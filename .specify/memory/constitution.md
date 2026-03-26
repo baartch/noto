@@ -1,12 +1,14 @@
 <!--
   Sync Impact Report
   ==================
-  Version change: 1.0.0 → 1.1.0
+  Version change: 1.1.0 → 1.2.0
   Modified principles:
-    - IV. Persistent Contextual Memory (storage guidance expanded from
-      markdown-only to SQLite-first, LLM-retrieval-optimized records)
-    - V. Simplicity and Minimal Dependencies (clarified: minimal deps with
-      pragmatic built-in/local persistence)
+    - III. System-Prompt-Driven Personality (expanded: per-profile prompts,
+      editable at runtime)
+    - IV. Persistent Contextual Memory (expanded: strict profile isolation,
+      one SQLite memory per purpose)
+    - V. Simplicity and Minimal Dependencies (clarified startup UX for
+      profile selection and lifecycle)
   Added sections: None
   Removed sections: None
   Templates requiring updates:
@@ -20,7 +22,7 @@
   Follow-up TODOs: None
 -->
 
-# Artman Constitution
+# Noto Constitution
 
 ## Core Principles
 
@@ -49,37 +51,36 @@ privacy stance, and quality needs.
 ### III. System-Prompt-Driven Personality
 
 All domain-specific behavior (consulting persona, tone,
-expertise area) MUST be defined exclusively in an external
-Markdown system-prompt file. The core application MUST be
-domain-agnostic; no hardcoded references to music, art
-management, or any specific consulting niche.
+expertise area) MUST be defined in editable external Markdown
+system-prompt files, scoped per profile (purpose). The core
+application MUST remain domain-agnostic; no hardcoded references
+to specific consulting niches.
 
-Rationale: A single system-prompt swap MUST transform the
-chatbot from an Artist Manager to a fitness coach, career
-advisor, or any other consulting role — zero code changes.
+Rationale: A profile prompt swap MUST transform Noto from an
+Artist Manager to any other consulting role without code
+changes.
 
 ### IV. Persistent Contextual Memory
 
-The chatbot MUST maintain structured local notes that capture
-key facts, decisions, progress, and open topics from every
-conversation. Primary storage MUST be a local single-file
-SQLite database optimized for retrieval (schema + indexes,
-including FTS where useful). Markdown exports/imports MAY be
-supported for portability, but SQLite is the source of truth.
-The LLM MUST receive relevant prior notes as context in each
-conversation to provide continuity.
+Noto MUST maintain structured local memory that captures key
+facts, decisions, progress, and open topics from every
+conversation. Memory storage MUST be one local single-file
+SQLite database per profile, optimized for retrieval (schema +
+indexes, including FTS where useful). Profile memories MUST be
+strictly isolated. The LLM MUST receive relevant prior notes
+from the active profile only.
 
-Rationale: Long-term value comes from the chatbot knowing the
-user better over time. SQLite keeps memory local, queryable,
-and scalable without introducing server complexity.
+Rationale: Long-term value requires continuity plus isolation.
+Each purpose needs dedicated context to avoid cross-domain
+contamination.
 
 ### V. Simplicity and Minimal Dependencies
 
 Start with the simplest viable implementation. Prefer standard
 library and lightweight local components. Every dependency MUST
 be justified by a clear need that cannot be met with
-reasonable effort in-house. The CLI interface MUST be
-straightforward: launch, chat, quit.
+reasonable effort in-house. CLI flow MUST remain simple,
+including profile selection and chat startup.
 
 Rationale: This is a personal tool. Complexity is the enemy
 of reliability and long-term maintainability for a solo or
@@ -91,19 +92,32 @@ small-team project.
   Text in/out via terminal.
 - **Single-user**: No authentication, no multi-tenancy.
   One local installation = one user.
-- **Configuration via files**: Provider credentials in env vars
-  or a local config file. System prompt in a Markdown file.
-  Local data path configurable.
-- **Notes storage**: Single-file SQLite database
-  (`~/.artman/memory.db` default or configurable). Schema MUST
-  support timestamps, tags/topics, session linkage, and note
-  content. Full-text indexes SHOULD be used for fast context
-  retrieval.
-- **Conversation flow**: On each user message the system MUST
-  (1) load the system prompt, (2) retrieve relevant notes from
-  SQLite, (3) send context + user message to the LLM,
-  (4) present the response, (5) update notes with new insights,
-  action items, and progress markers.
+- **Profile model**: A profile represents one purpose/consulting
+  context. Each profile MUST have:
+  - one SQLite memory DB file
+  - one editable `system_prompt.md` file
+  - optional per-profile provider/model overrides
+- **Storage layout**: Local data root defaults to `~/.noto/`.
+  Profiles MUST be stored under a deterministic directory
+  structure (e.g., `profiles/<profile-id>/memory.db` and
+  `profiles/<profile-id>/system_prompt.md`).
+- **Profile lifecycle**: CLI MUST support create/list/select/
+  edit-prompt/delete profile operations.
+- **Startup behavior**:
+  - 0 profiles: prompt user to create one.
+  - 1 profile: auto-select it.
+  - >1 profiles: require explicit selection or configured
+    default.
+- **Prompt editing**: System prompt files MUST be user-editable
+  at any time via normal file editing workflow (`$EDITOR` or
+  direct file path).
+- **Deletion policy**: Profiles (including their DB + prompt)
+  MUST be deletable locally with explicit confirmation to
+  prevent accidental data loss.
+- **Conversation flow**: On each user message Noto MUST
+  (1) load active profile prompt, (2) retrieve relevant profile
+  memory from SQLite, (3) send context + user message to the
+  LLM, (4) present response, (5) update active profile memory.
 - **Vector storage policy**: Local vector index is OPTIONAL and
   MUST remain secondary to SQLite source-of-truth records. Do
   not require vector DB in v1.
@@ -111,18 +125,20 @@ small-team project.
 ## Development Workflow
 
 - **Language**: Go (Golang).
-- **Testing**: Unit tests for provider abstraction, storage
-  access, note extraction, and prompt assembly. Integration
-  tests for end-to-end conversation flow with a mock LLM.
+- **Testing**: Unit tests for provider abstraction, profile
+  routing/isolation, storage access, note extraction, and prompt
+  assembly. Integration tests for end-to-end conversation flow
+  with mock LLM across multiple profiles.
 - **Code organization**: Keep files under ~500 LOC. Split
-  into clear modules: `cli`, `provider`, `memory`, `prompt`.
+  into clear modules: `cli`, `provider`, `profile`, `memory`,
+  `prompt`.
 - **Commits**: Conventional commits. No commit without
   explicit user instruction.
 
 ## Governance
 
 This constitution is the highest-authority document for the
-Artman project. All implementation decisions, pull requests,
+Noto project. All implementation decisions, pull requests,
 and design changes MUST be consistent with the principles
 above.
 
@@ -138,4 +154,4 @@ Amendment procedure:
 Compliance: Every plan and spec MUST include a Constitution
 Check section verifying alignment with these principles.
 
-**Version**: 1.1.0 | **Ratified**: 2026-03-26 | **Last Amended**: 2026-03-26
+**Version**: 1.2.0 | **Ratified**: 2026-03-26 | **Last Amended**: 2026-03-26
