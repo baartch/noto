@@ -32,14 +32,12 @@ func providerSetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set",
 		Short: "Set the provider configuration for the active profile",
-		Example: `  noto provider set --key sk-... --model gpt-4o-mini
-  noto provider set --endpoint http://localhost:11434/v1/chat/completions --model llama3.2 --key ollama`,
+		Example: `  noto provider set --key sk-...
+  noto provider set --endpoint http://localhost:11434/v1/chat/completions --key ollama
+  noto provider set --key sk-... --model gpt-4o-mini   # optional default model`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if apiKey == "" {
 				return fmt.Errorf("--key is required")
-			}
-			if model == "" {
-				return fmt.Errorf("--model is required")
 			}
 
 			ctx := context.Background()
@@ -86,7 +84,11 @@ func providerSetCmd() *cobra.Command {
 			}
 
 			fmt.Printf("Provider configured for profile %q\n", activeProfile.Name)
-			fmt.Printf("  Model:    %s\n", model)
+			if model != "" {
+				fmt.Printf("  Model:    %s\n", model)
+			} else {
+				fmt.Printf("  Model:    (none — use /model in chat to select)\n")
+			}
 			if endpoint != "" {
 				fmt.Printf("  Endpoint: %s\n", endpoint)
 			} else {
@@ -143,7 +145,7 @@ func providerShowCmd() *cobra.Command {
 
 			fmt.Printf("Provider configuration for profile %q:\n", activeProfile.Name)
 			fmt.Printf("  Type:     %s\n", cfg.ProviderType)
-			fmt.Printf("  Model:    %s\n", cfg.Model)
+			fmt.Printf("  Model:    %s\n", cfg.EffectiveModel())
 			fmt.Printf("  Endpoint: %s\n", endpoint)
 			fmt.Printf("  Key:      %s\n", keyDisplay)
 			return nil

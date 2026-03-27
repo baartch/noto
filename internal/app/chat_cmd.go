@@ -30,19 +30,18 @@ func chatCmd() *cobra.Command {
 func runChat(_ *cobra.Command, _ []string) error {
 	ctx := context.Background()
 
-	// Open global DB and resolve active profile.
 	db, err := openGlobalDB()
 	if err != nil {
 		return fmt.Errorf("chat: open db: %w", err)
 	}
 	defer db.Close()
 
+	// Resolve or auto-create active profile.
 	profRepo := store.NewProfileRepo(db)
 	profSvc := profile.NewService(profRepo)
 
 	activeProfile, err := profSvc.GetActive(ctx)
 	if err != nil {
-		// No active profile — try the startup flow automatically.
 		profiles, listErr := profSvc.List(ctx)
 		if listErr != nil {
 			return listErr
@@ -64,11 +63,11 @@ func runChat(_ *cobra.Command, _ []string) error {
 			}
 			activeProfile = profiles[0]
 		default:
-			return fmt.Errorf("multiple profiles exist but none is active. Run: noto profile select <name>")
+			return fmt.Errorf("multiple profiles exist but none is active — run: noto profile select <name>")
 		}
 	}
 
-	// Build command registry.
+	// Build command registry + dispatcher.
 	registry := commands.NewRegistry()
 	if err := commands.RegisterProfileCommands(registry); err != nil {
 		return err
@@ -78,14 +77,11 @@ func runChat(_ *cobra.Command, _ []string) error {
 	}
 
 	dispatcher := chat.NewDispatcher(registry)
-
 	execCtx := &commands.ExecContext{
 		ProfileID:   activeProfile.ID,
 		ProfileSlug: activeProfile.Slug,
 		Output:      os.Stdout,
 		Confirm: func(prompt string) bool {
-			// In TUI mode confirmation is handled by the model; fall back to true for
-			// non-destructive slash commands. Destructive commands should prompt inline.
 			fmt.Fprintf(os.Stderr, "%s [yes/no]: ", prompt)
 			var ans string
 			fmt.Scanln(&ans)
@@ -93,75 +89,103 @@ func runChat(_ *cobra.Command, _ []string) error {
 		},
 	}
 
-	// Resolve provider from environment (NOTO_API_KEY, NOTO_ENDPOINT, NOTO_MODEL)
-	// or from DB config. A nil providerFn means "no provider configured".
-	providerFn := resolveProvider(ctx, db, activeProfile.ID)
+	// Resolve provider config.
+	providerCfg, decryptedKey := loadProviderConfig(ctx, db, activeProfile.ID)
 
-	model := tui.New(activeProfile.Name, dispatcher, execCtx, providerFn)
+	// Build TUI callbacks.
+	var providerFn tui.ProviderFunc
+	var listModelsFn tui.ListModelsFunc
+	activeModel := ""
 
-	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	if providerCfg != nil && decryptedKey != "" {
+		activeModel = providerCfg.EffectiveModel()
+
+		adapterCfg := provider.Config{
+			ProviderType: "openai_compatible",
+			Endpoint:     providerCfg.Endpoint,
+			Model:        activeModel,
+			APIKey:       decryptedKey,
+		}
+
+		providerFn = func(ctx context.Context, userMsg string) (string, error) {
+			adapter := provider.NewOpenAICompatible(provider.Config{
+				ProviderType: adapterCfg.ProviderType,
+				Endpoint:     adapterCfg.Endpoint,
+				Model:        activeModel, // captured by reference so /model updates take effect
+				APIKey:       adapterCfg.APIKey,
+			})
+			resp, err := adapter.Complete(ctx, provider.CompletionRequest{
+				Messages:    []provider.Message{{Role: "user", Content: userMsg}},
+				Model:       activeModel,
+				Temperature: 0.7,
+			})
+			if err != nil {
+				return "", err
+			}
+			return resp.Content, nil
+		}
+
+		listModelsFn = func(ctx context.Context) ([]provider.ModelInfo, error) {
+			return provider.ListModels(ctx, adapterCfg)
+		}
+	}
+
+	// modelSelected persists the chosen model to the DB and updates activeModel.
+	cfgRepo := store.NewProviderConfigRepo(db)
+	modelSelectedFn := func(modelID string) error {
+		if err := cfgRepo.SetModel(ctx, activeProfile.ID, modelID); err != nil {
+			return err
+		}
+		activeModel = modelID // update closure so next provider call uses new model
+		return nil
+	}
+
+	m := tui.New(
+		activeProfile.Name,
+		activeModel,
+		dispatcher,
+		execCtx,
+		providerFn,
+		listModelsFn,
+		modelSelectedFn,
+	)
+
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("chat: TUI error: %w", err)
 	}
 	return nil
 }
 
-// resolveProvider builds a ProviderFunc from env vars or the stored provider config.
-// Returns nil if no provider is configured.
-func resolveProvider(ctx context.Context, db *store.DB, profileID string) tui.ProviderFunc {
-	// Prefer environment variables.
+// loadProviderConfig reads the active provider config and decrypts the API key.
+// Returns (nil, "") if nothing is configured.
+func loadProviderConfig(ctx context.Context, db *store.DB, profileID string) (*store.ProviderConfig, string) {
+	// Env vars take priority.
 	apiKey := os.Getenv("NOTO_API_KEY")
-	model := os.Getenv("NOTO_MODEL")
-	endpoint := os.Getenv("NOTO_ENDPOINT")
-
-	if apiKey == "" {
-		// Try reading from DB.
-		cfgRepo := store.NewProviderConfigRepo(db)
-		cfg, err := cfgRepo.GetActive(ctx, profileID)
-		if err != nil {
-			if errors.Is(err, store.ErrProviderConfigNotFound) {
-				return nil // no provider configured
-			}
-			return nil
-		}
-		// Decrypt the stored API key.
-		passphrase, pErr := security.MachinePassphrase()
-		if pErr != nil {
-			return nil
-		}
-		decrypted, dErr := security.Decrypt(cfg.CredentialRef, passphrase)
-		if dErr != nil {
-			return nil
-		}
-		apiKey = decrypted
-		model = cfg.Model
-		endpoint = cfg.Endpoint
+	if apiKey != "" {
+		return &store.ProviderConfig{
+			Endpoint:    os.Getenv("NOTO_ENDPOINT"),
+			Model:       os.Getenv("NOTO_MODEL"),
+			ActiveModel: os.Getenv("NOTO_MODEL"),
+		}, apiKey
 	}
 
-	if apiKey == "" {
-		return nil
-	}
-
-	if model == "" {
-		model = "gpt-4o-mini"
-	}
-
-	adapter := provider.NewOpenAICompatible(provider.Config{
-		ProviderType: "openai_compatible",
-		Endpoint:     endpoint,
-		Model:        model,
-		APIKey:       apiKey,
-	})
-
-	return func(ctx context.Context, userMsg string) (string, error) {
-		resp, err := adapter.Complete(ctx, provider.CompletionRequest{
-			Messages:    []provider.Message{{Role: "user", Content: userMsg}},
-			Model:       model,
-			Temperature: 0.7,
-		})
-		if err != nil {
-			return "", err
+	cfgRepo := store.NewProviderConfigRepo(db)
+	cfg, err := cfgRepo.GetActive(ctx, profileID)
+	if err != nil {
+		if errors.Is(err, store.ErrProviderConfigNotFound) {
+			return nil, ""
 		}
-		return resp.Content, nil
+		return nil, ""
 	}
+
+	passphrase, err := security.MachinePassphrase()
+	if err != nil {
+		return nil, ""
+	}
+	decrypted, err := security.Decrypt(cfg.CredentialRef, passphrase)
+	if err != nil {
+		return nil, ""
+	}
+	return cfg, decrypted
 }
