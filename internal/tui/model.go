@@ -96,20 +96,22 @@ type Model struct {
 	profileSelected ProfileSelectedFunc
 }
 
-type chatMessage struct{ role, content string }
+type chatMessage struct {
+	role      string
+	content   string
+	timestamp time.Time
+}
 
 // ---- styles -----------------------------------------------------------------
 
 var (
-	headerStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	userStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true)
-	assistantStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	headerStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Bold(false)
 	errStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
-	cmdOutStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
-	modelBadge      = lipgloss.NewStyle().Foreground(lipgloss.Color("13"))
-	notesBadge      = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	suggNormalStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	suggSelectStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("4")).Bold(true)
+	modelBadge      = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
+	notesBadge      = lipgloss.NewStyle().Foreground(lipgloss.Color("71"))
+	suggNormalStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	suggSelectStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("63")).Bold(true)
+	dividerStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
 )
 
 // New creates a new TUI Model.
@@ -157,7 +159,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.input.Width = msg.Width - 4
-		vpH := msg.Height - 4
+		// header(1) + divider(1) + inputDivider(1) + inputLine(1) + padding(1) = 5
+		vpH := msg.Height - 5
 		if vpH < 1 {
 			vpH = 1
 		}
@@ -210,7 +213,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.err = msg.err
 		} else {
-			m.messages = append(m.messages, chatMessage{role: "command", content: "System prompt updated."})
+			m.messages = append(m.messages, chatMessage{role: "command", content: "System prompt updated.", timestamp: time.Now()})
 			m.syncViewport()
 		}
 
@@ -219,7 +222,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.err = msg.err
 		} else {
-			m.messages = append(m.messages, chatMessage{role: "assistant", content: msg.content})
+			m.messages = append(m.messages, chatMessage{role: "assistant", content: msg.content, timestamp: time.Now()})
 		}
 		m.syncViewport()
 
@@ -360,8 +363,9 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 			m.err = result.Err
 		} else if result.Executed && result.Output != "" {
 			m.messages = append(m.messages, chatMessage{
-				role:    "command",
-				content: strings.TrimRight(result.Output, "\n"),
+				role:      "command",
+				content:   strings.TrimRight(result.Output, "\n"),
+				timestamp: time.Now(),
 			})
 			m.syncViewport()
 		}
@@ -369,13 +373,14 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	}
 
 	// Plain chat message.
-	m.messages = append(m.messages, chatMessage{role: "user", content: val})
+	m.messages = append(m.messages, chatMessage{role: "user", content: val, timestamp: time.Now()})
 	m.syncViewport()
 
 	if m.provider == nil {
 		m.messages = append(m.messages, chatMessage{
-			role:    "assistant",
-			content: "No provider configured. Run: noto provider set --key <key>\nThen pick a model with /model",
+			role:      "assistant",
+			content:   "No provider configured. Run: `noto provider set --key <key>`\nThen pick a model with `/model`",
+			timestamp: time.Now(),
 		})
 		m.syncViewport()
 		return m, tea.Batch(cmds...)
@@ -462,7 +467,7 @@ func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 					m.err = err
 				} else {
 					m.activeModel = chosen
-					m.messages = append(m.messages, chatMessage{role: "command", content: "Model set to: " + chosen})
+					m.messages = append(m.messages, chatMessage{role: "command", content: "Model set to: " + chosen, timestamp: time.Now()})
 					m.syncViewport()
 				}
 			}
@@ -472,7 +477,7 @@ func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 					m.err = err
 				} else {
 					m.profileName = chosen
-					m.messages = append(m.messages, chatMessage{role: "command", content: "Switched to profile: " + chosen})
+					m.messages = append(m.messages, chatMessage{role: "command", content: "Switched to profile: " + chosen, timestamp: time.Now()})
 					m.syncViewport()
 				}
 			}
@@ -551,6 +556,7 @@ func (m Model) View() string {
 		return "\n  Initialising…"
 	}
 
+	// ---- header bar ----
 	modelPart := ""
 	if m.activeModel != "" {
 		modelPart = "  " + modelBadge.Render("["+m.activeModel+"]")
@@ -559,8 +565,13 @@ func (m Model) View() string {
 	if m.notesIndicator != "" {
 		notesPart = "  " + notesBadge.Render(m.notesIndicator)
 	}
-	header := headerStyle.Render("─── Noto · "+m.profileName+" ── /model · /profile select · Ctrl+C quit ───") + modelPart + notesPart
+	title := headerStyle.Render("Noto") +
+		"  " + lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Render(m.profileName) +
+		modelPart + notesPart +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("237")).Render("  ·  /model  /profile select  Ctrl+C")
+	divider := dividerStyle.Render(strings.Repeat("─", m.width))
 
+	// ---- middle: picker or suggestions ----
 	var mid strings.Builder
 	if m.picker != nil {
 		ph := m.height / 2
@@ -577,11 +588,17 @@ func (m Model) View() string {
 		errBlock = errStyle.Render("  ✗ "+m.err.Error()) + "\n"
 	}
 
-	return header + "\n" +
+	// ---- input bar ----
+	inputDivider := dividerStyle.Render(strings.Repeat("─", m.width))
+	inputLine := "  " + m.input.View()
+
+	return title + "\n" +
+		divider + "\n" +
 		m.viewport.View() + "\n" +
 		mid.String() +
 		errBlock +
-		m.input.View()
+		inputDivider + "\n" +
+		inputLine
 }
 
 // renderSuggestions draws the suggestion list with cursor highlighted.
@@ -607,21 +624,32 @@ func (m *Model) syncViewport() {
 	m.viewport.GotoBottom()
 }
 
-// renderHistory renders all chat messages.
+// renderHistory renders all chat messages using styled bubbles.
 func (m *Model) renderHistory() string {
 	if len(m.messages) == 0 {
-		return headerStyle.Render("  No messages yet. Start typing below.")
+		return "\n" + headerStyle.Render("  No messages yet — start typing below.") + "\n"
 	}
+
+	termWidth := m.width
+	if termWidth < 40 {
+		termWidth = 80 // safe default before WindowSizeMsg
+	}
+
 	var sb strings.Builder
 	for _, msg := range m.messages {
+		ts := msg.timestamp
+		if ts.IsZero() {
+			ts = time.Now()
+		}
 		switch msg.role {
 		case "user":
-			sb.WriteString(userStyle.Render("You:   ") + msg.content + "\n\n")
+			sb.WriteString(renderUserBubble(msg.content, "You", ts, termWidth))
 		case "assistant":
-			sb.WriteString(assistantStyle.Render("Noto:  ") + msg.content + "\n\n")
+			sb.WriteString(renderAssistantBubble(msg.content, m.activeModel, ts, termWidth))
 		case "command":
-			sb.WriteString(cmdOutStyle.Render("  "+msg.content) + "\n\n")
+			sb.WriteString(renderCommandLine(msg.content))
 		}
+		sb.WriteString("\n\n")
 	}
 	return sb.String()
 }

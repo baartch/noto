@@ -5,8 +5,7 @@ bin/
 *.out
 vendor/
 
-# Go module cache
-/go.sum
+# Go module cache (go.sum should be committed — do not ignore it)
 
 # Noto local data (never commit user data)
 ~/.noto/
