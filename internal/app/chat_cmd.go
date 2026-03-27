@@ -81,6 +81,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 	if err := commands.RegisterPromptCommands(registry); err != nil {
 		return err
 	}
+	if err := commands.RegisterModelCommand(registry); err != nil {
+		return err
+	}
 	dispatcher := chatpkg.NewDispatcher(registry)
 
 	execCtx := &commands.ExecContext{
