@@ -49,8 +49,11 @@ func renderMarkdown(content string, maxWidth int) string {
 	}
 
 	if cachedRenderer.r == nil || cachedRenderer.width != w {
+		// Use an explicit dark style instead of WithAutoStyle().
+		// WithAutoStyle() queries the terminal background via OSC ]11;?
+		// which causes the response sequence to appear in the text input.
 		r, err := glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
+			glamour.WithStandardStyle("dark"),
 			glamour.WithWordWrap(w),
 		)
 		if err != nil {
