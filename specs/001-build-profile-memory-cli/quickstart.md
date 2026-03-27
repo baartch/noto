@@ -27,11 +27,21 @@ go run ./cmd/noto
 - Validate encrypted credential handling.
 - Validate corruption recovery (auto-repair then backup restore fallback).
 - Validate no cross-profile effects from slash commands.
+- Validate vector index corruption/missing-file handling triggers rebuild from SQLite.
+
+## Vector Retrieval Checks
+
+1. Populate profile with representative notes/messages.
+2. Trigger embedding + vector index sync.
+3. Run semantic retrieval query and verify top results map back to SQLite records.
+4. Delete or tamper with vector index file and verify automatic rebuild.
+5. Verify retrieval falls back safely when vector layer is unavailable.
 
 ## Performance Checks
 
 - Benchmark slash suggestion refresh latency against p95 budget.
 - Benchmark startup/context assembly/command feedback budgets.
+- Benchmark vector top-k lookup latency against p95 budget.
 
 ## Scope Guardrails
 

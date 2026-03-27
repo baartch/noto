@@ -63,6 +63,24 @@
   - `rank` (int)
   - `hint` (string)
 
+## Entity: VectorIndexEntry
+
+- **Purpose**: Derived semantic index record for retrieval acceleration.
+- **Fields**: `id`, `profile_id`, `source_type` (memory_note|session_summary|message), `source_id`,
+  `chunk_hash`, `embedding_model`, `embedding_dim`, `vector_ref`, `updated_at`.
+- **Validation**:
+  - (`profile_id`, `source_type`, `source_id`, `chunk_hash`) unique.
+  - Source reference must resolve to existing SQLite source-of-truth row.
+
+## Entity: VectorIndexManifest
+
+- **Purpose**: Single-file vector index metadata and consistency state per profile.
+- **Fields**: `id`, `profile_id`, `index_path`, `index_format_version`, `embedding_model`,
+  `embedding_dim`, `last_rebuild_at`, `last_sync_at`, `source_state_version`, `status`.
+- **Validation**:
+  - One manifest per profile.
+  - `status` in {ready, stale, rebuilding, failed}.
+
 ## Entity: ObservabilityEvent
 
 - **Purpose**: Structured local runtime event.
@@ -80,5 +98,7 @@
 - Profile: created → selected/defaulted → renamed → deleted (confirmed).
 - Conversation: active → archived.
 - ContextCacheEntry: created → reused → invalidated → rebuilt.
+- VectorIndexManifest: ready → stale → rebuilding → ready (or failed → rebuilding).
+- VectorIndexEntry: upserted on source change → queried for retrieval → removed on source delete.
 - Slash input: plain chat → slash mode (`/`) → suggest/update → explicit selection (if ambiguous)
   → execute or explicit unknown-command error.

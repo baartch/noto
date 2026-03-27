@@ -34,4 +34,16 @@
 - **Alternatives considered**:
   - No structural changes required beyond parser/suggest layers.
 
+## Decision: Add per-profile single-file vector index as secondary semantic layer
+
+- **Decision**: Maintain a single vector index file per profile as a derived semantic retrieval
+  layer, while SQLite remains the only source of truth.
+- **Rationale**: Improves semantic recall for memory retrieval while preserving deterministic
+  reliability, transactional integrity, and recoverability anchored in SQLite.
+- **Alternatives considered**:
+  - SQLite-only lexical retrieval: simpler but weaker semantic recall quality.
+  - Vector database as source of truth: rejected due to reliability/recovery and relational
+    workflow needs.
+  - Shared global vector index: rejected due to stricter profile isolation requirements.
+
 No unresolved clarifications remain.
