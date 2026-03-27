@@ -10,8 +10,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
-	"noto/internal/chat"
+	chatpkg "noto/internal/chat"
 	"noto/internal/commands"
+	"noto/internal/observe"
 	"noto/internal/profile"
 	"noto/internal/provider"
 	"noto/internal/security"
@@ -67,7 +68,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	// Build command registry + dispatcher.
+	// Build command registry + slash dispatcher.
 	registry := commands.NewRegistry()
 	if err := commands.RegisterProfileCommands(registry); err != nil {
 		return err
@@ -75,8 +76,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 	if err := commands.RegisterPromptCommands(registry); err != nil {
 		return err
 	}
-
-	dispatcher := chat.NewDispatcher(registry)
+	dispatcher := chatpkg.NewDispatcher(registry)
 	execCtx := &commands.ExecContext{
 		ProfileID:   activeProfile.ID,
 		ProfileSlug: activeProfile.Slug,
@@ -91,11 +91,10 @@ func runChat(_ *cobra.Command, _ []string) error {
 
 	// Resolve provider config.
 	providerCfg, decryptedKey := loadProviderConfig(ctx, db, activeProfile.ID)
+	activeModel := ""
 
-	// Build TUI callbacks.
 	var providerFn tui.ProviderFunc
 	var listModelsFn tui.ListModelsFunc
-	activeModel := ""
 
 	if providerCfg != nil && decryptedKey != "" {
 		activeModel = providerCfg.EffectiveModel()
@@ -103,64 +102,115 @@ func runChat(_ *cobra.Command, _ []string) error {
 		adapterCfg := provider.Config{
 			ProviderType: "openai_compatible",
 			Endpoint:     providerCfg.Endpoint,
-			Model:        activeModel,
 			APIKey:       decryptedKey,
 		}
 
-		providerFn = func(ctx context.Context, userMsg string) (string, error) {
-			adapter := provider.NewOpenAICompatible(provider.Config{
-				ProviderType: adapterCfg.ProviderType,
+		// We need a live reference to the tea.Program so extraction callbacks
+		// can send messages into it. We create a pointer-to-pointer and fill it
+		// after p := tea.NewProgram(...).
+		var prog **tea.Program
+		progHolder := new(*tea.Program)
+		prog = progHolder
+
+		// Load the profile system prompt.
+		systemPrompt := loadSystemPrompt(activeProfile.Slug)
+
+		// Repositories for the session.
+		convRepo    := store.NewConversationRepo(db)
+		msgRepo     := store.NewMessageRepo(db)
+		noteRepo    := store.NewMemoryNoteRepo(db)
+		summaryRepo := store.NewSessionSummaryRepo(db)
+		logger      := observe.NewNoopLogger()
+
+		// Create the session — this assembles the system prompt with memory notes.
+		sess, sessErr := chatpkg.NewSession(
+			ctx,
+			activeProfile.ID,
+			systemPrompt,
+			convRepo, msgRepo, noteRepo, summaryRepo,
+			provider.NewOpenAICompatible(provider.Config{
+				ProviderType: "openai_compatible",
 				Endpoint:     adapterCfg.Endpoint,
-				Model:        activeModel, // captured by reference so /model updates take effect
+				Model:        activeModel,
 				APIKey:       adapterCfg.APIKey,
-			})
-			resp, err := adapter.Complete(ctx, provider.CompletionRequest{
-				Messages:    []provider.Message{{Role: "user", Content: userMsg}},
-				Model:       activeModel,
-				Temperature: 0.7,
-			})
+			}),
+			logger,
+			func(count int) {
+				// Called from background goroutine — send into TUI via program.
+				if *prog != nil {
+					(*prog).Send(tui.NotesSaved(count))
+				}
+			},
+		)
+		if sessErr != nil {
+			return fmt.Errorf("chat: start session: %w", sessErr)
+		}
+		defer sess.Close(context.Background())
+
+		providerFn = func(callCtx context.Context, userMsg string) (string, error) {
+			// Update model on the adapter each call so /model changes take effect.
+			sess.SetModel(activeModel)
+			result, err := sess.Send(callCtx, userMsg)
 			if err != nil {
 				return "", err
 			}
-			return resp.Content, nil
+			return result.Reply, nil
 		}
 
-		listModelsFn = func(ctx context.Context) ([]provider.ModelInfo, error) {
-			return provider.ListModels(ctx, adapterCfg)
+		listModelsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
+			return provider.ListModels(callCtx, adapterCfg)
 		}
-	}
 
-	// modelSelected persists the chosen model to the DB and updates activeModel.
-	cfgRepo := store.NewProviderConfigRepo(db)
-	modelSelectedFn := func(modelID string) error {
-		if err := cfgRepo.SetModel(ctx, activeProfile.ID, modelID); err != nil {
-			return err
+		// modelSelected persists the choice and updates the closure variable.
+		cfgRepo := store.NewProviderConfigRepo(db)
+		modelSelectedFn := func(modelID string) error {
+			if err := cfgRepo.SetModel(ctx, activeProfile.ID, modelID); err != nil {
+				return err
+			}
+			activeModel = modelID
+			return nil
 		}
-		activeModel = modelID // update closure so next provider call uses new model
+
+		m := tui.New(
+			activeProfile.Name, activeModel,
+			dispatcher, execCtx,
+			providerFn, listModelsFn, modelSelectedFn,
+		)
+		p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+		*prog = p
+		if _, runErr := p.Run(); runErr != nil {
+			return fmt.Errorf("chat: TUI error: %w", runErr)
+		}
 		return nil
 	}
 
+	// No provider configured — still open TUI but show guidance.
 	m := tui.New(
-		activeProfile.Name,
-		activeModel,
-		dispatcher,
-		execCtx,
-		providerFn,
-		listModelsFn,
-		modelSelectedFn,
+		activeProfile.Name, "",
+		dispatcher, execCtx,
+		nil, nil,
+		func(modelID string) error { return nil },
 	)
-
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
-	if _, err := p.Run(); err != nil {
-		return fmt.Errorf("chat: TUI error: %w", err)
+	if _, runErr := p.Run(); runErr != nil {
+		return fmt.Errorf("chat: TUI error: %w", runErr)
 	}
 	return nil
 }
 
+// loadSystemPrompt reads the profile system prompt file, falling back to a default.
+func loadSystemPrompt(slug string) string {
+	home, _ := os.UserHomeDir()
+	path := home + "/.noto/profiles/" + slug + "/prompts/system.md"
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "You are a helpful assistant."
+	}
+	return strings.TrimSpace(string(data))
+}
+
 // loadProviderConfig reads the active provider config and decrypts the API key.
-// Returns (nil, "") if nothing is configured.
 func loadProviderConfig(ctx context.Context, db *store.DB, profileID string) (*store.ProviderConfig, string) {
-	// Env vars take priority.
 	apiKey := os.Getenv("NOTO_API_KEY")
 	if apiKey != "" {
 		return &store.ProviderConfig{

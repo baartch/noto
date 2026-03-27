@@ -31,6 +31,9 @@ func NewOpenAICompatible(cfg Config) *OpenAICompatible {
 // ProviderType returns the canonical provider type identifier.
 func (a *OpenAICompatible) ProviderType() string { return "openai_compatible" }
 
+// SetModel updates the default model used when the request has no model set.
+func (a *OpenAICompatible) SetModel(model string) { a.cfg.Model = model }
+
 // Complete performs an OpenAI-compatible chat completion request.
 func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
 	endpoint := a.cfg.Endpoint
@@ -38,8 +41,12 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 		endpoint = "https://api.openai.com/v1/chat/completions"
 	}
 
+	model := req.Model
+	if model == "" {
+		model = a.cfg.Model
+	}
 	payload := openAIRequest{
-		Model:       req.Model,
+		Model:       model,
 		MaxTokens:   req.MaxTokens,
 		Temperature: req.Temperature,
 	}

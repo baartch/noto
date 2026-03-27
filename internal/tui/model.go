@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -18,6 +19,10 @@ import (
 
 // ProviderFunc sends a single chat turn and returns the assistant reply.
 type ProviderFunc func(ctx context.Context, userMsg string) (string, error)
+
+// NotesSaved returns a tea.Msg that tells the TUI to show the notes indicator.
+// Call this from the NotesCallback passed to chat.NewSession.
+func NotesSaved(count int) tea.Msg { return notesSavedMsg{count: count} }
 
 // ListModelsFunc fetches the available models from the configured provider.
 type ListModelsFunc func(ctx context.Context) ([]provider.ModelInfo, error)
@@ -45,6 +50,9 @@ type Model struct {
 	// model picker overlay (non-nil when /model is open)
 	picker *pickerState
 
+	// notesIndicator briefly shows a note-saved badge after extraction.
+	notesIndicator string
+
 	dispatcher    *chat.Dispatcher
 	execCtx       *commands.ExecContext
 	provider      ProviderFunc
@@ -56,8 +64,10 @@ type chatMessage struct{ role, content string }
 
 // ---- async tea.Msg types ----------------------------------------------------
 
-type providerReplyMsg struct{ content string; err error }
-type modelsLoadedMsg  struct{ models []provider.ModelInfo; err error }
+type providerReplyMsg      struct{ content string; err error }
+type modelsLoadedMsg       struct{ models []provider.ModelInfo; err error }
+type notesSavedMsg         struct{ count int }
+type clearNotesIndicatorMsg struct{}
 
 // ---- styles -----------------------------------------------------------------
 
@@ -68,6 +78,7 @@ var (
 	errStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
 	cmdOutStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
 	modelBadge      = lipgloss.NewStyle().Foreground(lipgloss.Color("13"))
+	notesBadge      = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
 	suggNormalStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	suggSelectStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("4")).Bold(true)
 )
@@ -142,6 +153,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.picker.cursor = 0
 			}
 		}
+
+	// ---- notes saved (background extraction) --------------------------------
+	case notesSavedMsg:
+		if msg.count > 0 {
+			m.notesIndicator = fmt.Sprintf("📝 %d note(s) saved", msg.count)
+			cmds = append(cmds, tea.Tick(3*time.Second, func(_ time.Time) tea.Msg {
+				return clearNotesIndicatorMsg{}
+			}))
+		}
+
+	case clearNotesIndicatorMsg:
+		m.notesIndicator = ""
 
 	// ---- provider reply -----------------------------------------------------
 	case providerReplyMsg:
@@ -424,7 +447,11 @@ func (m Model) View() string {
 	if m.activeModel != "" {
 		modelPart = "  " + modelBadge.Render("["+m.activeModel+"]")
 	}
-	header := headerStyle.Render("─── Noto · "+m.profileName+" ── /model · Ctrl+C quit ───") + modelPart
+	notesPart := ""
+	if m.notesIndicator != "" {
+		notesPart = "  " + notesBadge.Render(m.notesIndicator)
+	}
+	header := headerStyle.Render("─── Noto · "+m.profileName+" ── /model · Ctrl+C quit ───") + modelPart + notesPart
 
 	// Middle section: model picker OR slash suggestions OR empty.
 	var mid strings.Builder
