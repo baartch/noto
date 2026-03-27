@@ -12,7 +12,7 @@ import (
 func buildTestRegistry(t *testing.T) *commands.Registry {
 	t.Helper()
 	r := commands.NewRegistry()
-	if err := commands.RegisterProfileCommands(r); err != nil {
+	if err := commands.RegisterProfileCommands(r, commands.NoopProfileService{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := commands.RegisterPromptCommands(r); err != nil {

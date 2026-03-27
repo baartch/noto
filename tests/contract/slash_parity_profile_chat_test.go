@@ -1,19 +1,30 @@
 package contract
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
-	"noto/internal/commands"
 	"noto/internal/chat"
+	"noto/internal/commands"
 	"noto/internal/parser"
+	"noto/internal/profile"
+	"noto/internal/store"
 )
 
-// buildRegistry creates a registry with all standard commands registered.
+// buildRegistry creates a registry with real profile commands backed by a temp DB.
 func buildRegistry(t *testing.T) *commands.Registry {
 	t.Helper()
+	dir := t.TempDir()
+	db, err := store.Open(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	svc := profile.NewService(store.NewProfileRepo(db))
 	r := commands.NewRegistry()
-	if err := commands.RegisterProfileCommands(r); err != nil {
+	if err := commands.RegisterProfileCommands(r, svc); err != nil {
 		t.Fatalf("register profile commands: %v", err)
 	}
 	if err := commands.RegisterPromptCommands(r); err != nil {
@@ -22,7 +33,6 @@ func buildRegistry(t *testing.T) *commands.Registry {
 	return r
 }
 
-// TestSlashParity_ProfileList verifies /profile list is registered and executable.
 func TestSlashParity_ProfileList(t *testing.T) {
 	r := buildRegistry(t)
 	dispatcher := chat.NewDispatcher(r)
@@ -39,13 +49,12 @@ func TestSlashParity_ProfileList(t *testing.T) {
 	}
 }
 
-// TestSlashParity_ProfileCreate verifies /profile create <name> executes.
 func TestSlashParity_ProfileCreate(t *testing.T) {
 	r := buildRegistry(t)
 	dispatcher := chat.NewDispatcher(r)
 
 	var out strings.Builder
-	ctx := &commands.ExecContext{Output: &out}
+	ctx := &commands.ExecContext{Output: &out, ProfileSlug: "test"}
 
 	result := dispatcher.Dispatch("/profile create myprofile", ctx)
 	if result.Err != nil {
@@ -56,7 +65,6 @@ func TestSlashParity_ProfileCreate(t *testing.T) {
 	}
 }
 
-// TestSlashParity_PartialInput_ReturnsSuggestions verifies partial slash shows suggestions.
 func TestSlashParity_PartialInput_ReturnsSuggestions(t *testing.T) {
 	r := buildRegistry(t)
 	dispatcher := chat.NewDispatcher(r)
@@ -83,7 +91,6 @@ func TestSlashParity_PartialInput_ReturnsSuggestions(t *testing.T) {
 	}
 }
 
-// TestSlashParity_UnknownCommand_ReturnsErrorAndSuggestions verifies unknown slash gives error + suggestions.
 func TestSlashParity_UnknownCommand_ReturnsErrorAndSuggestions(t *testing.T) {
 	r := buildRegistry(t)
 	dispatcher := chat.NewDispatcher(r)
@@ -100,7 +107,6 @@ func TestSlashParity_UnknownCommand_ReturnsErrorAndSuggestions(t *testing.T) {
 	}
 }
 
-// TestSlashParity_PlainInput_NotSlash verifies normal chat input is not treated as slash.
 func TestSlashParity_PlainInput_NotSlash(t *testing.T) {
 	r := buildRegistry(t)
 	dispatcher := chat.NewDispatcher(r)
@@ -114,7 +120,6 @@ func TestSlashParity_PlainInput_NotSlash(t *testing.T) {
 	}
 }
 
-// TestSlashParser_CanonicalPath verifies the parser produces the expected command path.
 func TestSlashParser_CanonicalPath(t *testing.T) {
 	cases := []struct {
 		input    string

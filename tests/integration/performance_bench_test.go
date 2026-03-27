@@ -39,7 +39,7 @@ func BenchmarkStartup_ProfileList(b *testing.B) {
 // BenchmarkSlashSuggestion measures suggestion refresh latency per keystroke.
 func BenchmarkSlashSuggestion_Refresh(b *testing.B) {
 	r := commands.NewRegistry()
-	commands.RegisterProfileCommands(r)
+	commands.RegisterProfileCommands(r, commands.NoopProfileService{})
 	commands.RegisterPromptCommands(r)
 	engine := suggest.New(r)
 

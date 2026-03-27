@@ -71,6 +71,10 @@ type modelsLoadedMsg        struct{ models []provider.ModelInfo; err error }
 type notesSavedMsg          struct{ count int }
 type clearNotesIndicatorMsg struct{}
 type editorFinishedMsg      struct{ err error }
+type profileChangedMsg      struct{ name string }
+
+// ProfileChanged returns a tea.Msg that updates the profile name in the header.
+func ProfileChanged(name string) tea.Msg { return profileChangedMsg{name: name} }
 
 // ---- styles -----------------------------------------------------------------
 
@@ -168,6 +172,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clearNotesIndicatorMsg:
 		m.notesIndicator = ""
+
+	// ---- profile changed (select / rename) ---------------------------------
+	case profileChangedMsg:
+		m.profileName = msg.name
 
 	// ---- editor finished ----------------------------------------------------
 	case editorFinishedMsg:

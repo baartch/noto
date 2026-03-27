@@ -68,15 +68,20 @@ func runChat(_ *cobra.Command, _ []string) error {
 		}
 	}
 
+	// Single program holder shared by all async callbacks (notes, profile changes).
+	// Filled just before p.Run() so closures can reference it safely.
+	var prog *tea.Program
+
 	// Build command registry + slash dispatcher.
 	registry := commands.NewRegistry()
-	if err := commands.RegisterProfileCommands(registry); err != nil {
+	if err := commands.RegisterProfileCommands(registry, profSvc); err != nil {
 		return err
 	}
 	if err := commands.RegisterPromptCommands(registry); err != nil {
 		return err
 	}
 	dispatcher := chatpkg.NewDispatcher(registry)
+
 	execCtx := &commands.ExecContext{
 		ProfileID:   activeProfile.ID,
 		ProfileSlug: activeProfile.Slug,
@@ -87,9 +92,12 @@ func runChat(_ *cobra.Command, _ []string) error {
 			fmt.Scanln(&ans)
 			return strings.ToLower(strings.TrimSpace(ans)) == "yes"
 		},
-		// Non-nil signals to handlers that we're in TUI mode.
-		// Actual suspension is handled by the TUI via tea.ExecProcess.
 		SuspendForEditor: func(fn func() error) error { return fn() },
+		OnProfileChanged: func(newName string) {
+			if prog != nil {
+				prog.Send(tui.ProfileChanged(newName))
+			}
+		},
 	}
 
 	// Resolve provider config.
@@ -98,6 +106,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 
 	var providerFn tui.ProviderFunc
 	var listModelsFn tui.ListModelsFunc
+	modelSelectedFn := func(modelID string) error { return nil }
 
 	if providerCfg != nil && decryptedKey != "" {
 		activeModel = providerCfg.EffectiveModel()
@@ -108,24 +117,14 @@ func runChat(_ *cobra.Command, _ []string) error {
 			APIKey:       decryptedKey,
 		}
 
-		// We need a live reference to the tea.Program so extraction callbacks
-		// can send messages into it. We create a pointer-to-pointer and fill it
-		// after p := tea.NewProgram(...).
-		var prog **tea.Program
-		progHolder := new(*tea.Program)
-		prog = progHolder
-
-		// Load the profile system prompt.
 		systemPrompt := loadSystemPrompt(activeProfile.Slug)
 
-		// Repositories for the session.
 		convRepo    := store.NewConversationRepo(db)
 		msgRepo     := store.NewMessageRepo(db)
 		noteRepo    := store.NewMemoryNoteRepo(db)
 		summaryRepo := store.NewSessionSummaryRepo(db)
 		logger      := observe.NewNoopLogger()
 
-		// Create the session — this assembles the system prompt with memory notes.
 		sess, sessErr := chatpkg.NewSession(
 			ctx,
 			activeProfile.ID,
@@ -139,9 +138,8 @@ func runChat(_ *cobra.Command, _ []string) error {
 			}),
 			logger,
 			func(count int) {
-				// Called from background goroutine — send into TUI via program.
-				if *prog != nil {
-					(*prog).Send(tui.NotesSaved(count))
+				if prog != nil {
+					prog.Send(tui.NotesSaved(count))
 				}
 			},
 		)
@@ -151,7 +149,6 @@ func runChat(_ *cobra.Command, _ []string) error {
 		defer sess.Close(context.Background())
 
 		providerFn = func(callCtx context.Context, userMsg string) (string, error) {
-			// Update model on the adapter each call so /model changes take effect.
 			sess.SetModel(activeModel)
 			result, err := sess.Send(callCtx, userMsg)
 			if err != nil {
@@ -164,38 +161,23 @@ func runChat(_ *cobra.Command, _ []string) error {
 			return provider.ListModels(callCtx, adapterCfg)
 		}
 
-		// modelSelected persists the choice and updates the closure variable.
 		cfgRepo := store.NewProviderConfigRepo(db)
-		modelSelectedFn := func(modelID string) error {
+		modelSelectedFn = func(modelID string) error {
 			if err := cfgRepo.SetModel(ctx, activeProfile.ID, modelID); err != nil {
 				return err
 			}
 			activeModel = modelID
 			return nil
 		}
-
-		m := tui.New(
-			activeProfile.Name, activeModel,
-			dispatcher, execCtx,
-			providerFn, listModelsFn, modelSelectedFn,
-		)
-		p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
-		*prog = p
-		if _, runErr := p.Run(); runErr != nil {
-			return fmt.Errorf("chat: TUI error: %w", runErr)
-		}
-		return nil
 	}
 
-	// No provider configured — still open TUI but show guidance.
 	m := tui.New(
-		activeProfile.Name, "",
+		activeProfile.Name, activeModel,
 		dispatcher, execCtx,
-		nil, nil,
-		func(modelID string) error { return nil },
+		providerFn, listModelsFn, modelSelectedFn,
 	)
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
-	if _, runErr := p.Run(); runErr != nil {
+	prog = tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	if _, runErr := prog.Run(); runErr != nil {
 		return fmt.Errorf("chat: TUI error: %w", runErr)
 	}
 	return nil
