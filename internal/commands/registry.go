@@ -53,6 +53,11 @@ type ExecContext struct {
 	// Confirm is a function that prompts the user for explicit confirmation.
 	// It returns true if the user confirmed, false otherwise.
 	Confirm func(prompt string) bool
+
+	// SuspendForEditor is called by commands that need to open a terminal editor.
+	// The TUI suspends itself, runs fn (which opens the editor), then resumes.
+	// If nil, editor-based commands are unavailable in the current execution context.
+	SuspendForEditor func(fn func() error) error
 }
 
 // Registry holds all registered commands and provides lookup and listing operations.

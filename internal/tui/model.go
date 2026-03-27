@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -64,10 +66,11 @@ type chatMessage struct{ role, content string }
 
 // ---- async tea.Msg types ----------------------------------------------------
 
-type providerReplyMsg      struct{ content string; err error }
-type modelsLoadedMsg       struct{ models []provider.ModelInfo; err error }
-type notesSavedMsg         struct{ count int }
+type providerReplyMsg       struct{ content string; err error }
+type modelsLoadedMsg        struct{ models []provider.ModelInfo; err error }
+type notesSavedMsg          struct{ count int }
 type clearNotesIndicatorMsg struct{}
+type editorFinishedMsg      struct{ err error }
 
 // ---- styles -----------------------------------------------------------------
 
@@ -165,6 +168,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clearNotesIndicatorMsg:
 		m.notesIndicator = ""
+
+	// ---- editor finished ----------------------------------------------------
+	case editorFinishedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			m.messages = append(m.messages, chatMessage{
+				role:    "command",
+				content: "System prompt updated.",
+			})
+			m.syncViewport()
+		}
 
 	// ---- provider reply -----------------------------------------------------
 	case providerReplyMsg:
@@ -314,6 +329,10 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	result := m.dispatcher.Dispatch(val, m.execCtx)
 	if result.IsSlash {
 		if result.Err != nil {
+			// Check if this is a request to open the editor.
+			if openErr, ok := commands.AsErrOpenEditor(result.Err); ok {
+				return m, m.openEditor(openErr.Path, cmds)
+			}
 			m.err = result.Err
 		} else if result.Executed && result.Output != "" {
 			m.messages = append(m.messages, chatMessage{
@@ -365,6 +384,22 @@ func (m *Model) clearSuggestions() {
 	m.suggestions = nil
 	m.suggCursor = -1
 	m.suggActive = false
+}
+
+// openEditor suspends the TUI, opens the file in $EDITOR, then resumes.
+func (m Model) openEditor(path string, cmds []tea.Cmd) tea.Cmd {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = os.Getenv("VISUAL")
+	}
+	if editor == "" {
+		editor = "vi"
+	}
+	c := exec.Command(editor, path)
+	cmds = append(cmds, tea.ExecProcess(c, func(err error) tea.Msg {
+		return editorFinishedMsg{err: err}
+	}))
+	return tea.Batch(cmds...)
 }
 
 // openModelPicker initialises the picker overlay and fires the async fetch.

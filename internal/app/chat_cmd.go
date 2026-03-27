@@ -87,6 +87,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 			fmt.Scanln(&ans)
 			return strings.ToLower(strings.TrimSpace(ans)) == "yes"
 		},
+		// Non-nil signals to handlers that we're in TUI mode.
+		// Actual suspension is handled by the TUI via tea.ExecProcess.
+		SuspendForEditor: func(fn func() error) error { return fn() },
 	}
 
 	// Resolve provider config.
