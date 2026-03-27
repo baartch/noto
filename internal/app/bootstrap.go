@@ -33,7 +33,7 @@ func Bootstrap(slug string, logOutput io.Writer) (*Container, error) {
 	if err != nil {
 		return nil, fmt.Errorf("app: db path: %w", err)
 	}
-	db, err := store.Open(dbPath)
+	db, err := store.OpenProfile(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("app: open db: %w", err)
 	}

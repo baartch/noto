@@ -31,14 +31,15 @@ func chatCmd() *cobra.Command {
 func runChat(_ *cobra.Command, _ []string) error {
 	ctx := context.Background()
 
-	db, err := openGlobalDB()
+	// Global DB: profile registry only.
+	globalDB, err := openGlobalDB()
 	if err != nil {
-		return fmt.Errorf("chat: open db: %w", err)
+		return fmt.Errorf("chat: open global db: %w", err)
 	}
-	defer db.Close()
+	defer globalDB.Close()
 
 	// Resolve or auto-create active profile.
-	profRepo := store.NewProfileRepo(db)
+	profRepo := store.NewProfileRepo(globalDB)
 	profSvc := profile.NewService(profRepo)
 
 	activeProfile, err := profSvc.GetActive(ctx)
@@ -97,8 +98,15 @@ func runChat(_ *cobra.Command, _ []string) error {
 		// are handled directly by the TUI via the profileSelected return value.
 	}
 
+	// Per-profile DB: conversations, messages, memory notes, provider config, etc.
+	profileDB, err := openProfileDB(activeProfile.Slug)
+	if err != nil {
+		return fmt.Errorf("chat: open profile db: %w", err)
+	}
+	defer profileDB.Close()
+
 	// Resolve provider config.
-	providerCfg, decryptedKey := loadProviderConfig(ctx, db, activeProfile.ID)
+	providerCfg, decryptedKey := loadProviderConfig(ctx, profileDB, activeProfile.ID)
 	activeModel := ""
 
 	var providerFn tui.ProviderFunc
@@ -116,10 +124,10 @@ func runChat(_ *cobra.Command, _ []string) error {
 
 		systemPrompt := loadSystemPrompt(activeProfile.Slug)
 
-		convRepo    := store.NewConversationRepo(db)
-		msgRepo     := store.NewMessageRepo(db)
-		noteRepo    := store.NewMemoryNoteRepo(db)
-		summaryRepo := store.NewSessionSummaryRepo(db)
+		convRepo    := store.NewConversationRepo(profileDB)
+		msgRepo     := store.NewMessageRepo(profileDB)
+		noteRepo    := store.NewMemoryNoteRepo(profileDB)
+		summaryRepo := store.NewSessionSummaryRepo(profileDB)
 		logger      := observe.NewNoopLogger()
 
 		sess, sessErr := chatpkg.NewSession(
@@ -158,7 +166,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 			return provider.ListModels(callCtx, adapterCfg)
 		}
 
-		cfgRepo := store.NewProviderConfigRepo(db)
+		cfgRepo := store.NewProviderConfigRepo(profileDB)
 		modelSelectedFn = func(modelID string) error {
 			if err := cfgRepo.SetModel(ctx, activeProfile.ID, modelID); err != nil {
 				return err

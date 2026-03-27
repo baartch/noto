@@ -16,7 +16,7 @@ import (
 func buildRegistry(t *testing.T) *commands.Registry {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "test.db"))
+	db, err := store.OpenForTesting(filepath.Join(dir, "test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

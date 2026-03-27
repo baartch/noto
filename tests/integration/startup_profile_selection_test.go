@@ -16,7 +16,7 @@ func tempDB(t *testing.T) (*store.DB, func()) {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.db")
-	db, err := store.Open(path)
+	db, err := store.OpenForTesting(path)
 	if err != nil {
 		t.Fatalf("open temp db: %v", err)
 	}

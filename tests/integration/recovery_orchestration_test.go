@@ -14,7 +14,7 @@ func TestRecovery_MissingDB_RestoresFromBackup(t *testing.T) {
 
 	// Create a minimal DB file to snapshot.
 	dbPath := filepath.Join(dir, "memory.db")
-	db, err := store.Open(dbPath)
+	db, err := store.OpenForTesting(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestRecovery_MissingDB_RestoresFromBackup(t *testing.T) {
 	}
 
 	// Verify DB is valid after restore.
-	db2, err := store.Open(dbPath)
+	db2, err := store.OpenForTesting(dbPath)
 	if err != nil {
 		t.Fatalf("restored DB should open: %v", err)
 	}

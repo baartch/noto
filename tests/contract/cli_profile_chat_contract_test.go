@@ -13,7 +13,7 @@ import (
 func openTestDB(t *testing.T) (*store.DB, func()) {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := store.Open(filepath.Join(dir, "contract_test.db"))
+	db, err := store.OpenForTesting(filepath.Join(dir, "contract_test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

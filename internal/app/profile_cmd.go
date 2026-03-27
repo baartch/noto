@@ -11,6 +11,7 @@ import (
 	"noto/internal/store"
 )
 
+
 func profileCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "profile",
@@ -24,28 +25,6 @@ func profileCmd() *cobra.Command {
 	return cmd
 }
 
-// openGlobalDB opens the shared global-scope SQLite DB for profile management.
-// For a real implementation this would need a separate global DB path;
-// here we use a fixed path under ~/.noto/global.db.
-func openGlobalDB() (*store.DB, error) {
-	appDir, err := globalAppDir()
-	if err != nil {
-		return nil, err
-	}
-	return store.Open(appDir + "/global.db")
-}
-
-func globalAppDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	dir := home + "/.noto"
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", err
-	}
-	return dir, nil
-}
 
 func profileCreateCmd() *cobra.Command {
 	return &cobra.Command{

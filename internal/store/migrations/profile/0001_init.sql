@@ -1,26 +1,12 @@
--- 0001_init.sql
--- Initial schema for Noto Profile Memory CLI
-
--- ============================================================
--- profiles
--- ============================================================
-CREATE TABLE IF NOT EXISTS profiles (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL UNIQUE,
-    slug        TEXT NOT NULL UNIQUE,
-    system_prompt_path TEXT NOT NULL DEFAULT '',
-    db_path     TEXT NOT NULL DEFAULT '',
-    is_default  INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
-    created_at  DATETIME NOT NULL DEFAULT (datetime('now')),
-    updated_at  DATETIME NOT NULL DEFAULT (datetime('now'))
-);
+-- profile/0001_init.sql
+-- Per-profile DB: all profile-scoped data.
 
 -- ============================================================
 -- conversations
 -- ============================================================
 CREATE TABLE IF NOT EXISTS conversations (
     id          TEXT PRIMARY KEY,
-    profile_id  TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    profile_id  TEXT NOT NULL,
     started_at  DATETIME NOT NULL DEFAULT (datetime('now')),
     ended_at    DATETIME,
     status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived'))
@@ -48,13 +34,13 @@ CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation
 -- ============================================================
 CREATE TABLE IF NOT EXISTS memory_notes (
     id                  TEXT PRIMARY KEY,
-    profile_id          TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    conversation_id     TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+    profile_id          TEXT NOT NULL,
+    conversation_id     TEXT,
     category            TEXT NOT NULL DEFAULT 'fact'
                             CHECK (category IN ('fact','progress','blocker','action_item','other')),
     content             TEXT NOT NULL,
     importance          INTEGER NOT NULL DEFAULT 5 CHECK (importance BETWEEN 1 AND 10),
-    source_message_ids  TEXT NOT NULL DEFAULT '[]', -- JSON array of message IDs
+    source_message_ids  TEXT NOT NULL DEFAULT '[]',
     created_at          DATETIME NOT NULL DEFAULT (datetime('now')),
     updated_at          DATETIME NOT NULL DEFAULT (datetime('now'))
 );
@@ -66,11 +52,11 @@ CREATE INDEX IF NOT EXISTS idx_memory_notes_profile_id ON memory_notes(profile_i
 -- ============================================================
 CREATE TABLE IF NOT EXISTS session_summaries (
     id              TEXT PRIMARY KEY,
-    profile_id      TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+    profile_id      TEXT NOT NULL,
+    conversation_id TEXT,
     summary_text    TEXT NOT NULL,
-    open_loops      TEXT NOT NULL DEFAULT '[]',  -- JSON array
-    next_actions    TEXT NOT NULL DEFAULT '[]',  -- JSON array
+    open_loops      TEXT NOT NULL DEFAULT '[]',
+    next_actions    TEXT NOT NULL DEFAULT '[]',
     created_at      DATETIME NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -81,11 +67,12 @@ CREATE INDEX IF NOT EXISTS idx_session_summaries_profile_id ON session_summaries
 -- ============================================================
 CREATE TABLE IF NOT EXISTS provider_config (
     id             TEXT PRIMARY KEY,
-    profile_id     TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    profile_id     TEXT NOT NULL,
     provider_type  TEXT NOT NULL,
     endpoint       TEXT NOT NULL DEFAULT '',
     model          TEXT NOT NULL DEFAULT '',
-    credential_ref TEXT NOT NULL DEFAULT '', -- encrypted credential key or reference
+    active_model   TEXT NOT NULL DEFAULT '',
+    credential_ref TEXT NOT NULL DEFAULT '',
     is_active      INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
     created_at     DATETIME NOT NULL DEFAULT (datetime('now')),
     updated_at     DATETIME NOT NULL DEFAULT (datetime('now'))
@@ -98,10 +85,10 @@ CREATE INDEX IF NOT EXISTS idx_provider_config_profile_id ON provider_config(pro
 -- ============================================================
 CREATE TABLE IF NOT EXISTS context_cache (
     id              TEXT PRIMARY KEY,
-    profile_id      TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    profile_id      TEXT NOT NULL,
     cache_key       TEXT NOT NULL,
     payload         TEXT NOT NULL DEFAULT '',
-    source_note_ids TEXT NOT NULL DEFAULT '[]',  -- JSON array
+    source_note_ids TEXT NOT NULL DEFAULT '[]',
     prompt_version  TEXT NOT NULL DEFAULT '',
     state_version   TEXT NOT NULL DEFAULT '',
     created_at      DATETIME NOT NULL DEFAULT (datetime('now')),
@@ -116,7 +103,7 @@ CREATE INDEX IF NOT EXISTS idx_context_cache_profile_id ON context_cache(profile
 -- ============================================================
 CREATE TABLE IF NOT EXISTS vector_index_entries (
     id              TEXT PRIMARY KEY,
-    profile_id      TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    profile_id      TEXT NOT NULL,
     source_type     TEXT NOT NULL CHECK (source_type IN ('memory_note','session_summary','message')),
     source_id       TEXT NOT NULL,
     chunk_hash      TEXT NOT NULL,
@@ -134,7 +121,7 @@ CREATE INDEX IF NOT EXISTS idx_vector_entries_profile_id ON vector_index_entries
 -- ============================================================
 CREATE TABLE IF NOT EXISTS vector_index_manifest (
     id                   TEXT PRIMARY KEY,
-    profile_id           TEXT NOT NULL UNIQUE REFERENCES profiles(id) ON DELETE CASCADE,
+    profile_id           TEXT NOT NULL UNIQUE,
     index_path           TEXT NOT NULL DEFAULT '',
     index_format_version TEXT NOT NULL DEFAULT '1',
     embedding_model      TEXT NOT NULL DEFAULT '',

@@ -41,19 +41,13 @@ func providerSetCmd() *cobra.Command {
 			}
 
 			ctx := context.Background()
-			db, err := openGlobalDB()
+			globalDB, profileDB, activeProfile, err := openBothDBs(ctx)
 			if err != nil {
 				return err
 			}
-			defer db.Close()
+			defer globalDB.Close()
+			defer profileDB.Close()
 
-			// Resolve active profile.
-			activeProfile, err := resolveActiveProfile(ctx, db)
-			if err != nil {
-				return err
-			}
-
-			// Encrypt the API key.
 			passphrase, err := security.MachinePassphrase()
 			if err != nil {
 				return fmt.Errorf("provider: get passphrase: %w", err)
@@ -63,8 +57,7 @@ func providerSetCmd() *cobra.Command {
 				return fmt.Errorf("provider: encrypt key: %w", err)
 			}
 
-			// Deactivate any existing configs for this profile first.
-			if err := deactivateProviderConfigs(ctx, db, activeProfile.ID); err != nil {
+			if err := deactivateProviderConfigs(ctx, profileDB, activeProfile.ID); err != nil {
 				return err
 			}
 
@@ -78,7 +71,7 @@ func providerSetCmd() *cobra.Command {
 				IsActive:      true,
 			}
 
-			repo := store.NewProviderConfigRepo(db)
+			repo := store.NewProviderConfigRepo(profileDB)
 			if err := repo.Upsert(ctx, cfg); err != nil {
 				return err
 			}
@@ -100,7 +93,7 @@ func providerSetCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&apiKey, "key", "", "API key (required)")
-	cmd.Flags().StringVar(&model, "model", "", "Model name, e.g. gpt-4o-mini, llama3.2 (required)")
+	cmd.Flags().StringVar(&model, "model", "", "Model name, e.g. gpt-4o-mini, llama3.2 (optional)")
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "API endpoint URL (default: OpenAI)")
 	return cmd
 }
@@ -111,26 +104,21 @@ func providerShowCmd() *cobra.Command {
 		Short: "Show the current provider configuration for the active profile",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			db, err := openGlobalDB()
+			globalDB, profileDB, activeProfile, err := openBothDBs(ctx)
 			if err != nil {
 				return err
 			}
-			defer db.Close()
+			defer globalDB.Close()
+			defer profileDB.Close()
 
-			activeProfile, err := resolveActiveProfile(ctx, db)
-			if err != nil {
-				return err
-			}
-
-			repo := store.NewProviderConfigRepo(db)
+			repo := store.NewProviderConfigRepo(profileDB)
 			cfg, err := repo.GetActive(ctx, activeProfile.ID)
 			if err != nil {
 				fmt.Printf("No provider configured for profile %q.\n", activeProfile.Name)
-				fmt.Println("Run: noto provider set --key <key> --model <model>")
+				fmt.Println("Run: noto provider set --key <key>")
 				return nil
 			}
 
-			// Decrypt to show masked key.
 			passphrase, _ := security.MachinePassphrase()
 			decrypted, decErr := security.Decrypt(cfg.CredentialRef, passphrase)
 			keyDisplay := "(decryption failed)"
@@ -159,18 +147,14 @@ func providerClearCmd() *cobra.Command {
 		Short: "Remove the provider configuration for the active profile",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			db, err := openGlobalDB()
+			globalDB, profileDB, activeProfile, err := openBothDBs(ctx)
 			if err != nil {
 				return err
 			}
-			defer db.Close()
+			defer globalDB.Close()
+			defer profileDB.Close()
 
-			activeProfile, err := resolveActiveProfile(ctx, db)
-			if err != nil {
-				return err
-			}
-
-			if err := deactivateProviderConfigs(ctx, db, activeProfile.ID); err != nil {
+			if err := deactivateProviderConfigs(ctx, profileDB, activeProfile.ID); err != nil {
 				return err
 			}
 			fmt.Printf("Provider configuration cleared for profile %q.\n", activeProfile.Name)
@@ -181,8 +165,31 @@ func providerClearCmd() *cobra.Command {
 
 // ---- helpers ----------------------------------------------------------------
 
+// openBothDBs opens the global DB, resolves the active profile, then opens
+// the profile DB. Returns all three for use in command handlers.
+func openBothDBs(ctx context.Context) (*store.DB, *store.DB, *store.Profile, error) {
+	globalDB, err := openGlobalDB()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	activeProfile, err := resolveActiveProfile(ctx, globalDB)
+	if err != nil {
+		globalDB.Close()
+		return nil, nil, nil, err
+	}
+
+	profileDB, err := openProfileDB(activeProfile.Slug)
+	if err != nil {
+		globalDB.Close()
+		return nil, nil, nil, fmt.Errorf("provider: open profile db: %w", err)
+	}
+
+	return globalDB, profileDB, activeProfile, nil
+}
+
 func resolveActiveProfile(ctx context.Context, db *store.DB) (*store.Profile, error) {
-	svc := newProfileSvcFromDB(db)
+	svc := profileServiceAdapter{repo: store.NewProfileRepo(db)}
 	p, err := svc.GetActive(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("no active profile — run: noto profile select <name>")
@@ -203,23 +210,10 @@ func maskKey(key string) string {
 	return key[:4]
 }
 
-// newProfileSvcFromDB creates a profile.Service from an open DB.
-// Avoids importing the profile package from provider_cmd by reusing the helper
-// already available in profile_cmd.go via the shared openGlobalDB pattern.
-func newProfileSvcFromDB(db *store.DB) interface {
-	GetActive(ctx context.Context) (*store.Profile, error)
-} {
-	return profileServiceAdapter{repo: store.NewProfileRepo(db)}
-}
-
 type profileServiceAdapter struct {
 	repo *store.ProfileRepo
 }
 
 func (a profileServiceAdapter) GetActive(ctx context.Context) (*store.Profile, error) {
-	p, err := a.repo.GetDefault(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return p, nil
+	return a.repo.GetDefault(ctx)
 }
