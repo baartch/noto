@@ -195,7 +195,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 		providerFn, listModelsFn, modelSelectedFn,
 		listProfilesFn, profileSelectedFn,
 	)
-	prog = tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	prog = tea.NewProgram(m, tea.WithAltScreen())
 	if _, runErr := prog.Run(); runErr != nil {
 		return fmt.Errorf("chat: TUI error: %w", runErr)
 	}

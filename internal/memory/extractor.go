@@ -23,14 +23,16 @@ type extractedItem struct {
 	Importance int    `json:"importance"` // 1-10
 }
 
-const extractionPrompt = `You are a memory extraction assistant. Given the following conversation exchange, identify any information worth remembering for future sessions: facts about the user, decisions made, progress updates, blockers, or action items.
+const extractionPrompt = `Extract memory-worthy facts from this conversation exchange.
+Reply ONLY with a JSON array (no markdown, no explanation). Language: match the conversation language.
 
-Respond ONLY with a JSON array. Each element must have:
-- "category": one of "fact", "progress", "blocker", "action_item", "other"
-- "content": a concise single-sentence note (max 200 chars)
-- "importance": integer 1-10 (10 = critical, 1 = trivial)
+Each object: {"category":"fact|progress|blocker|action_item|other","content":"one concise sentence, max 150 chars","importance":1-10}
 
-If nothing is worth remembering, respond with an empty array: []
+Rules:
+- importance 8-10: critical facts about the user (name, role, key goals, decisions)
+- importance 5-7: useful context (preferences, current work, recent events)
+- importance 1-4: minor details
+- Return [] if nothing is worth remembering long-term
 
 Exchange:
 User: %s
