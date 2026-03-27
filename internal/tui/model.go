@@ -27,18 +27,22 @@ type ModelSelectedFunc func(modelID string) error
 
 // Model is the root Bubble Tea model for Noto.
 type Model struct {
-	profileName  string
-	activeModel  string // currently selected model (shown in header)
-	input        textinput.Model
-	viewport     viewport.Model
-	messages     []chatMessage
-	suggestions  []suggest.Suggestion
-	width        int
-	height       int
-	err          error
-	ready        bool
+	profileName string
+	activeModel string
+	input       textinput.Model
+	viewport    viewport.Model
+	messages    []chatMessage
+	width       int
+	height      int
+	err         error
+	ready       bool
 
-	// picker is non-nil when the /model overlay is active.
+	// slash suggestion state
+	suggestions []suggest.Suggestion
+	suggCursor  int  // -1 = nothing selected; 0..n-1 = highlighted entry
+	suggActive  bool // true when ↑/↓ navigation is in progress
+
+	// model picker overlay (non-nil when /model is open)
 	picker *pickerState
 
 	dispatcher    *chat.Dispatcher
@@ -48,12 +52,9 @@ type Model struct {
 	modelSelected ModelSelectedFunc
 }
 
-type chatMessage struct {
-	role    string
-	content string
-}
+type chatMessage struct{ role, content string }
 
-// ---- async messages ---------------------------------------------------------
+// ---- async tea.Msg types ----------------------------------------------------
 
 type providerReplyMsg struct{ content string; err error }
 type modelsLoadedMsg  struct{ models []provider.ModelInfo; err error }
@@ -61,13 +62,14 @@ type modelsLoadedMsg  struct{ models []provider.ModelInfo; err error }
 // ---- styles -----------------------------------------------------------------
 
 var (
-	headerStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	userStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true)
-	assistantStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	suggStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
-	errStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
-	cmdOutStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
-	modelBadge     = lipgloss.NewStyle().Foreground(lipgloss.Color("13"))
+	headerStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	userStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true)
+	assistantStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	errStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
+	cmdOutStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
+	modelBadge      = lipgloss.NewStyle().Foreground(lipgloss.Color("13"))
+	suggNormalStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	suggSelectStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("4")).Bold(true)
 )
 
 // New creates a new TUI Model.
@@ -76,7 +78,7 @@ func New(
 	activeModel string,
 	dispatcher *chat.Dispatcher,
 	execCtx *commands.ExecContext,
-	provider ProviderFunc,
+	providerFn ProviderFunc,
 	listModels ListModelsFunc,
 	modelSelected ModelSelectedFunc,
 ) Model {
@@ -89,18 +91,17 @@ func New(
 		profileName:   profileName,
 		activeModel:   activeModel,
 		input:         ti,
+		suggCursor:    -1,
 		dispatcher:    dispatcher,
 		execCtx:       execCtx,
-		provider:      provider,
+		provider:      providerFn,
 		listModels:    listModels,
 		modelSelected: modelSelected,
 	}
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd {
-	return textinput.Blink
-}
+func (m Model) Init() tea.Cmd { return textinput.Blink }
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -113,10 +114,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.input.Width = msg.Width - 4
-		headerH := 2
-		inputH  := 2
-		vpH := msg.Height - headerH - inputH - 2
-		if vpH < 1 { vpH = 1 }
+		vpH := msg.Height - 4 // header + input rows
+		if vpH < 1 {
+			vpH = 1
+		}
 		if !m.ready {
 			m.viewport = viewport.New(msg.Width, vpH)
 			m.viewport.SetContent(m.renderHistory())
@@ -126,7 +127,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.Height = vpH
 		}
 
-	// ---- async: models list loaded ------------------------------------------
+	// ---- models loaded (for /model picker) ----------------------------------
 	case modelsLoadedMsg:
 		if m.picker != nil {
 			m.picker.loading = false
@@ -142,7 +143,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	// ---- async: provider reply ----------------------------------------------
+	// ---- provider reply -----------------------------------------------------
 	case providerReplyMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -153,14 +154,60 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ---- keyboard -----------------------------------------------------------
 	case tea.KeyMsg:
-		// Picker overlay handles its own keys.
+		// Model picker overlay takes priority.
 		if m.picker != nil {
 			return m.updatePicker(msg, cmds)
 		}
 
+		// Suggestion navigation takes priority over everything except Ctrl+C.
+		if m.suggActive && len(m.suggestions) > 0 {
+			return m.updateSuggNav(msg, cmds)
+		}
+
 		switch msg.Type {
-		case tea.KeyCtrlC, tea.KeyEsc:
+
+		case tea.KeyCtrlC:
 			return m, tea.Quit
+
+		case tea.KeyEsc:
+			// Dismiss suggestions if visible, otherwise quit.
+			if len(m.suggestions) > 0 {
+				m.clearSuggestions()
+				m.input.SetValue("")
+				return m, nil
+			}
+			return m, tea.Quit
+
+		case tea.KeyUp:
+			// Start suggestion navigation if suggestions are showing.
+			if len(m.suggestions) > 0 {
+				m.suggActive = true
+				m.suggCursor = len(m.suggestions) - 1
+				m.input.SetValue("/" + m.suggestions[m.suggCursor].CommandPath)
+				m.input.CursorEnd()
+				return m, nil
+			}
+			// Otherwise scroll viewport.
+			var vpCmd tea.Cmd
+			m.viewport, vpCmd = m.viewport.Update(msg)
+			return m, vpCmd
+
+		case tea.KeyDown:
+			if len(m.suggestions) > 0 {
+				m.suggActive = true
+				m.suggCursor = 0
+				m.input.SetValue("/" + m.suggestions[m.suggCursor].CommandPath)
+				m.input.CursorEnd()
+				return m, nil
+			}
+			var vpCmd tea.Cmd
+			m.viewport, vpCmd = m.viewport.Update(msg)
+			return m, vpCmd
+
+		case tea.KeyPgUp, tea.KeyPgDown:
+			var vpCmd tea.Cmd
+			m.viewport, vpCmd = m.viewport.Update(msg)
+			return m, vpCmd
 
 		case tea.KeyEnter:
 			val := strings.TrimSpace(m.input.Value())
@@ -168,72 +215,147 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.input.SetValue("")
-			m.suggestions = nil
+			m.clearSuggestions()
 			m.err = nil
-
-			// /model opens the picker directly without going through the dispatcher.
-			if val == "/model" || val == "/model " {
-				return m.openModelPicker(cmds)
-			}
-
-			// All other input goes through the slash dispatcher.
-			result := m.dispatcher.Dispatch(val, m.execCtx)
-
-			if result.IsSlash {
-				if result.Err != nil {
-					m.err = result.Err
-				} else if result.Executed && result.Output != "" {
-					m.messages = append(m.messages, chatMessage{
-						role:    "command",
-						content: strings.TrimRight(result.Output, "\n"),
-					})
-				} else if !result.Executed && len(result.Suggestions) == 0 {
-					// partial — do nothing, suggestions already cleared
-				}
-				m.syncViewport()
-				return m, nil
-			}
-
-			// Plain chat.
-			m.messages = append(m.messages, chatMessage{role: "user", content: val})
-			m.syncViewport()
-
-			if m.provider == nil {
-				m.messages = append(m.messages, chatMessage{
-					role:    "assistant",
-					content: "No provider configured. Run: noto provider set --key <key>\nThen pick a model with /model",
-				})
-				m.syncViewport()
-				return m, nil
-			}
-			userVal := val
-			cmds = append(cmds, func() tea.Msg {
-				reply, err := m.provider(context.Background(), userVal)
-				return providerReplyMsg{content: reply, err: err}
-			})
-
-		case tea.KeyUp, tea.KeyDown, tea.KeyPgUp, tea.KeyPgDown:
-			var vpCmd tea.Cmd
-			m.viewport, vpCmd = m.viewport.Update(msg)
-			cmds = append(cmds, vpCmd)
-			return m, tea.Batch(cmds...)
+			return m.handleSubmit(val, cmds)
 		}
 	}
 
-	// Forward remaining events to text input + refresh suggestions.
+	// Forward to text input and recompute suggestions.
 	var inputCmd tea.Cmd
 	m.input, inputCmd = m.input.Update(msg)
 	cmds = append(cmds, inputCmd)
+	m.refreshSuggestions()
 
-	val := m.input.Value()
-	if strings.HasPrefix(val, "/") {
-		// Use a trailing space to force "partial" mode in the dispatcher.
-		result := m.dispatcher.Dispatch(val+" ", m.execCtx)
-		m.suggestions = result.Suggestions
-	} else {
-		m.suggestions = nil
+	return m, tea.Batch(cmds...)
+}
+
+// updateSuggNav handles ↑/↓/Enter/Esc while suggestion navigation is active.
+func (m Model) updateSuggNav(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyUp:
+		if m.suggCursor > 0 {
+			m.suggCursor--
+		} else {
+			m.suggCursor = len(m.suggestions) - 1
+		}
+		m.input.SetValue("/" + m.suggestions[m.suggCursor].CommandPath)
+		m.input.CursorEnd()
+
+	case tea.KeyDown:
+		if m.suggCursor < len(m.suggestions)-1 {
+			m.suggCursor++
+		} else {
+			m.suggCursor = 0
+		}
+		m.input.SetValue("/" + m.suggestions[m.suggCursor].CommandPath)
+		m.input.CursorEnd()
+
+	case tea.KeyEnter:
+		val := strings.TrimSpace(m.input.Value())
+		m.clearSuggestions()
+		m.err = nil
+		if val == "" {
+			return m, tea.Batch(cmds...)
+		}
+		return m.handleSubmit(val, cmds)
+
+	case tea.KeyEsc, tea.KeyCtrlC:
+		m.clearSuggestions()
+		m.input.SetValue("")
+		if msg.Type == tea.KeyCtrlC {
+			return m, tea.Quit
+		}
+
+	default:
+		// Any other key exits navigation and lets the input handle it normally.
+		m.suggActive = false
+		m.suggCursor = -1
+		var inputCmd tea.Cmd
+		m.input, inputCmd = m.input.Update(msg)
+		cmds = append(cmds, inputCmd)
+		m.refreshSuggestions()
 	}
 
+	return m, tea.Batch(cmds...)
+}
+
+// handleSubmit processes a confirmed input value (Enter pressed).
+func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
+	// /model opens the model picker.
+	if strings.TrimSpace(val) == "/model" {
+		return m.openModelPicker(cmds)
+	}
+
+	// Route through slash dispatcher.
+	result := m.dispatcher.Dispatch(val, m.execCtx)
+	if result.IsSlash {
+		if result.Err != nil {
+			m.err = result.Err
+		} else if result.Executed && result.Output != "" {
+			m.messages = append(m.messages, chatMessage{
+				role:    "command",
+				content: strings.TrimRight(result.Output, "\n"),
+			})
+			m.syncViewport()
+		}
+		return m, tea.Batch(cmds...)
+	}
+
+	// Plain chat message.
+	m.messages = append(m.messages, chatMessage{role: "user", content: val})
+	m.syncViewport()
+
+	if m.provider == nil {
+		m.messages = append(m.messages, chatMessage{
+			role:    "assistant",
+			content: "No provider configured. Run: noto provider set --key <key>\nThen pick a model with /model",
+		})
+		m.syncViewport()
+		return m, tea.Batch(cmds...)
+	}
+
+	userVal := val
+	cmds = append(cmds, func() tea.Msg {
+		reply, err := m.provider(context.Background(), userVal)
+		return providerReplyMsg{content: reply, err: err}
+	})
+	return m, tea.Batch(cmds...)
+}
+
+// refreshSuggestions recomputes the suggestion list from the current input value.
+func (m *Model) refreshSuggestions() {
+	val := m.input.Value()
+	if strings.HasPrefix(val, "/") && !m.suggActive {
+		result := m.dispatcher.Dispatch(val+" ", m.execCtx)
+		if len(result.Suggestions) != len(m.suggestions) {
+			m.suggCursor = -1 // reset cursor when list changes
+		}
+		m.suggestions = result.Suggestions
+	} else if !strings.HasPrefix(val, "/") {
+		m.clearSuggestions()
+	}
+}
+
+// clearSuggestions resets all suggestion state.
+func (m *Model) clearSuggestions() {
+	m.suggestions = nil
+	m.suggCursor = -1
+	m.suggActive = false
+}
+
+// openModelPicker initialises the picker overlay and fires the async fetch.
+func (m Model) openModelPicker(cmds []tea.Cmd) (tea.Model, tea.Cmd) {
+	m.picker = &pickerState{loading: true}
+	if m.listModels != nil {
+		cmds = append(cmds, func() tea.Msg {
+			models, err := m.listModels(context.Background())
+			return modelsLoadedMsg{models: models, err: err}
+		})
+	} else {
+		m.picker.loading = false
+		m.picker.err = fmt.Errorf("no provider configured")
+	}
 	return m, tea.Batch(cmds...)
 }
 
@@ -242,7 +364,9 @@ func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 	switch msg.Type {
 	case tea.KeyEsc, tea.KeyCtrlC:
 		m.picker = nil
-		return m, tea.Batch(cmds...)
+		if msg.Type == tea.KeyCtrlC {
+			return m, tea.Quit
+		}
 
 	case tea.KeyEnter:
 		chosen := m.picker.selected()
@@ -259,7 +383,6 @@ func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 				m.syncViewport()
 			}
 		}
-		return m, tea.Batch(cmds...)
 
 	case tea.KeyUp:
 		if m.picker.cursor > 0 {
@@ -279,33 +402,17 @@ func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 		}
 
 	default:
-		// Printable rune → add to filter.
 		if msg.Type == tea.KeyRunes {
 			m.picker.filter += msg.String()
 			m.picker.cursor = 0
 		}
 	}
 
-	m.picker.clampCursor()
-	return m, tea.Batch(cmds...)
-}
-
-// openModelPicker initialises the picker overlay and fires the async models fetch.
-func (m Model) openModelPicker(cmds []tea.Cmd) (tea.Model, tea.Cmd) {
-	m.picker = &pickerState{loading: true}
-	if m.listModels != nil {
-		cmds = append(cmds, func() tea.Msg {
-			models, err := m.listModels(context.Background())
-			return modelsLoadedMsg{models: models, err: err}
-		})
-	} else {
-		m.picker.loading = false
-		m.picker.err = errNoProvider
+	if m.picker != nil {
+		m.picker.clampCursor()
 	}
 	return m, tea.Batch(cmds...)
 }
-
-var errNoProvider = fmt.Errorf("no provider configured")
 
 // View implements tea.Model.
 func (m Model) View() string {
@@ -313,28 +420,22 @@ func (m Model) View() string {
 		return "\n  Initialising…"
 	}
 
-	// Header.
 	modelPart := ""
 	if m.activeModel != "" {
 		modelPart = "  " + modelBadge.Render("["+m.activeModel+"]")
 	}
-	header := headerStyle.Render("─── Noto · "+m.profileName+" ── /model to switch · Ctrl+C quit ───") + modelPart
+	header := headerStyle.Render("─── Noto · "+m.profileName+" ── /model · Ctrl+C quit ───") + modelPart
 
-	// Picker overlay replaces the suggestions area.
-	var midSection string
+	// Middle section: model picker OR slash suggestions OR empty.
+	var mid strings.Builder
 	if m.picker != nil {
-		pickerHeight := m.height / 2
-		if pickerHeight < 6 { pickerHeight = 6 }
-		midSection = m.picker.render(pickerHeight) + "\n"
-	} else {
-		// Slash suggestions.
-		if len(m.suggestions) > 0 {
-			var sb strings.Builder
-			for _, s := range m.suggestions {
-				sb.WriteString(suggStyle.Render("  /"+s.CommandPath+"  — "+s.Hint) + "\n")
-			}
-			midSection = sb.String()
+		ph := m.height / 2
+		if ph < 6 {
+			ph = 6
 		}
+		mid.WriteString(m.picker.render(ph) + "\n")
+	} else if len(m.suggestions) > 0 {
+		mid.WriteString(m.renderSuggestions())
 	}
 
 	var errBlock string
@@ -344,14 +445,30 @@ func (m Model) View() string {
 
 	return header + "\n" +
 		m.viewport.View() + "\n" +
-		midSection +
+		mid.String() +
 		errBlock +
 		m.input.View()
 }
 
-// syncViewport rebuilds viewport content and scrolls to the bottom.
+// renderSuggestions draws the suggestion list with the active cursor highlighted.
+func (m *Model) renderSuggestions() string {
+	var sb strings.Builder
+	for i, s := range m.suggestions {
+		line := fmt.Sprintf("  /%s  — %s", s.CommandPath, s.Hint)
+		if i == m.suggCursor {
+			sb.WriteString(suggSelectStyle.Render(line) + "\n")
+		} else {
+			sb.WriteString(suggNormalStyle.Render(line) + "\n")
+		}
+	}
+	return sb.String()
+}
+
+// syncViewport rebuilds viewport content and scrolls to bottom.
 func (m *Model) syncViewport() {
-	if !m.ready { return }
+	if !m.ready {
+		return
+	}
 	m.viewport.SetContent(m.renderHistory())
 	m.viewport.GotoBottom()
 }
