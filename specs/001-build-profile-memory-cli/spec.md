@@ -14,6 +14,11 @@
 - Q: What is the backup frequency policy? → A: Periodic + on session end.
 - Q: What is the local observability policy? → A: Structured logs + local metrics.
 - Q: What is explicitly out of scope for this release? → A: Multi-user sync, cloud backup, and vector memory as source of truth.
+- Q: What is the slash command scope inside chat? → A: Full parity with CLI commands.
+- Q: How should ambiguous slash commands be handled? → A: Require explicit selection when multiple matches exist.
+- Q: When should slash command suggestions be visible? → A: Only when input starts with `/`.
+- Q: What slash syntax style should be canonical? → A: Hierarchical style (e.g., `/profile list`, `/prompt show`).
+- Q: How should unknown slash commands be handled? → A: Show explicit error with top matching suggestions.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -98,6 +103,10 @@ deletion confirmation behavior.
   exposing credential material.
 - Provider becomes unavailable mid-chat; app preserves transcript and allows retry or provider
   switch.
+- A slash command is valid in CLI but missing in chat; app treats this as parity failure and
+  reports a corrective error.
+- Slash input matches multiple commands; app requires explicit user selection before execution.
+- Unknown slash command is entered; app shows explicit error and top matching command suggestions.
 - Memory retrieval returns no relevant results; app continues chat without failure.
 - Cached context is stale or corrupted; app invalidates and rebuilds cache from persisted memory.
 - Cache references removed memory items; app repairs cache automatically without cross-profile
@@ -146,6 +155,16 @@ deletion confirmation behavior.
   if repair fails, restore from the latest local backup for that profile.
 - **FR-021**: System MUST create profile-local backups periodically and at session end to support
   bounded data-loss recovery.
+- **FR-022**: System MUST expose every CLI command in chat via slash command format with
+  equivalent behavior, validation, and side effects.
+- **FR-023**: System MUST require explicit user selection when slash input maps to multiple
+  command matches; ambiguous slash input MUST NOT auto-execute.
+- **FR-024**: System MUST show command suggestions only while the current chat input is in slash
+  command mode (input begins with `/`).
+- **FR-025**: System MUST use hierarchical slash command syntax as canonical format (e.g.,
+  `/profile list`, `/prompt show`) consistent with CLI command structure.
+- **FR-026**: System MUST return explicit error feedback and top matching suggestions when an
+  unknown slash command is entered.
 
 ### Non-Functional Requirements *(mandatory)*
 
@@ -182,6 +201,8 @@ deletion confirmation behavior.
   inputs for chat startup or early turns, linked to cache validity metadata.
 - **Provider Configuration**: User-selectable model access settings that enable chatting across
   multiple providers without changing user workflows.
+- **Slash Command**: Chat command invocation using canonical hierarchical syntax mapped to the
+  same command semantics as CLI mode.
 
 ## Success Criteria *(mandatory)*
 
@@ -210,6 +231,8 @@ deletion confirmation behavior.
   last periodic or session-end backup.
 - **SC-013**: In validation runs, 100% of startup, memory retrieval, cache invalidation,
   provider error, and recovery flows produce structured log records and local metric updates.
+- **SC-014**: In UI validation runs, command suggestion lists are shown for 100% of slash-mode
+  inputs and 0% of non-slash chat inputs.
 
 ## Assumptions
 

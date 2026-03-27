@@ -4,8 +4,7 @@
 
 - Go 1.23+
 - Local terminal on macOS/Linux
-- At least one reachable provider endpoint (GitHub Models, OpenRouter, local OpenAI-compatible,
-  or generic OpenAI-compatible)
+- Reachable model provider configuration
 
 ## Run
 
@@ -13,44 +12,27 @@
 go run ./cmd/noto
 ```
 
-## First-Run Validation
+## Slash Command Validation
 
-1. Start app.
-2. Confirm zero-profile flow forces profile creation.
-3. Configure provider credentials and verify credentials are stored encrypted.
-4. Start chat; end session; confirm summary/notes and session-end backup are written.
-5. Restart app; confirm continuity context loads (cache hit path if available).
+1. Enter chat and type `/`.
+2. Confirm command suggestions appear.
+3. Type `/pro` and confirm profile commands are suggested.
+4. Execute `/profile list` and verify behavior matches CLI mode.
+5. Enter ambiguous slash input and confirm explicit selection is required.
+6. Enter unknown slash input and confirm explicit error + top suggestions.
+7. Confirm no suggestions appear during non-slash chat input.
 
-## Core Commands
+## Reliability/Security Checks
 
-```bash
-noto profile create "Career Coach"
-noto profile list
-noto profile select "Career Coach"
-noto prompt show
-noto prompt edit
-noto chat
-noto profile rename "Career Coach" "Exec Coach"
-noto profile delete "Exec Coach"
-```
-
-## Reliability and Recovery Checks
-
-- Simulate cache corruption: verify invalidation + rebuild from memory.
-- Simulate DB corruption: verify auto-repair attempt, then backup restore fallback.
-- Verify recovery notice explains outcome and recovery point.
-
-## Observability Checks
-
-- Verify structured log entries for startup, retrieval, cache, provider error, and recovery paths.
-- Verify profile-scoped local metrics update for the same flows.
+- Validate encrypted credential handling.
+- Validate corruption recovery (auto-repair then backup restore fallback).
+- Validate no cross-profile effects from slash commands.
 
 ## Performance Checks
 
-- Benchmark startup (warm) against plan budget.
-- Benchmark first contextual response for cache-hit and cache-miss paths.
-- Verify command feedback latency for profile operations.
+- Benchmark slash suggestion refresh latency against p95 budget.
+- Benchmark startup/context assembly/command feedback budgets.
 
 ## Scope Guardrails
 
-- Out-of-scope for this release: multi-user sync, cloud backup, vector memory as source of truth.
+- Out-of-scope: multi-user sync, cloud backup, vector memory as source-of-truth.

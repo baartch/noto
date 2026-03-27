@@ -1,71 +1,44 @@
-# CLI Contract: Noto Commands and Interactive Behavior
+# CLI and Chat Slash Command Contract
 
-## Startup Contract
+## Command Parity Contract
 
-1. If profile count = 0: force create-profile flow before entering chat.
-2. If profile count = 1: auto-select profile and enter chat.
-3. If profile count > 1: require profile/default selection before chat.
+All CLI commands MUST be executable inside chat via slash format with equivalent behavior,
+validation, and side effects.
 
-## Command Contract
+## Canonical Slash Syntax
 
-### `noto profile create <name>`
-- **Behavior**: Create profile, initialize prompt file, DB, and profile-local paths.
-- **Success Output**: Created profile identifier + local path.
-- **Failure Cases**: duplicate/invalid name, DB init failure, filesystem failure.
+- Canonical format: `/group action [args...]`
+- Examples:
+  - `/profile list`
+  - `/profile select "Career Coach"`
+  - `/prompt show`
 
-### `noto profile list`
-- **Behavior**: List profiles with active/default indicators.
+## Suggestion Contract
 
-### `noto profile select <name>`
-- **Behavior**: Set active profile for next chat and profile-scoped commands.
-- **Failure Cases**: unknown profile.
+- Suggestions visible only when current input begins with `/`.
+- Suggestions refresh on each keystroke in slash mode.
+- Suggestions include command path + short hint.
+- Ambiguous slash input requires explicit user selection; no auto-execution.
+- Unknown slash command returns explicit error + top matching suggestions.
 
-### `noto profile rename <old> <new>`
-- **Behavior**: Rename profile safely without cross-profile side effects.
-- **Failure Cases**: unknown old profile, duplicate new name.
+## Execution Safety Contract
 
-### `noto profile delete <name>`
-- **Behavior**: Require explicit confirmation phrase; on confirm remove only target profile data.
-- **Failure Cases**: confirmation mismatch/cancel, unknown profile, delete failures.
+- Destructive commands in slash mode require same explicit confirmation behavior as CLI mode.
+- Slash command execution cannot bypass profile isolation checks.
 
-### `noto prompt show`
-- **Behavior**: Display active profile prompt.
+## Existing Command Surface (applies to CLI + slash)
 
-### `noto prompt edit`
-- **Behavior**: Edit prompt; save; invalidate active profile context cache.
+- `profile create <name>`
+- `profile list`
+- `profile select <name>`
+- `profile rename <old> <new>`
+- `profile delete <name>`
+- `prompt show`
+- `prompt edit`
+- `chat`
 
-### `noto chat`
-- **Behavior**: Enter interactive chat in active profile.
-- **Runtime guarantees**:
-  - Uses only active profile prompt/memory/cache/provider config.
-  - On cache miss/invalid cache, rebuilds from persisted memory.
-  - On session end, writes memory notes, summary, and session-end backup snapshot.
+## Recovery/Security/Isolation
 
-## Recovery Contract
-
-- On profile DB corruption detection:
-  1. Attempt automatic repair.
-  2. If repair fails, restore latest valid profile-local backup snapshot.
-  3. Emit clear user-visible notice of outcome and recovered point.
-- Recovery process must never read/write unrelated profile data.
-
-## Security Contract
-
-- Provider credentials stored encrypted at rest.
-- Commands/logs must never print decrypted credential material.
-- Non-credential profile artifacts remain local files under OS permissions.
-
-## Observability Contract
-
-- Emit structured local logs and local metrics for:
-  - startup flow decisions,
-  - retrieval/cache hit/miss and invalidation,
-  - provider call outcomes,
-  - recovery attempts/results,
-  - destructive command confirmations.
-
-## Isolation Contract
-
-- No command may read/write memory, prompt, cache, backups, credentials, or recovery state
-  outside selected profile scope.
-- Deleting/restoring one profile cannot alter other profiles.
+- Recovery: auto-repair then backup restore fallback with user notice.
+- Security: credentials encrypted at rest; no decrypted secrets in output/logs.
+- Isolation: no cross-profile reads/writes from any command path.
