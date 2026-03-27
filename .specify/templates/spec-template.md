@@ -90,6 +90,17 @@
 - **FR-004**: System MUST [data requirement, e.g., "persist user preferences"]
 - **FR-005**: System MUST [behavior, e.g., "log all security events"]
 
+### Non-Functional Requirements *(mandatory)*
+
+- **NFR-001 Code Quality**: Changes MUST pass formatting, linting, and static analysis rules
+  defined by the project.
+- **NFR-002 Testing Standards**: Changes MUST include automated tests for new/changed behavior,
+  including negative/error paths where applicable.
+- **NFR-003 UX Consistency**: User-facing changes MUST follow established UX patterns
+  (terminology, interaction flows, visual behavior) or document approved deviations.
+- **NFR-004 Performance**: Changes MUST define measurable performance targets and verification
+  steps for critical paths.
+
 *Example of marking unclear requirements:*
 
 - **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
@@ -113,6 +124,9 @@
 - **SC-002**: [Measurable metric, e.g., "System handles 1000 concurrent users without degradation"]
 - **SC-003**: [User satisfaction metric, e.g., "90% of users successfully complete primary task on first attempt"]
 - **SC-004**: [Business metric, e.g., "Reduce support tickets related to [X] by 50%"]
+- **SC-005**: [Code quality metric, e.g., "0 lint/format violations in CI for feature scope"]
+- **SC-006**: [Testing metric, e.g., "All new/changed behavior covered by automated tests"]
+- **SC-007**: [Performance metric, e.g., "p95 critical path latency remains under defined budget"]
 
 ## Assumptions
 

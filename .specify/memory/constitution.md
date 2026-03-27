@@ -1,157 +1,83 @@
 <!--
-  Sync Impact Report
-  ==================
-  Version change: 1.1.0 → 1.2.0
-  Modified principles:
-    - III. System-Prompt-Driven Personality (expanded: per-profile prompts,
-      editable at runtime)
-    - IV. Persistent Contextual Memory (expanded: strict profile isolation,
-      one SQLite memory per purpose)
-    - V. Simplicity and Minimal Dependencies (clarified startup UX for
-      profile selection and lifecycle)
-  Added sections: None
-  Removed sections: None
-  Templates requiring updates:
-    - .specify/templates/plan-template.md ✅ reviewed (no changes needed;
-      Constitution Check remains generic)
-    - .specify/templates/spec-template.md ✅ reviewed (no changes needed)
-    - .specify/templates/tasks-template.md ✅ reviewed (no changes needed)
-    - .specify/templates/checklist-template.md ✅ reviewed (no changes needed)
-    - .specify/templates/agent-file-template.md ✅ reviewed (no changes needed)
-    - No commands/ directory exists; nothing to check.
-  Follow-up TODOs: None
+Sync Impact Report
+- Version change: N/A → 1.0.0
+- Modified principles:
+  - N/A (initial constitution adoption)
+- Added sections:
+  - Quality Standards
+  - Delivery Workflow & Review Gates
+- Removed sections:
+  - None
+- Templates requiring updates:
+  - ✅ updated: .specify/templates/plan-template.md
+  - ✅ updated: .specify/templates/spec-template.md
+  - ✅ updated: .specify/templates/tasks-template.md
+  - ✅ no command templates present: .specify/templates/commands/*.md
+- Follow-up TODOs:
+  - None
 -->
 
 # Noto Constitution
 
 ## Core Principles
 
-### I. Local-First Privacy
+### I. Code Quality Is Enforced
+All production code MUST pass formatter, linter, and static analysis checks before merge.
+Code MUST keep clear naming, small focused modules, and explicit error handling. Reviews MUST
+reject unclear or unmaintainable code even if functionally correct.
 
-All user data — conversation history, notes, configuration —
-MUST remain on the user's local machine. No telemetry, no cloud
-sync, no external storage of personal content. The user owns
-their data unconditionally.
+Rationale: consistent quality reduces defects, review time, and long-term maintenance cost.
 
-Rationale: The chatbot accumulates deeply personal context
-(goals, struggles, progress). Trust requires absolute local
-data sovereignty.
+### II. Testing Standards Are Non-Negotiable
+Every behavior change MUST include automated tests at the right level (unit, integration,
+contract, end-to-end as applicable). Tests MUST cover success and failure paths. Regressions
+MUST add a failing test first, then fix.
 
-### II. LLM-Agnostic Provider Layer
+Rationale: test discipline prevents silent regressions and enables safe iteration.
 
-The system MUST support multiple LLM backends (GitHub Models,
-OpenRouter, OpenAI-compatible APIs, local models) through a
-unified provider interface. Switching providers MUST NOT require
-code changes beyond configuration (env vars or config file).
+### III. User Experience Consistency First
+User-facing changes MUST follow existing UX patterns: terminology, interaction flow, visual
+states, accessibility behavior, and error messaging. Any deviation MUST be documented in the
+spec/plan and explicitly approved during review.
 
-Rationale: Provider lock-in limits accessibility and increases
-cost risk. Users MUST choose the model that fits their budget,
-privacy stance, and quality needs.
+Rationale: consistent UX lowers cognitive load, improves trust, and reduces support overhead.
 
-### III. System-Prompt-Driven Personality
+### IV. Performance Requirements Are Defined and Verified
+Each feature MUST define measurable performance budgets for critical paths (e.g., latency,
+throughput, memory, startup/render time). Implementation MUST include validation steps proving
+budgets hold before release.
 
-All domain-specific behavior (consulting persona, tone,
-expertise area) MUST be defined in editable external Markdown
-system-prompt files, scoped per profile (purpose). The core
-application MUST remain domain-agnostic; no hardcoded references
-to specific consulting niches.
+Rationale: explicit budgets stop performance decay and keep user experience reliable at scale.
 
-Rationale: A profile prompt swap MUST transform Noto from an
-Artist Manager to any other consulting role without code
-changes.
+## Quality Standards
 
-### IV. Persistent Contextual Memory
+- Specifications MUST include non-functional requirements for code quality, testing, UX
+  consistency, and performance.
+- Plans MUST include constitution gates for all four principles before implementation begins.
+- Tasks MUST include required test work before implementation and explicit performance/UX
+  validation work.
 
-Noto MUST maintain structured local memory that captures key
-facts, decisions, progress, and open topics from every
-conversation. Memory storage MUST be one local single-file
-SQLite database per profile, optimized for retrieval (schema +
-indexes, including FTS where useful). Profile memories MUST be
-strictly isolated. The LLM MUST receive relevant prior notes
-from the active profile only.
+## Delivery Workflow & Review Gates
 
-Rationale: Long-term value requires continuity plus isolation.
-Each purpose needs dedicated context to avoid cross-domain
-contamination.
-
-### V. Simplicity and Minimal Dependencies
-
-Start with the simplest viable implementation. Prefer standard
-library and lightweight local components. Every dependency MUST
-be justified by a clear need that cannot be met with
-reasonable effort in-house. CLI flow MUST remain simple,
-including profile selection and chat startup.
-
-Rationale: This is a personal tool. Complexity is the enemy
-of reliability and long-term maintainability for a solo or
-small-team project.
-
-## Architecture Constraints
-
-- **CLI-only interface**: No web UI, no desktop GUI in v1.
-  Text in/out via terminal.
-- **Single-user**: No authentication, no multi-tenancy.
-  One local installation = one user.
-- **Profile model**: A profile represents one purpose/consulting
-  context. Each profile MUST have:
-  - one SQLite memory DB file
-  - one editable `system_prompt.md` file
-  - optional per-profile provider/model overrides
-- **Storage layout**: Local data root defaults to `~/.noto/`.
-  Profiles MUST be stored under a deterministic directory
-  structure (e.g., `profiles/<profile-id>/memory.db` and
-  `profiles/<profile-id>/system_prompt.md`).
-- **Profile lifecycle**: CLI MUST support create/list/select/
-  edit-prompt/delete profile operations.
-- **Startup behavior**:
-  - 0 profiles: prompt user to create one.
-  - 1 profile: auto-select it.
-  - >1 profiles: require explicit selection or configured
-    default.
-- **Prompt editing**: System prompt files MUST be user-editable
-  at any time via normal file editing workflow (`$EDITOR` or
-  direct file path).
-- **Deletion policy**: Profiles (including their DB + prompt)
-  MUST be deletable locally with explicit confirmation to
-  prevent accidental data loss.
-- **Conversation flow**: On each user message Noto MUST
-  (1) load active profile prompt, (2) retrieve relevant profile
-  memory from SQLite, (3) send context + user message to the
-  LLM, (4) present response, (5) update active profile memory.
-- **Vector storage policy**: Local vector index is OPTIONAL and
-  MUST remain secondary to SQLite source-of-truth records. Do
-  not require vector DB in v1.
-
-## Development Workflow
-
-- **Language**: Go (Golang).
-- **Testing**: Unit tests for provider abstraction, profile
-  routing/isolation, storage access, note extraction, and prompt
-  assembly. Integration tests for end-to-end conversation flow
-  with mock LLM across multiple profiles.
-- **Code organization**: Keep files under ~500 LOC. Split
-  into clear modules: `cli`, `provider`, `profile`, `memory`,
-  `prompt`.
-- **Commits**: Conventional commits. No commit without
-  explicit user instruction.
+- PRs MUST show: passing quality checks, passing tests, UX consistency validation, and
+  performance evidence for impacted paths.
+- Reviewers MUST block merges on any missing gate evidence.
+- Release notes MUST include notable UX or performance changes when user-visible.
 
 ## Governance
 
-This constitution is the highest-authority document for the
-Noto project. All implementation decisions, pull requests,
-and design changes MUST be consistent with the principles
-above.
+This constitution overrides conflicting local practice for planning, implementation, and review.
+Amendments require: (1) documented proposal, (2) approval by maintainers, (3) template sync
+across `.specify/templates/*`, and (4) migration notes for in-flight work.
 
-Amendment procedure:
-1. Propose change with rationale.
-2. Document impact on existing code and storage format.
-3. Update constitution version per semver rules:
-   - MAJOR: Principle removal or incompatible redefinition.
-   - MINOR: New principle or material expansion.
-   - PATCH: Clarification or wording fix.
-4. Update `LAST_AMENDED_DATE`.
+Versioning policy (semantic):
+- MAJOR: remove or redefine a principle/policy in a backward-incompatible way.
+- MINOR: add principle/section or materially expand mandatory guidance.
+- PATCH: clarifications, wording improvements, typo/non-semantic fixes.
 
-Compliance: Every plan and spec MUST include a Constitution
-Check section verifying alignment with these principles.
+Compliance review expectations:
+- Every plan: Constitution Check before research/design and re-check before implementation.
+- Every PR: explicit compliance confirmation for all core principles.
+- Quarterly (or milestone) audit: spot-check recent specs/plans/tasks for alignment.
 
-**Version**: 1.2.0 | **Ratified**: 2026-03-26 | **Last Amended**: 2026-03-26
+**Version**: 1.0.0 | **Ratified**: 2026-03-27 | **Last Amended**: 2026-03-27
