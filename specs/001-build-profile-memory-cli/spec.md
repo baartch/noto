@@ -5,6 +5,16 @@
 **Status**: Draft  
 **Input**: User description: "Build the following: Noto = local CLI chatbot for multi-purpose consulting..."
 
+## Clarifications
+
+### Session 2026-03-27
+
+- Q: What is the local data protection scope? → A: Encrypt provider credentials only; keep profile DB/prompt plaintext local files.
+- Q: What is the reliability strategy for local DB corruption? → A: Auto-repair, else restore last local backup.
+- Q: What is the backup frequency policy? → A: Periodic + on session end.
+- Q: What is the local observability policy? → A: Structured logs + local metrics.
+- Q: What is explicitly out of scope for this release? → A: Multi-user sync, cloud backup, and vector memory as source of truth.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Start and Chat with a Profile (Priority: P1)
@@ -84,12 +94,18 @@ deletion confirmation behavior.
 - Active profile is deleted only after explicit confirmation and a safe fallback selection.
 - User starts app while profile data is missing/corrupted; app reports issue and offers recovery
   path without exposing data from other profiles.
+- Encrypted provider credentials cannot be read; app prompts secure reconfiguration without
+  exposing credential material.
 - Provider becomes unavailable mid-chat; app preserves transcript and allows retry or provider
   switch.
 - Memory retrieval returns no relevant results; app continues chat without failure.
 - Cached context is stale or corrupted; app invalidates and rebuilds cache from persisted memory.
 - Cache references removed memory items; app repairs cache automatically without cross-profile
   leakage.
+- Profile database is corrupted; app attempts automatic repair and, on failure, restores the
+  latest local backup with a clear user notice.
+- Backup is unavailable or stale; app reports the recovery gap and starts protected fallback flow
+  without mixing data from other profiles.
 
 ## Requirements *(mandatory)*
 
@@ -124,6 +140,12 @@ deletion confirmation behavior.
 - **FR-017**: System MUST support fast retrieval of relevant prior memory during chat.
 - **FR-018**: System MUST keep prompt-driven behavior configurable by users, with no hardcoded
   consulting niche behavior in core flows.
+- **FR-019**: System MUST encrypt provider credentials at rest, while profile database, prompts,
+  and cache remain local files protected by OS-level file permissions.
+- **FR-020**: System MUST attempt automatic repair when a profile database is corrupted and,
+  if repair fails, restore from the latest local backup for that profile.
+- **FR-021**: System MUST create profile-local backups periodically and at session end to support
+  bounded data-loss recovery.
 
 ### Non-Functional Requirements *(mandatory)*
 
@@ -137,6 +159,14 @@ deletion confirmation behavior.
   steps for critical paths.
 - **NFR-005 Privacy**: User content and profile memory MUST remain local by default; no external
   persistence of user data is allowed.
+- **NFR-006 Data Protection**: Provider credentials MUST be encrypted at rest; non-credential
+  profile artifacts MAY remain plaintext local files under user-controlled OS permissions.
+- **NFR-007 Reliability**: Corruption recovery MUST be deterministic: auto-repair first, backup
+  restore second, and clear user notification of outcome.
+- **NFR-008 Recovery Point**: Backup cadence MUST combine periodic snapshots and session-end
+  snapshots to limit potential lost work between recoveries.
+- **NFR-009 Observability**: System MUST emit structured local logs and profile-scoped local
+  metrics for startup, retrieval, cache, provider calls, and recovery events.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -174,6 +204,12 @@ deletion confirmation behavior.
 - **SC-009**: In benchmark scenarios, memory recall does not noticeably delay conversational
   turn-taking for typical profile histories.
 - **SC-010**: Cache rebuild success rate is at least 99% when cache is missing or invalid.
+- **SC-011**: In corruption simulations, at least 99% of affected profiles recover via
+  auto-repair or backup restore without cross-profile impact.
+- **SC-012**: In recovery drills, maximum unrecoverable work is limited to activity since the
+  last periodic or session-end backup.
+- **SC-013**: In validation runs, 100% of startup, memory retrieval, cache invalidation,
+  provider error, and recovery flows produce structured log records and local metric updates.
 
 ## Assumptions
 
@@ -184,5 +220,7 @@ deletion confirmation behavior.
   MVP continuity needs.
 - Session-handoff summaries and local context cache are bounded in size to keep storage and
   runtime overhead predictable.
+- Out of scope for this release: multi-user sync, cloud backup, and vector memory as source of
+  truth (vector may be added later as secondary retrieval support).
 - Advanced semantic memory enhancements are out of scope for this feature and can be introduced
   later without changing core profile workflows.
