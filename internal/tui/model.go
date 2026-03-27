@@ -16,21 +16,55 @@ import (
 	"noto/internal/chat"
 	"noto/internal/commands"
 	"noto/internal/provider"
+	"noto/internal/store"
 	"noto/internal/suggest"
 )
 
+// ---- callback types ---------------------------------------------------------
+
 // ProviderFunc sends a single chat turn and returns the assistant reply.
 type ProviderFunc func(ctx context.Context, userMsg string) (string, error)
-
-// NotesSaved returns a tea.Msg that tells the TUI to show the notes indicator.
-// Call this from the NotesCallback passed to chat.NewSession.
-func NotesSaved(count int) tea.Msg { return notesSavedMsg{count: count} }
 
 // ListModelsFunc fetches the available models from the configured provider.
 type ListModelsFunc func(ctx context.Context) ([]provider.ModelInfo, error)
 
 // ModelSelectedFunc is called when the user picks a model in the picker.
 type ModelSelectedFunc func(modelID string) error
+
+// ListProfilesFunc returns all profiles for the profile picker.
+type ListProfilesFunc func(ctx context.Context) ([]*store.Profile, error)
+
+// ProfileSelectedFunc is called when the user picks a profile in the picker.
+type ProfileSelectedFunc func(profileName string) error
+
+// ---- public tea.Msg constructors --------------------------------------------
+
+// NotesSaved returns a tea.Msg that shows the notes saved badge.
+func NotesSaved(count int) tea.Msg { return notesSavedMsg{count: count} }
+
+// ProfileChanged returns a tea.Msg that updates the profile name in the header.
+func ProfileChanged(name string) tea.Msg { return profileChangedMsg{name: name} }
+
+// ---- async tea.Msg types (internal) ----------------------------------------
+
+type providerReplyMsg       struct{ content string; err error }
+type modelsLoadedMsg        struct{ items []pickerItem; err error }
+type profilesLoadedMsg      struct{ items []pickerItem; err error }
+type notesSavedMsg          struct{ count int }
+type clearNotesIndicatorMsg struct{}
+type editorFinishedMsg      struct{ err error }
+type profileChangedMsg      struct{ name string }
+
+// ---- picker kind ------------------------------------------------------------
+
+type pickerKind int
+
+const (
+	pickerKindModel   pickerKind = iota
+	pickerKindProfile pickerKind = iota
+)
+
+// ---- TUI model --------------------------------------------------------------
 
 // Model is the root Bubble Tea model for Noto.
 type Model struct {
@@ -46,35 +80,26 @@ type Model struct {
 
 	// slash suggestion state
 	suggestions []suggest.Suggestion
-	suggCursor  int  // -1 = nothing selected; 0..n-1 = highlighted entry
-	suggActive  bool // true when ↑/↓ navigation is in progress
+	suggCursor  int
+	suggActive  bool
 
-	// model picker overlay (non-nil when /model is open)
-	picker *pickerState
+	// picker overlay
+	picker     *pickerState
+	pickerKind pickerKind
 
-	// notesIndicator briefly shows a note-saved badge after extraction.
+	// notes badge
 	notesIndicator string
 
-	dispatcher    *chat.Dispatcher
-	execCtx       *commands.ExecContext
-	provider      ProviderFunc
-	listModels    ListModelsFunc
-	modelSelected ModelSelectedFunc
+	dispatcher      *chat.Dispatcher
+	execCtx         *commands.ExecContext
+	provider        ProviderFunc
+	listModels      ListModelsFunc
+	modelSelected   ModelSelectedFunc
+	listProfiles    ListProfilesFunc
+	profileSelected ProfileSelectedFunc
 }
 
 type chatMessage struct{ role, content string }
-
-// ---- async tea.Msg types ----------------------------------------------------
-
-type providerReplyMsg       struct{ content string; err error }
-type modelsLoadedMsg        struct{ models []provider.ModelInfo; err error }
-type notesSavedMsg          struct{ count int }
-type clearNotesIndicatorMsg struct{}
-type editorFinishedMsg      struct{ err error }
-type profileChangedMsg      struct{ name string }
-
-// ProfileChanged returns a tea.Msg that updates the profile name in the header.
-func ProfileChanged(name string) tea.Msg { return profileChangedMsg{name: name} }
 
 // ---- styles -----------------------------------------------------------------
 
@@ -99,6 +124,8 @@ func New(
 	providerFn ProviderFunc,
 	listModels ListModelsFunc,
 	modelSelected ModelSelectedFunc,
+	listProfiles ListProfilesFunc,
+	profileSelected ProfileSelectedFunc,
 ) Model {
 	ti := textinput.New()
 	ti.Placeholder = "Type a message or /command…"
@@ -106,15 +133,17 @@ func New(
 	ti.CharLimit = 4096
 
 	return Model{
-		profileName:   profileName,
-		activeModel:   activeModel,
-		input:         ti,
-		suggCursor:    -1,
-		dispatcher:    dispatcher,
-		execCtx:       execCtx,
-		provider:      providerFn,
-		listModels:    listModels,
-		modelSelected: modelSelected,
+		profileName:     profileName,
+		activeModel:     activeModel,
+		input:           ti,
+		suggCursor:      -1,
+		dispatcher:      dispatcher,
+		execCtx:         execCtx,
+		provider:        providerFn,
+		listModels:      listModels,
+		modelSelected:   modelSelected,
+		listProfiles:    listProfiles,
+		profileSelected: profileSelected,
 	}
 }
 
@@ -127,12 +156,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 
-	// ---- window size --------------------------------------------------------
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		m.input.Width = msg.Width - 4
-		vpH := msg.Height - 4 // header + input rows
+		vpH := msg.Height - 4
 		if vpH < 1 {
 			vpH = 1
 		}
@@ -145,23 +173,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.Height = vpH
 		}
 
-	// ---- models loaded (for /model picker) ----------------------------------
+	// ---- picker items loaded ------------------------------------------------
 	case modelsLoadedMsg:
-		if m.picker != nil {
+		if m.picker != nil && m.pickerKind == pickerKindModel {
 			m.picker.loading = false
 			if msg.err != nil {
 				m.picker.err = msg.err
 			} else {
-				ids := make([]string, len(msg.models))
-				for i, mi := range msg.models {
-					ids[i] = mi.ID
-				}
-				m.picker.models = ids
+				m.picker.items = msg.items
 				m.picker.cursor = 0
 			}
 		}
 
-	// ---- notes saved (background extraction) --------------------------------
+	case profilesLoadedMsg:
+		if m.picker != nil && m.pickerKind == pickerKindProfile {
+			m.picker.loading = false
+			if msg.err != nil {
+				m.picker.err = msg.err
+			} else {
+				m.picker.items = msg.items
+				m.picker.cursor = 0
+			}
+		}
+
+	// ---- notes badge --------------------------------------------------------
 	case notesSavedMsg:
 		if msg.count > 0 {
 			m.notesIndicator = fmt.Sprintf("📝 %d note(s) saved", msg.count)
@@ -173,21 +208,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case clearNotesIndicatorMsg:
 		m.notesIndicator = ""
 
-	// ---- profile changed (select / rename) ---------------------------------
-	case profileChangedMsg:
-		m.profileName = msg.name
-
 	// ---- editor finished ----------------------------------------------------
 	case editorFinishedMsg:
 		if msg.err != nil {
 			m.err = msg.err
 		} else {
-			m.messages = append(m.messages, chatMessage{
-				role:    "command",
-				content: "System prompt updated.",
-			})
+			m.messages = append(m.messages, chatMessage{role: "command", content: "System prompt updated."})
 			m.syncViewport()
 		}
+
+	// ---- profile changed ----------------------------------------------------
+	case profileChangedMsg:
+		m.profileName = msg.name
 
 	// ---- provider reply -----------------------------------------------------
 	case providerReplyMsg:
@@ -200,23 +232,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ---- keyboard -----------------------------------------------------------
 	case tea.KeyMsg:
-		// Model picker overlay takes priority.
 		if m.picker != nil {
 			return m.updatePicker(msg, cmds)
 		}
-
-		// Suggestion navigation takes priority over everything except Ctrl+C.
 		if m.suggActive && len(m.suggestions) > 0 {
 			return m.updateSuggNav(msg, cmds)
 		}
 
 		switch msg.Type {
-
 		case tea.KeyCtrlC:
 			return m, tea.Quit
 
 		case tea.KeyEsc:
-			// Dismiss suggestions if visible, otherwise quit.
 			if len(m.suggestions) > 0 {
 				m.clearSuggestions()
 				m.input.SetValue("")
@@ -225,7 +252,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case tea.KeyUp:
-			// Start suggestion navigation if suggestions are showing.
 			if len(m.suggestions) > 0 {
 				m.suggActive = true
 				m.suggCursor = len(m.suggestions) - 1
@@ -233,7 +259,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input.CursorEnd()
 				return m, nil
 			}
-			// Otherwise scroll viewport.
 			var vpCmd tea.Cmd
 			m.viewport, vpCmd = m.viewport.Update(msg)
 			return m, vpCmd
@@ -267,7 +292,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Forward to text input and recompute suggestions.
 	var inputCmd tea.Cmd
 	m.input, inputCmd = m.input.Update(msg)
 	cmds = append(cmds, inputCmd)
@@ -276,7 +300,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// updateSuggNav handles ↑/↓/Enter/Esc while suggestion navigation is active.
+// updateSuggNav handles keyboard while suggestion navigation is active.
 func (m Model) updateSuggNav(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyUp:
@@ -314,7 +338,6 @@ func (m Model) updateSuggNav(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd
 		}
 
 	default:
-		// Any other key exits navigation and lets the input handle it normally.
 		m.suggActive = false
 		m.suggCursor = -1
 		var inputCmd tea.Cmd
@@ -326,20 +349,20 @@ func (m Model) updateSuggNav(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd
 	return m, tea.Batch(cmds...)
 }
 
-// handleSubmit processes a confirmed input value (Enter pressed).
+// handleSubmit processes a confirmed input value.
 func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
-	// /model opens the model picker.
 	if strings.TrimSpace(val) == "/model" {
-		return m.openModelPicker(cmds)
+		return m.openPicker(pickerKindModel, cmds)
 	}
 
-	// Route through slash dispatcher.
 	result := m.dispatcher.Dispatch(val, m.execCtx)
 	if result.IsSlash {
 		if result.Err != nil {
-			// Check if this is a request to open the editor.
 			if openErr, ok := commands.AsErrOpenEditor(result.Err); ok {
 				return m, m.openEditor(openErr.Path, cmds)
+			}
+			if commands.AsErrOpenProfilePicker(result.Err) {
+				return m.openPicker(pickerKindProfile, cmds)
 			}
 			m.err = result.Err
 		} else if result.Executed && result.Output != "" {
@@ -373,59 +396,57 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// refreshSuggestions recomputes the suggestion list from the current input value.
-func (m *Model) refreshSuggestions() {
-	val := m.input.Value()
-	if strings.HasPrefix(val, "/") && !m.suggActive {
-		result := m.dispatcher.Dispatch(val+" ", m.execCtx)
-		if len(result.Suggestions) != len(m.suggestions) {
-			m.suggCursor = -1 // reset cursor when list changes
+// openPicker initialises the picker overlay and fires the async data fetch.
+func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
+	m.pickerKind = kind
+	switch kind {
+	case pickerKindModel:
+		m.picker = &pickerState{title: "Select model", loading: true}
+		if m.listModels != nil {
+			cmds = append(cmds, func() tea.Msg {
+				models, err := m.listModels(context.Background())
+				if err != nil {
+					return modelsLoadedMsg{err: err}
+				}
+				items := make([]pickerItem, len(models))
+				for i, mi := range models {
+					items[i] = pickerItem{Value: mi.ID}
+				}
+				return modelsLoadedMsg{items: items}
+			})
+		} else {
+			m.picker.loading = false
+			m.picker.err = fmt.Errorf("no provider configured")
 		}
-		m.suggestions = result.Suggestions
-	} else if !strings.HasPrefix(val, "/") {
-		m.clearSuggestions()
-	}
-}
 
-// clearSuggestions resets all suggestion state.
-func (m *Model) clearSuggestions() {
-	m.suggestions = nil
-	m.suggCursor = -1
-	m.suggActive = false
-}
+	case pickerKindProfile:
+		m.picker = &pickerState{title: "Select profile", loading: true}
+		if m.listProfiles != nil {
+			current := m.profileName
+			cmds = append(cmds, func() tea.Msg {
+				profiles, err := m.listProfiles(context.Background())
+				if err != nil {
+					return profilesLoadedMsg{err: err}
+				}
+				items := make([]pickerItem, len(profiles))
+				for i, p := range profiles {
+					items[i] = pickerItem{
+						Value:  p.Name,
+						Active: p.Name == current,
+					}
+				}
+				return profilesLoadedMsg{items: items}
+			})
+		} else {
+			m.picker.loading = false
+			m.picker.err = fmt.Errorf("no profile service available")
+		}
+	}
 
-// openEditor suspends the TUI, opens the file in $EDITOR, then resumes.
-func (m Model) openEditor(path string, cmds []tea.Cmd) tea.Cmd {
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = os.Getenv("VISUAL")
-	}
-	if editor == "" {
-		editor = "vi"
-	}
-	c := exec.Command(editor, path)
-	cmds = append(cmds, tea.ExecProcess(c, func(err error) tea.Msg {
-		return editorFinishedMsg{err: err}
-	}))
-	return tea.Batch(cmds...)
-}
-
-// openModelPicker initialises the picker overlay and fires the async fetch.
-func (m Model) openModelPicker(cmds []tea.Cmd) (tea.Model, tea.Cmd) {
-	m.picker = &pickerState{loading: true}
-	if m.listModels != nil {
-		cmds = append(cmds, func() tea.Msg {
-			models, err := m.listModels(context.Background())
-			return modelsLoadedMsg{models: models, err: err}
-		})
-	} else {
-		m.picker.loading = false
-		m.picker.err = fmt.Errorf("no provider configured")
-	}
 	return m, tea.Batch(cmds...)
 }
 
-// updatePicker handles keypresses when the model picker overlay is open.
+// updatePicker handles keypresses while the picker overlay is open.
 func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc, tea.KeyCtrlC:
@@ -435,18 +456,32 @@ func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 		}
 
 	case tea.KeyEnter:
-		chosen := m.picker.selected()
+		chosen := m.picker.selectedValue()
+		kind := m.pickerKind
 		m.picker = nil
-		if chosen != "" && m.modelSelected != nil {
-			if err := m.modelSelected(chosen); err != nil {
-				m.err = err
-			} else {
-				m.activeModel = chosen
-				m.messages = append(m.messages, chatMessage{
-					role:    "command",
-					content: "Model set to: " + chosen,
-				})
-				m.syncViewport()
+		if chosen == "" {
+			return m, tea.Batch(cmds...)
+		}
+		switch kind {
+		case pickerKindModel:
+			if m.modelSelected != nil {
+				if err := m.modelSelected(chosen); err != nil {
+					m.err = err
+				} else {
+					m.activeModel = chosen
+					m.messages = append(m.messages, chatMessage{role: "command", content: "Model set to: " + chosen})
+					m.syncViewport()
+				}
+			}
+		case pickerKindProfile:
+			if m.profileSelected != nil {
+				if err := m.profileSelected(chosen); err != nil {
+					m.err = err
+				} else {
+					m.profileName = chosen
+					m.messages = append(m.messages, chatMessage{role: "command", content: "Switched to profile: " + chosen})
+					m.syncViewport()
+				}
 			}
 		}
 
@@ -480,6 +515,43 @@ func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 	return m, tea.Batch(cmds...)
 }
 
+// openEditor suspends the TUI and opens a file in $EDITOR via tea.ExecProcess.
+func (m Model) openEditor(path string, cmds []tea.Cmd) tea.Cmd {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = os.Getenv("VISUAL")
+	}
+	if editor == "" {
+		editor = "vi"
+	}
+	c := exec.Command(editor, path)
+	cmds = append(cmds, tea.ExecProcess(c, func(err error) tea.Msg {
+		return editorFinishedMsg{err: err}
+	}))
+	return tea.Batch(cmds...)
+}
+
+// refreshSuggestions recomputes the suggestion list from current input.
+func (m *Model) refreshSuggestions() {
+	val := m.input.Value()
+	if strings.HasPrefix(val, "/") && !m.suggActive {
+		result := m.dispatcher.Dispatch(val+" ", m.execCtx)
+		if len(result.Suggestions) != len(m.suggestions) {
+			m.suggCursor = -1
+		}
+		m.suggestions = result.Suggestions
+	} else if !strings.HasPrefix(val, "/") {
+		m.clearSuggestions()
+	}
+}
+
+// clearSuggestions resets all suggestion state.
+func (m *Model) clearSuggestions() {
+	m.suggestions = nil
+	m.suggCursor = -1
+	m.suggActive = false
+}
+
 // View implements tea.Model.
 func (m Model) View() string {
 	if !m.ready {
@@ -494,9 +566,8 @@ func (m Model) View() string {
 	if m.notesIndicator != "" {
 		notesPart = "  " + notesBadge.Render(m.notesIndicator)
 	}
-	header := headerStyle.Render("─── Noto · "+m.profileName+" ── /model · Ctrl+C quit ───") + modelPart + notesPart
+	header := headerStyle.Render("─── Noto · "+m.profileName+" ── /model · /profile select · Ctrl+C quit ───") + modelPart + notesPart
 
-	// Middle section: model picker OR slash suggestions OR empty.
 	var mid strings.Builder
 	if m.picker != nil {
 		ph := m.height / 2
@@ -520,7 +591,7 @@ func (m Model) View() string {
 		m.input.View()
 }
 
-// renderSuggestions draws the suggestion list with the active cursor highlighted.
+// renderSuggestions draws the suggestion list with cursor highlighted.
 func (m *Model) renderSuggestions() string {
 	var sb strings.Builder
 	for i, s := range m.suggestions {
@@ -543,7 +614,7 @@ func (m *Model) syncViewport() {
 	m.viewport.GotoBottom()
 }
 
-// renderHistory renders all chat messages into a single string.
+// renderHistory renders all chat messages.
 func (m *Model) renderHistory() string {
 	if len(m.messages) == 0 {
 		return headerStyle.Render("  No messages yet. Start typing below.")

@@ -33,19 +33,23 @@ func buildRegistry(t *testing.T) *commands.Registry {
 	return r
 }
 
-func TestSlashParity_ProfileList(t *testing.T) {
+func TestSlashParity_ProfileSelect_NoArgs_OpensPicker(t *testing.T) {
 	r := buildRegistry(t)
 	dispatcher := chat.NewDispatcher(r)
 
 	var out strings.Builder
 	ctx := &commands.ExecContext{Output: &out}
 
-	result := dispatcher.Dispatch("/profile list", ctx)
-	if result.Err != nil {
-		t.Fatalf("dispatch error: %v", result.Err)
+	// /profile select with no args returns ErrOpenProfilePicker (not a hard error).
+	result := dispatcher.Dispatch("/profile select", ctx)
+	if !result.IsSlash {
+		t.Error("expected IsSlash=true")
 	}
-	if !result.Executed {
-		t.Error("expected Executed=true")
+	if result.Err == nil {
+		t.Fatal("expected ErrOpenProfilePicker sentinel error")
+	}
+	if !commands.AsErrOpenProfilePicker(result.Err) {
+		t.Errorf("expected ErrOpenProfilePicker, got: %v", result.Err)
 	}
 }
 

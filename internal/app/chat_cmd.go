@@ -171,10 +171,25 @@ func runChat(_ *cobra.Command, _ []string) error {
 		}
 	}
 
+	listProfilesFn := func(ctx context.Context) ([]*store.Profile, error) {
+		return profSvc.List(ctx)
+	}
+	profileSelectedFn := func(profileName string) error {
+		p, err := profSvc.Select(ctx, profileName)
+		if err != nil {
+			return err
+		}
+		if prog != nil {
+			prog.Send(tui.ProfileChanged(p.Name))
+		}
+		return nil
+	}
+
 	m := tui.New(
 		activeProfile.Name, activeModel,
 		dispatcher, execCtx,
 		providerFn, listModelsFn, modelSelectedFn,
+		listProfilesFn, profileSelectedFn,
 	)
 	prog = tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, runErr := prog.Run(); runErr != nil {

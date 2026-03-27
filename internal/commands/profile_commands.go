@@ -2,9 +2,9 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
-	"text/tabwriter"
 
 	"noto/internal/store"
 )
@@ -31,16 +31,9 @@ func RegisterProfileCommands(r *Registry, svc ProfileService) error {
 			Handler:     profileCreateHandler(svc),
 		},
 		{
-			Path:        "profile list",
-			Usage:       "profile list",
-			Description: "List all profiles",
-			Scope:       ScopeGlobal,
-			Handler:     profileListHandler(svc),
-		},
-		{
 			Path:        "profile select",
-			Usage:       "profile select <name>",
-			Description: "Select a profile as the active profile",
+			Usage:       "profile select",
+			Description: "Switch to a different profile (opens interactive picker)",
 			Scope:       ScopeGlobal,
 			Handler:     profileSelectHandler(svc),
 		},
@@ -83,39 +76,35 @@ func profileCreateHandler(svc ProfileService) HandlerFunc {
 	}
 }
 
-func profileListHandler(svc ProfileService) HandlerFunc {
-	return func(ctx *ExecContext, _ []string) error {
-		profiles, err := svc.List(context.Background())
-		if err != nil {
-			return err
-		}
-		w := tabwriter.NewWriter(ctx.Output, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "NAME\tSLUG\tACTIVE")
-		for _, p := range profiles {
-			active := ""
-			if p.IsDefault {
-				active = "●"
-			}
-			fmt.Fprintf(w, "%s\t%s\t%s\n", p.Name, p.Slug, active)
-		}
-		return w.Flush()
-	}
+// ErrOpenProfilePicker is a sentinel error returned by profileSelectHandler
+// when running inside the TUI, telling it to open the interactive profile picker.
+type ErrOpenProfilePicker struct{}
+
+func (e *ErrOpenProfilePicker) Error() string { return "open-profile-picker" }
+
+// AsErrOpenProfilePicker checks whether err is an *ErrOpenProfilePicker.
+func AsErrOpenProfilePicker(err error) bool {
+	var e *ErrOpenProfilePicker
+	return errors.As(err, &e)
 }
 
 func profileSelectHandler(svc ProfileService) HandlerFunc {
 	return func(ctx *ExecContext, args []string) error {
-		if len(args) == 0 {
-			return fmt.Errorf("usage: profile select <name>")
+		// If a name was given as an argument (CLI usage), execute directly.
+		if len(args) > 0 {
+			name := strings.Join(args, " ")
+			p, err := svc.Select(context.Background(), name)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(ctx.Output, "Active profile: %q\n", p.Name)
+			if ctx.OnProfileChanged != nil {
+				ctx.OnProfileChanged(p.Name)
+			}
+			return nil
 		}
-		p, err := svc.Select(context.Background(), args[0])
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(ctx.Output, "Active profile: %q\n", p.Name)
-		if ctx.OnProfileChanged != nil {
-			ctx.OnProfileChanged(p.Name)
-		}
-		return nil
+		// No args — signal the TUI to open the interactive picker.
+		return &ErrOpenProfilePicker{}
 	}
 }
 

@@ -57,11 +57,11 @@ func TestSlashSuggestions_ExactMatch_IsFirst(t *testing.T) {
 	r := buildTestRegistry(t)
 	engine := suggest.New(r)
 
-	sug := engine.Suggest("profile list")
+	sug := engine.Suggest("profile select")
 	if len(sug) == 0 {
 		t.Fatal("expected at least one suggestion")
 	}
-	if sug[0].CommandPath != "profile list" {
+	if sug[0].CommandPath != "profile select" {
 		t.Errorf("expected exact match first, got %q", sug[0].CommandPath)
 	}
 }
