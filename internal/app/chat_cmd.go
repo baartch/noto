@@ -14,6 +14,7 @@ import (
 	"noto/internal/commands"
 	"noto/internal/profile"
 	"noto/internal/provider"
+	"noto/internal/security"
 	"noto/internal/store"
 	"noto/internal/tui"
 )
@@ -123,7 +124,16 @@ func resolveProvider(ctx context.Context, db *store.DB, profileID string) tui.Pr
 			}
 			return nil
 		}
-		apiKey = cfg.CredentialRef // already decrypted at this layer (simplification)
+		// Decrypt the stored API key.
+		passphrase, pErr := security.MachinePassphrase()
+		if pErr != nil {
+			return nil
+		}
+		decrypted, dErr := security.Decrypt(cfg.CredentialRef, passphrase)
+		if dErr != nil {
+			return nil
+		}
+		apiKey = decrypted
 		model = cfg.Model
 		endpoint = cfg.Endpoint
 	}
