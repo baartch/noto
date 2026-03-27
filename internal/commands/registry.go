@@ -59,10 +59,7 @@ type ExecContext struct {
 	// If nil, editor-based commands are unavailable in the current execution context.
 	SuspendForEditor func(fn func() error) error
 
-	// OnProfileChanged is called after a command changes the active profile name
-	// (select, rename). The TUI uses this to update the header.
-	// newName is the display name of the now-active profile.
-	OnProfileChanged func(newName string)
+
 }
 
 // Registry holds all registered commands and provides lookup and listing operations.

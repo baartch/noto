@@ -93,11 +93,8 @@ func runChat(_ *cobra.Command, _ []string) error {
 			return strings.ToLower(strings.TrimSpace(ans)) == "yes"
 		},
 		SuspendForEditor: func(fn func() error) error { return fn() },
-		OnProfileChanged: func(newName string) {
-			if prog != nil {
-				prog.Send(tui.ProfileChanged(newName))
-			}
-		},
+		// OnProfileChanged is intentionally nil — profile name updates
+		// are handled directly by the TUI via the profileSelected return value.
 	}
 
 	// Resolve provider config.
@@ -174,15 +171,11 @@ func runChat(_ *cobra.Command, _ []string) error {
 	listProfilesFn := func(ctx context.Context) ([]*store.Profile, error) {
 		return profSvc.List(ctx)
 	}
+	// profileSelectedFn just does the DB work and returns the new name.
+	// The TUI updates its own state from the return value — no prog.Send().
 	profileSelectedFn := func(profileName string) error {
-		p, err := profSvc.Select(ctx, profileName)
-		if err != nil {
-			return err
-		}
-		if prog != nil {
-			prog.Send(tui.ProfileChanged(p.Name))
-		}
-		return nil
+		_, err := profSvc.Select(ctx, profileName)
+		return err
 	}
 
 	m := tui.New(

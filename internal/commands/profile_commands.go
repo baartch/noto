@@ -98,9 +98,6 @@ func profileSelectHandler(svc ProfileService) HandlerFunc {
 				return err
 			}
 			fmt.Fprintf(ctx.Output, "Active profile: %q\n", p.Name)
-			if ctx.OnProfileChanged != nil {
-				ctx.OnProfileChanged(p.Name)
-			}
 			return nil
 		}
 		// No args — signal the TUI to open the interactive picker.
@@ -118,13 +115,6 @@ func profileRenameHandler(svc ProfileService) HandlerFunc {
 			return err
 		}
 		fmt.Fprintf(ctx.Output, "Renamed to %q\n", p.Name)
-		// If we renamed the currently active profile, update the header.
-		if ctx.OnProfileChanged != nil {
-			active, aerr := svc.GetActive(context.Background())
-			if aerr == nil {
-				ctx.OnProfileChanged(active.Name)
-			}
-		}
 		return nil
 	}
 }
@@ -145,13 +135,6 @@ func profileDeleteHandler(svc ProfileService) HandlerFunc {
 			return err
 		}
 		fmt.Fprintf(ctx.Output, "Deleted profile %q\n", name)
-		// After deletion, report whichever profile is now active.
-		if ctx.OnProfileChanged != nil {
-			active, aerr := svc.GetActive(context.Background())
-			if aerr == nil {
-				ctx.OnProfileChanged(active.Name)
-			}
-		}
 		return nil
 	}
 }

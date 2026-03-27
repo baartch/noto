@@ -42,8 +42,6 @@ type ProfileSelectedFunc func(profileName string) error
 // NotesSaved returns a tea.Msg that shows the notes saved badge.
 func NotesSaved(count int) tea.Msg { return notesSavedMsg{count: count} }
 
-// ProfileChanged returns a tea.Msg that updates the profile name in the header.
-func ProfileChanged(name string) tea.Msg { return profileChangedMsg{name: name} }
 
 // ---- async tea.Msg types (internal) ----------------------------------------
 
@@ -52,8 +50,7 @@ type modelsLoadedMsg        struct{ items []pickerItem; err error }
 type profilesLoadedMsg      struct{ items []pickerItem; err error }
 type notesSavedMsg          struct{ count int }
 type clearNotesIndicatorMsg struct{}
-type editorFinishedMsg      struct{ err error }
-type profileChangedMsg      struct{ name string }
+type editorFinishedMsg struct{ err error }
 
 // ---- picker kind ------------------------------------------------------------
 
@@ -216,10 +213,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.messages = append(m.messages, chatMessage{role: "command", content: "System prompt updated."})
 			m.syncViewport()
 		}
-
-	// ---- profile changed ----------------------------------------------------
-	case profileChangedMsg:
-		m.profileName = msg.name
 
 	// ---- provider reply -----------------------------------------------------
 	case providerReplyMsg:
