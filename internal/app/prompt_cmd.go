@@ -1,12 +1,15 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 
 	"github.com/spf13/cobra"
+
+	"noto/internal/commands"
 	"noto/internal/profile"
+	"noto/internal/store"
 )
 
 func promptCmd() *cobra.Command {
@@ -24,15 +27,8 @@ func promptShowCmd() *cobra.Command {
 		Use:   "show",
 		Short: "Show the current system prompt",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: resolve active profile slug from DB; using "default" as placeholder.
-			slug := resolveActiveSlug()
-			ps := profile.NewPromptStore(slug)
-			content, err := ps.GetSystemPrompt()
-			if err != nil {
-				return err
-			}
-			fmt.Println(content)
-			return nil
+			ctx := context.Background()
+			return runPromptCommand(ctx, "prompt show", nil)
 		},
 	}
 }
@@ -42,40 +38,53 @@ func promptEditCmd() *cobra.Command {
 		Use:   "edit",
 		Short: "Edit the system prompt in $EDITOR",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			slug := resolveActiveSlug()
-			ps := profile.NewPromptStore(slug)
-
-			// Ensure file exists.
-			if _, err := ps.GetSystemPrompt(); err != nil {
-				return err
-			}
-
-			home, _ := os.UserHomeDir()
-			path := home + "/.noto/profiles/" + slug + "/prompts/system.md"
-
-			editor := os.Getenv("EDITOR")
-			if editor == "" {
-				editor = "vi"
-			}
-			c := exec.Command(editor, path)
-			c.Stdin = os.Stdin
-			c.Stdout = os.Stdout
-			c.Stderr = os.Stderr
-			return c.Run()
+			ctx := context.Background()
+			return runPromptCommand(ctx, "prompt edit", nil)
 		},
 	}
 }
 
-// resolveActiveSlug returns the active profile slug.
-// TODO: read from ~/.noto/active_profile or DB.
-func resolveActiveSlug() string {
-	data, err := os.ReadFile(os.Getenv("HOME") + "/.noto/active_profile")
-	if err != nil || len(data) == 0 {
-		return "default"
+func runPromptCommand(ctx context.Context, commandPath string, args []string) error {
+	globalDB, err := openGlobalDB()
+	if err != nil {
+		return err
 	}
-	slug := string(data)
-	for len(slug) > 0 && (slug[len(slug)-1] == '\n' || slug[len(slug)-1] == '\r') {
-		slug = slug[:len(slug)-1]
+	defer globalDB.Close()
+
+	profSvc := profile.NewService(store.NewProfileRepo(globalDB))
+	activeProfile, err := profSvc.GetActive(ctx)
+	if err != nil {
+		return err
 	}
-	return slug
+
+	profileDB, err := openProfileDB(activeProfile.Slug)
+	if err != nil {
+		return err
+	}
+	defer profileDB.Close()
+
+	registry := commands.NewRegistry()
+	if err := commands.RegisterPromptCommands(registry); err != nil {
+		return err
+	}
+
+	cmd, found := registry.Lookup(commandPath)
+	if !found {
+		return fmt.Errorf("unknown command: %s", commandPath)
+	}
+
+	execCtx := &commands.ExecContext{
+		ProfileID:   activeProfile.ID,
+		ProfileSlug: activeProfile.Slug,
+		Output:      os.Stdout,
+		SuspendForEditor: func(fn func() error) error { return fn() },
+		OnPromptChanged: func(slug string) error {
+			cacheRepo := store.NewContextCacheRepo(profileDB)
+			_ = cacheRepo.InvalidateAll(ctx, activeProfile.ID)
+			_ = store.NewVectorManifestRepo(profileDB).SetManifestStatusStr(ctx, activeProfile.ID, "stale")
+			return nil
+		},
+	}
+
+	return cmd.Handler(execCtx, args)
 }
