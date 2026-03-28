@@ -19,14 +19,16 @@ func providerCmd() *cobra.Command {
 	cmd.AddCommand(providerSetCmd())
 	cmd.AddCommand(providerShowCmd())
 	cmd.AddCommand(providerClearCmd())
+	cmd.AddCommand(providerExtractorModelCmd())
 	return cmd
 }
 
 func providerSetCmd() *cobra.Command {
 	var (
-		apiKey   string
-		model    string
-		endpoint string
+		apiKey         string
+		model          string
+		extractorModel string
+		endpoint       string
 	)
 
 	cmd := &cobra.Command{
@@ -34,7 +36,8 @@ func providerSetCmd() *cobra.Command {
 		Short: "Set the provider configuration for the active profile",
 		Example: `  noto provider set --key sk-...
   noto provider set --endpoint http://localhost:11434/v1/chat/completions --key ollama
-  noto provider set --key sk-... --model gpt-4o-mini   # optional default model`,
+  noto provider set --key sk-... --model gpt-4o-mini   # optional default model
+  noto provider set --key sk-... --model gpt-4o --extractor-model gpt-4o-mini`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if apiKey == "" {
 				return fmt.Errorf("--key is required")
@@ -62,13 +65,14 @@ func providerSetCmd() *cobra.Command {
 			}
 
 			cfg := &store.ProviderConfig{
-				ID:            fmt.Sprintf("pc-%x", time.Now().UnixNano()),
-				ProfileID:     activeProfile.ID,
-				ProviderType:  "openai_compatible",
-				Endpoint:      endpoint,
-				Model:         model,
-				CredentialRef: encrypted,
-				IsActive:      true,
+				ID:             fmt.Sprintf("pc-%x", time.Now().UnixNano()),
+				ProfileID:      activeProfile.ID,
+				ProviderType:   "openai_compatible",
+				Endpoint:       endpoint,
+				Model:          model,
+				ExtractorModel: extractorModel,
+				CredentialRef:  encrypted,
+				IsActive:       true,
 			}
 
 			repo := store.NewProviderConfigRepo(profileDB)
@@ -78,22 +82,28 @@ func providerSetCmd() *cobra.Command {
 
 			fmt.Printf("Provider configured for profile %q\n", activeProfile.Name)
 			if model != "" {
-				fmt.Printf("  Model:    %s\n", model)
+				fmt.Printf("  Model:          %s\n", model)
 			} else {
-				fmt.Printf("  Model:    (none — use /model in chat to select)\n")
+				fmt.Printf("  Model:          (none — use /model in chat to select)\n")
+			}
+			if extractorModel != "" {
+				fmt.Printf("  Extractor:      %s\n", extractorModel)
+			} else {
+				fmt.Printf("  Extractor:      (defaults to model)\n")
 			}
 			if endpoint != "" {
-				fmt.Printf("  Endpoint: %s\n", endpoint)
+				fmt.Printf("  Endpoint:       %s\n", endpoint)
 			} else {
-				fmt.Printf("  Endpoint: https://api.openai.com/v1/chat/completions (default)\n")
+				fmt.Printf("  Endpoint:       https://api.openai.com/v1/chat/completions (default)\n")
 			}
-			fmt.Printf("  Key:      %s***\n", maskKey(apiKey))
+			fmt.Printf("  Key:            %s***\n", maskKey(apiKey))
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&apiKey, "key", "", "API key (required)")
 	cmd.Flags().StringVar(&model, "model", "", "Model name, e.g. gpt-4o-mini, llama3.2 (optional)")
+	cmd.Flags().StringVar(&extractorModel, "extractor-model", "", "Model name for memory extraction (optional)")
 	cmd.Flags().StringVar(&endpoint, "endpoint", "", "API endpoint URL (default: OpenAI)")
 	return cmd
 }
@@ -132,10 +142,11 @@ func providerShowCmd() *cobra.Command {
 			}
 
 			fmt.Printf("Provider configuration for profile %q:\n", activeProfile.Name)
-			fmt.Printf("  Type:     %s\n", cfg.ProviderType)
-			fmt.Printf("  Model:    %s\n", cfg.EffectiveModel())
-			fmt.Printf("  Endpoint: %s\n", endpoint)
-			fmt.Printf("  Key:      %s\n", keyDisplay)
+			fmt.Printf("  Type:      %s\n", cfg.ProviderType)
+			fmt.Printf("  Model:     %s\n", cfg.EffectiveModel())
+			fmt.Printf("  Extractor: %s\n", cfg.EffectiveExtractorModel())
+			fmt.Printf("  Endpoint:  %s\n", endpoint)
+			fmt.Printf("  Key:       %s\n", keyDisplay)
 			return nil
 		},
 	}
@@ -158,6 +169,32 @@ func providerClearCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("Provider configuration cleared for profile %q.\n", activeProfile.Name)
+			return nil
+		},
+	}
+}
+
+func providerExtractorModelCmd() *cobra.Command {
+	var model string
+	return &cobra.Command{
+		Use:   "extractor-model",
+		Short: "Set the extractor model for the active profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			model = args[0]
+			ctx := context.Background()
+			globalDB, profileDB, activeProfile, err := openBothDBs(ctx)
+			if err != nil {
+				return err
+			}
+			defer globalDB.Close()
+			defer profileDB.Close()
+
+			repo := store.NewProviderConfigRepo(profileDB)
+			if err := repo.SetExtractorModel(ctx, activeProfile.ID, model); err != nil {
+				return err
+			}
+			fmt.Printf("Extractor model set for profile %q: %s\n", activeProfile.Name, model)
 			return nil
 		},
 	}

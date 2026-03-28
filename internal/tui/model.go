@@ -44,6 +44,9 @@ type ListBackupsFunc func(ctx context.Context) ([]string, error)
 // BackupSelectedFunc is called when the user picks a backup timestamp.
 type BackupSelectedFunc func(timestamp string) error
 
+// ExtractorModelSelectedFunc is called when the user picks an extractor model.
+type ExtractorModelSelectedFunc func(modelID string) error
+
 // ---- public tea.Msg constructors --------------------------------------------
 
 // NotesSaved returns a tea.Msg that shows the notes saved badge.
@@ -56,15 +59,17 @@ func NotesSaving() tea.Msg { return notesSavingMsg{} }
 func StatsUpdated(formatted string) tea.Msg { return statsUpdatedMsg{formatted: formatted} }
 
 // ProfileSwitched updates the TUI state after switching profiles.
-func ProfileSwitched(profileName, activeModel, cacheStatus, tokenStatus string, provider ProviderFunc, listModels ListModelsFunc, modelSelected ModelSelectedFunc) tea.Msg {
+func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, tokenStatus string, provider ProviderFunc, listModels ListModelsFunc, modelSelected ModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc) profileSwitchedMsg {
 	return profileSwitchedMsg{
-		profileName:   profileName,
-		activeModel:   activeModel,
-		cacheStatus:   cacheStatus,
-		tokenStatus:   tokenStatus,
-		provider:      provider,
-		listModels:    listModels,
-		modelSelected: modelSelected,
+		profileName:            profileName,
+		activeModel:            activeModel,
+		extractorModel:         extractorModel,
+		cacheStatus:            cacheStatus,
+		tokenStatus:            tokenStatus,
+		provider:               provider,
+		listModels:             listModels,
+		modelSelected:          modelSelected,
+		extractorModelSelected: extractorModelSelected,
 	}
 }
 
@@ -86,13 +91,15 @@ type clearNotesIndicatorMsg struct{}
 type editorFinishedMsg      struct{ err error }
 type statsUpdatedMsg        struct{ formatted string }
 type profileSwitchedMsg     struct {
-	profileName   string
-	activeModel   string
-	cacheStatus   string
-	tokenStatus   string
-	provider      ProviderFunc
-	listModels    ListModelsFunc
-	modelSelected ModelSelectedFunc
+	profileName            string
+	activeModel            string
+	extractorModel         string
+	cacheStatus            string
+	tokenStatus            string
+	provider               ProviderFunc
+	listModels             ListModelsFunc
+	modelSelected          ModelSelectedFunc
+	extractorModelSelected ExtractorModelSelectedFunc
 }
 type profileSwitchFailedMsg struct{ err error }
 type spinnerTickMsg         struct{}
@@ -105,6 +112,7 @@ const (
 	pickerKindModel   pickerKind = iota
 	pickerKindProfile pickerKind = iota
 	pickerKindBackup  pickerKind = iota
+	pickerKindExtractorModel pickerKind = iota
 )
 
 // ---- TUI model --------------------------------------------------------------
@@ -148,6 +156,8 @@ type Model struct {
 	profileSwitch   ProfileSwitchCmd
 	listBackups     ListBackupsFunc
 	backupSelected  BackupSelectedFunc
+	extractorModel string
+	extractorModelSelected ExtractorModelSelectedFunc
 }
 
 type chatMessage struct {
@@ -174,6 +184,7 @@ var (
 func New(
 	profileName string,
 	activeModel string,
+	extractorModel string,
 	cacheStatus string,
 	tokenStatus string,
 	dispatcher *chat.Dispatcher,
@@ -185,6 +196,7 @@ func New(
 	profileSwitch ProfileSwitchCmd,
 	listBackups ListBackupsFunc,
 	backupSelected BackupSelectedFunc,
+	extractorModelSelected ExtractorModelSelectedFunc,
 ) Model {
 	ti := textarea.New()
 	ti.Placeholder = "Type a message or /command…"
@@ -219,6 +231,8 @@ func New(
 		profileSwitch: profileSwitch,
 		listBackups:   listBackups,
 		backupSelected:  backupSelected,
+		extractorModel:  extractorModel,
+		extractorModelSelected: extractorModelSelected,
 	}
 }
 
@@ -251,7 +265,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ---- picker items loaded ------------------------------------------------
 	case modelsLoadedMsg:
-		if m.picker != nil && m.pickerKind == pickerKindModel {
+		if m.picker != nil && (m.pickerKind == pickerKindModel || m.pickerKind == pickerKindExtractorModel) {
 			m.picker.loading = false
 			if msg.err != nil {
 				m.picker.err = msg.err
@@ -314,11 +328,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case profileSwitchedMsg:
 		m.profileName = msg.profileName
 		m.activeModel = msg.activeModel
+		m.extractorModel = msg.extractorModel
 		m.cacheStatus = msg.cacheStatus
 		m.tokenStatus = msg.tokenStatus
 		m.provider = msg.provider
 		m.listModels = msg.listModels
 		m.modelSelected = msg.modelSelected
+		m.extractorModelSelected = msg.extractorModelSelected
 		m.messages = []chatMessage{{role: "command", content: "Switched to profile: " + msg.profileName, timestamp: time.Now()}}
 		m.err = nil
 		m.clearSuggestions()
@@ -483,6 +499,9 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	if strings.TrimSpace(val) == "/model" {
 		return m.openPicker(pickerKindModel, cmds)
 	}
+	if strings.TrimSpace(val) == "/provider extractor-model" {
+		return m.openPicker(pickerKindExtractorModel, cmds)
+	}
 
 	result := m.dispatcher.Dispatch(val, m.execCtx)
 	if result.IsSlash {
@@ -495,6 +514,9 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 			}
 			if commands.AsErrOpenBackupPicker(result.Err) {
 				return m.openPicker(pickerKindBackup, cmds)
+			}
+			if commands.AsErrOpenExtractorModelPicker(result.Err) {
+				return m.openPicker(pickerKindExtractorModel, cmds)
 			}
 			m.err = result.Err
 		} else if result.Executed && result.Output != "" {
@@ -599,6 +621,25 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 			m.picker.loading = false
 			m.picker.err = fmt.Errorf("no backup service available")
 		}
+	case pickerKindExtractorModel:
+		m.picker = &pickerState{title: "Select extractor model", loading: true, width: m.width - 4}
+		if m.listModels != nil {
+			current := m.extractorModel
+			cmds = append(cmds, func() tea.Msg {
+				models, err := m.listModels(context.Background())
+				if err != nil {
+					return modelsLoadedMsg{err: err}
+				}
+				items := make([]pickerItem, len(models))
+				for i, mi := range models {
+					items[i] = pickerItem{Value: mi.ID, Active: mi.ID == current}
+				}
+				return modelsLoadedMsg{items: items}
+			})
+		} else {
+			m.picker.loading = false
+			m.picker.err = fmt.Errorf("no provider configured")
+		}
 	}
 
 	return m, tea.Batch(cmds...)
@@ -648,6 +689,16 @@ func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 					m.err = err
 				} else {
 					m.messages = append(m.messages, chatMessage{role: "command", content: "Restored backup: " + chosen, timestamp: time.Now()})
+					m.syncViewport()
+				}
+			}
+		case pickerKindExtractorModel:
+			if m.extractorModelSelected != nil {
+				if err := m.extractorModelSelected(chosen); err != nil {
+					m.err = err
+				} else {
+					m.extractorModel = chosen
+					m.messages = append(m.messages, chatMessage{role: "command", content: "Extractor model set to: " + chosen, timestamp: time.Now()})
 					m.syncViewport()
 				}
 			}

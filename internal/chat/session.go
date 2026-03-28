@@ -37,9 +37,11 @@ type Session struct {
 	convRepo    *store.ConversationRepo
 	msgRepo     *store.MessageRepo
 	noteRepo    *store.MemoryNoteRepo
+	cacheRepo   *store.ContextCacheRepo
 	summaryRepo *store.SessionSummaryRepo
-	adapter     provider.Adapter
-	extractor   *memory.Extractor
+	adapter          provider.Adapter
+	extractor        *memory.Extractor
+	extractorAdapter provider.Adapter
 	logger      observe.Logger
 
 	backupStop  chan struct{}
@@ -70,6 +72,7 @@ func NewSession(
 	noteRepo *store.MemoryNoteRepo,
 	summaryRepo *store.SessionSummaryRepo,
 	adapter provider.Adapter,
+	extractorAdapter provider.Adapter,
 	logger observe.Logger,
 	onNotes NotesCallback,
 	onNotesSaving NotesSavingCallback,
@@ -111,7 +114,9 @@ func NewSession(
 		noteRepo:       noteRepo,
 		summaryRepo:    summaryRepo,
 		adapter:        adapter,
-		extractor:      memory.NewExtractor(noteRepo, adapter, store.NewContextCacheRepo(db)),
+		extractorAdapter: extractorAdapter,
+		cacheRepo:       store.NewContextCacheRepo(db),
+		extractor:        memory.NewExtractor(noteRepo, adapter, store.NewContextCacheRepo(db)),
 		logger:         logger,
 		history:        recentHistory,
 		onNotes:        onNotes,
@@ -200,7 +205,11 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	result, err := s.extractor.ExtractTurn(ctx, s.profileID, s.conversationID, userMsg, assistantMsg)
+	extractor := s.extractor
+	if s.extractorAdapter != nil {
+		extractor = memory.NewExtractor(s.noteRepo, s.extractorAdapter, s.cacheRepo)
+	}
+	result, err := extractor.ExtractTurn(ctx, s.profileID, s.conversationID, userMsg, assistantMsg)
 	if err != nil {
 		s.logger.Errorf("memory extraction failed: %v", err)
 		s.markNotesDone(0)
@@ -215,6 +224,16 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 // SetModel updates the model used for subsequent provider calls.
 func (s *Session) SetModel(model string) {
 	if a, ok := s.adapter.(interface{ SetModel(string) }); ok {
+		a.SetModel(model)
+	}
+}
+
+// SetExtractorModel updates the model used for note extraction.
+func (s *Session) SetExtractorModel(model string) {
+	if s.extractorAdapter == nil {
+		return
+	}
+	if a, ok := s.extractorAdapter.(interface{ SetModel(string) }); ok {
 		a.SetModel(model)
 	}
 }

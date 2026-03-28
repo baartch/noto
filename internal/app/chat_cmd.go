@@ -72,6 +72,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 	if err := commands.RegisterModelCommand(registry); err != nil {
 		return err
 	}
+	if err := commands.RegisterProviderCommands(registry); err != nil {
+		return err
+	}
 	if err := commands.RegisterBackupCommands(registry); err != nil {
 		return err
 	}
@@ -107,14 +110,17 @@ func runChat(_ *cobra.Command, _ []string) error {
 	// Resolve provider config.
 	providerCfg, decryptedKey := loadProviderConfig(ctx, profileDB, activeProfile.ID)
 	activeModel := ""
+	extractorModel := ""
 	cacheStatus := "cache: n/a"
 
 	var providerFn tui.ProviderFunc
 	var listModelsFn tui.ListModelsFunc
 	modelSelectedFn := func(modelID string) error { return nil }
+	extractorModelSelectedFn := func(modelID string) error { return nil }
 
 	if providerCfg != nil && decryptedKey != "" {
 		activeModel = providerCfg.EffectiveModel()
+		extractorModel = providerCfg.EffectiveExtractorModel()
 
 		adapterCfg := provider.Config{
 			ProviderType: "openai_compatible",
@@ -141,6 +147,12 @@ func runChat(_ *cobra.Command, _ []string) error {
 				ProviderType: "openai_compatible",
 				Endpoint:     adapterCfg.Endpoint,
 				Model:        activeModel,
+				APIKey:       adapterCfg.APIKey,
+			}),
+			provider.NewOpenAICompatible(provider.Config{
+				ProviderType: "openai_compatible",
+				Endpoint:     adapterCfg.Endpoint,
+				Model:        extractorModel,
 				APIKey:       adapterCfg.APIKey,
 			}),
 			logger,
@@ -185,6 +197,16 @@ func runChat(_ *cobra.Command, _ []string) error {
 			activeModel = modelID
 			return nil
 		}
+		extractorModelSelectedFn = func(modelID string) error {
+			if err := cfgRepo.SetExtractorModel(ctx, activeProfile.ID, modelID); err != nil {
+				return err
+			}
+			extractorModel = modelID
+			if sess != nil {
+				sess.SetExtractorModel(modelID)
+			}
+			return nil
+		}
 	}
 
 	listProfilesFn := func(ctx context.Context) ([]*store.Profile, error) {
@@ -219,9 +241,11 @@ func runChat(_ *cobra.Command, _ []string) error {
 			providerFn = nil
 			listModelsFn = nil
 			modelSelectedFn = func(modelID string) error { return nil }
+			extractorModelSelectedFn = func(modelID string) error { return nil }
 
 			if providerCfg != nil && decryptedKey != "" {
 				activeModel = providerCfg.EffectiveModel()
+				extractorModel = providerCfg.EffectiveExtractorModel()
 				adapterCfg := provider.Config{
 					ProviderType: "openai_compatible",
 					Endpoint:     providerCfg.Endpoint,
@@ -245,6 +269,12 @@ func runChat(_ *cobra.Command, _ []string) error {
 						ProviderType: "openai_compatible",
 						Endpoint:     adapterCfg.Endpoint,
 						Model:        activeModel,
+						APIKey:       adapterCfg.APIKey,
+					}),
+					provider.NewOpenAICompatible(provider.Config{
+						ProviderType: "openai_compatible",
+						Endpoint:     adapterCfg.Endpoint,
+						Model:        extractorModel,
 						APIKey:       adapterCfg.APIKey,
 					}),
 					logger,
@@ -288,9 +318,19 @@ func runChat(_ *cobra.Command, _ []string) error {
 					activeModel = modelID
 					return nil
 				}
+				extractorModelSelectedFn = func(modelID string) error {
+					if err := cfgRepo.SetExtractorModel(ctx, p.ID, modelID); err != nil {
+						return err
+					}
+					extractorModel = modelID
+					if sess != nil {
+						sess.SetExtractorModel(modelID)
+					}
+					return nil
+				}
 			}
 
-			return tui.ProfileSwitched(profileName, activeModel, cacheStatus, "tokens: n/a", providerFn, listModelsFn, modelSelectedFn)
+			return tui.ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, "tokens: n/a", providerFn, listModelsFn, modelSelectedFn, extractorModelSelectedFn)
 		}
 	}
 	listBackupsFn := func(ctx context.Context) ([]string, error) {
@@ -301,12 +341,13 @@ func runChat(_ *cobra.Command, _ []string) error {
 	}
 
 	m := tui.New(
-		activeProfile.Name, activeModel,
+		activeProfile.Name, activeModel, extractorModel,
 		cacheStatus, "tokens: n/a",
 		dispatcher, execCtx,
 		providerFn, listModelsFn, modelSelectedFn,
 		listProfilesFn, profileSwitchCmd,
 		listBackupsFn, backupSelectedFn,
+		extractorModelSelectedFn,
 	)
 	prog = tea.NewProgram(m, tea.WithAltScreen())
 	if _, runErr := prog.Run(); runErr != nil {
