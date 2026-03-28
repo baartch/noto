@@ -82,10 +82,12 @@ func (d *Dispatcher) Dispatch(input string, ctx *commands.ExecContext) DispatchR
 
 	var out strings.Builder
 	execCtx := &commands.ExecContext{
-		ProfileID:   ctx.ProfileID,
-		ProfileSlug: ctx.ProfileSlug,
-		Output:      &out,
-		Confirm:     ctx.Confirm,
+		ProfileID:        ctx.ProfileID,
+		ProfileSlug:      ctx.ProfileSlug,
+		Output:           &out,
+		Confirm:          ctx.Confirm,
+		SuspendForEditor: ctx.SuspendForEditor,
+		OnPromptChanged:  ctx.OnPromptChanged,
 	}
 
 	if err := cmd.Handler(execCtx, parsed.Args); err != nil {
