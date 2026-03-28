@@ -116,6 +116,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 	// Resolve provider config.
 	providerCfg, decryptedKey := loadProviderConfig(ctx, profileDB, activeProfile.ID)
 	activeModel := ""
+	cacheStatus := "cache: n/a"
 
 	var providerFn tui.ProviderFunc
 	var listModelsFn tui.ListModelsFunc
@@ -162,6 +163,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 		}
 		defer sess.Close(context.Background())
 
+		cacheStatus = sess.CacheStatus()
 		providerFn = func(callCtx context.Context, userMsg string) (string, error) {
 			sess.SetModel(activeModel)
 			result, err := sess.Send(callCtx, userMsg)
@@ -197,6 +199,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 
 	m := tui.New(
 		activeProfile.Name, activeModel,
+		cacheStatus, "tokens: n/a",
 		dispatcher, execCtx,
 		providerFn, listModelsFn, modelSelectedFn,
 		listProfilesFn, profileSelectedFn,

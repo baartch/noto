@@ -68,6 +68,8 @@ const (
 type Model struct {
 	profileName string
 	activeModel string
+	cacheStatus string
+	tokenStatus string
 	input       textarea.Model
 	viewport    viewport.Model
 	messages    []chatMessage
@@ -119,6 +121,8 @@ var (
 func New(
 	profileName string,
 	activeModel string,
+	cacheStatus string,
+	tokenStatus string,
 	dispatcher *chat.Dispatcher,
 	execCtx *commands.ExecContext,
 	providerFn ProviderFunc,
@@ -147,6 +151,8 @@ func New(
 	return Model{
 		profileName:     profileName,
 		activeModel:     activeModel,
+		cacheStatus:     cacheStatus,
+		tokenStatus:     tokenStatus,
 		input:           ti,
 		suggCursor:      -1,
 		dispatcher:      dispatcher,
@@ -617,6 +623,37 @@ func (m Model) View() string {
 		errBlock +
 		inputDivider + "\n" +
 		inputLine
+}
+
+// renderFooter draws the bottom status line.
+func (m *Model) renderFooter() string {
+	left := strings.TrimSpace(m.cacheStatus)
+	if left == "" {
+		left = "cache: n/a"
+	}
+	right := strings.TrimSpace(m.profileName)
+	if m.activeModel != "" {
+		right = right + "  [" + m.activeModel + "]"
+	}
+	if m.notesIndicator != "" {
+		left = left + "  " + notesBadge.Render(m.notesIndicator)
+	}
+	if m.tokenStatus != "" {
+		left = left + "  " + m.tokenStatus
+	}
+	return footerLine(m.width, left, right)
+}
+
+// footerLine pads left/right content to terminal width.
+func footerLine(width int, left, right string) string {
+	if width <= 0 {
+		return left + "  " + right
+	}
+	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 2 {
+		return left + "  " + right
+	}
+	return left + strings.Repeat(" ", gap) + right
 }
 
 // renderSuggestions draws the suggestion list with cursor highlighted.

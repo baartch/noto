@@ -25,6 +25,7 @@ type Session struct {
 	profileID      string
 	conversationID string
 	systemPrompt   string
+	cacheHit       bool
 
 	convRepo    *store.ConversationRepo
 	msgRepo     *store.MessageRepo
@@ -87,6 +88,7 @@ func NewSession(
 		profileID:      profileID,
 		conversationID: convID,
 		systemPrompt:   rc.AssembledPrompt,
+		cacheHit:       rc.CacheHit,
 		convRepo:       convRepo,
 		msgRepo:        msgRepo,
 		noteRepo:       noteRepo,
@@ -179,6 +181,14 @@ func (s *Session) SetModel(model string) {
 	if a, ok := s.adapter.(interface{ SetModel(string) }); ok {
 		a.SetModel(model)
 	}
+}
+
+// CacheStatus returns "hit" or "miss" depending on the startup cache usage.
+func (s *Session) CacheStatus() string {
+	if s.cacheHit {
+		return "cache: hit"
+	}
+	return "cache: miss"
 }
 
 // Close archives the conversation.

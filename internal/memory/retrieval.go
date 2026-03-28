@@ -24,6 +24,9 @@ type RetrievalContext struct {
 
 	// AssembledPrompt is the final combined system prompt with injected context.
 	AssembledPrompt string
+
+	// CacheHit indicates the assembled prompt was served from cache.
+	CacheHit bool
 }
 
 // Retrieval assembles context for a chat turn from SQLite source-of-truth data.
@@ -54,6 +57,7 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 		if err == nil && cached != nil {
 			var cachedCtx RetrievalContext
 			if err := json.Unmarshal([]byte(cached.Payload), &cachedCtx); err == nil {
+				cachedCtx.CacheHit = true
 				return &cachedCtx, nil
 			}
 			_ = r.cacheRepo.Invalidate(ctx, profileID, cacheKey)
@@ -80,6 +84,7 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 		MemoryBlock:     memoryBlock,
 		SessionSummary:  summaryText,
 		AssembledPrompt: assembled,
+		CacheHit:        false,
 	}
 
 	if r.cacheRepo != nil {
