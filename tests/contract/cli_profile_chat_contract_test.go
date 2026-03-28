@@ -13,6 +13,7 @@ import (
 func openTestDB(t *testing.T) (*store.DB, func()) {
 	t.Helper()
 	dir := t.TempDir()
+	t.Setenv("NOTO_APP_DIR", dir)
 	db, err := store.OpenForTesting(filepath.Join(dir, "contract_test.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)

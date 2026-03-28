@@ -15,6 +15,7 @@ import (
 func tempDB(t *testing.T) (*store.DB, func()) {
 	t.Helper()
 	dir := t.TempDir()
+	t.Setenv("NOTO_APP_DIR", dir)
 	path := filepath.Join(dir, "test.db")
 	db, err := store.OpenForTesting(path)
 	if err != nil {

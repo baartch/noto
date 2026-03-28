@@ -15,6 +15,7 @@ import (
 // BenchmarkStartup measures profile list retrieval (startup critical path).
 func BenchmarkStartup_ProfileList(b *testing.B) {
 	dir := b.TempDir()
+	b.Setenv("NOTO_APP_DIR", dir)
 	db, err := store.OpenForTesting(filepath.Join(dir, "bench.db"))
 	if err != nil {
 		b.Fatal(err)
@@ -68,6 +69,7 @@ func BenchmarkSlashParser_Parse(b *testing.B) {
 // BenchmarkContextCache_GetMiss measures cache miss lookup speed.
 func BenchmarkContextCache_GetMiss(b *testing.B) {
 	dir := b.TempDir()
+	b.Setenv("NOTO_APP_DIR", dir)
 	db, err := store.OpenForTesting(filepath.Join(dir, "bench_cache.db"))
 	if err != nil {
 		b.Fatal(err)

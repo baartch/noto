@@ -37,6 +37,9 @@ const (
 
 // AppDir returns the absolute path to the top-level Noto application directory (~/.noto).
 func AppDir() (string, error) {
+	if override := os.Getenv("NOTO_APP_DIR"); override != "" {
+		return override, nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("config: could not determine home directory: %w", err)

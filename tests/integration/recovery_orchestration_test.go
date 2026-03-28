@@ -11,6 +11,7 @@ import (
 
 func TestRecovery_MissingDB_RestoresFromBackup(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("NOTO_APP_DIR", dir)
 
 	// Create a minimal DB file to snapshot.
 	dbPath := filepath.Join(dir, "memory.db")
