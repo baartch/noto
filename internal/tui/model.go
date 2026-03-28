@@ -63,6 +63,7 @@ type notesSavedMsg          struct{ count int }
 type clearNotesIndicatorMsg struct{}
 type editorFinishedMsg      struct{ err error }
 type statsUpdatedMsg        struct{ formatted string }
+type spinnerTickMsg         struct{}
 
 // ---- picker kind ------------------------------------------------------------
 
@@ -102,6 +103,10 @@ type Model struct {
 	// notes badge
 	notesIndicator string
 
+	// pending assistant state
+	pending      bool
+	spinnerIndex int
+
 	dispatcher      *chat.Dispatcher
 	execCtx         *commands.ExecContext
 	provider        ProviderFunc
@@ -118,6 +123,8 @@ type chatMessage struct {
 	content   string
 	timestamp time.Time
 }
+
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 // ---- styles -----------------------------------------------------------------
 
@@ -269,12 +276,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statsUpdatedMsg:
 		m.tokenStatus = msg.formatted
 
+	case spinnerTickMsg:
+		if m.pending {
+			m.spinnerIndex = (m.spinnerIndex + 1) % len(spinnerFrames)
+			m.updatePendingSpinner()
+			m.syncViewport()
+			cmds = append(cmds, tea.Tick(120*time.Millisecond, func(time.Time) tea.Msg { return spinnerTickMsg{} }))
+		}
+
 	// ---- provider reply -----------------------------------------------------
 	case providerReplyMsg:
 		if msg.err != nil {
 			m.err = msg.err
+			m.clearPending()
+			m.pending = false
 		} else {
-			m.messages = append(m.messages, chatMessage{role: "assistant", content: msg.content, timestamp: time.Now()})
+			m.resolvePending(msg.content)
+			m.pending = false
 		}
 		m.syncViewport()
 
@@ -345,6 +363,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.input, inputCmd = m.input.Update(msg)
 	cmds = append(cmds, inputCmd)
 	m.refreshSuggestions()
+	m.updatePendingSpinner()
 
 	return m, tea.Batch(cmds...)
 }
@@ -430,9 +449,14 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 
 	// Plain chat message.
 	m.messages = append(m.messages, chatMessage{role: "user", content: val, timestamp: time.Now()})
+	m.messages = append(m.messages, chatMessage{role: "pending", content: spinnerFrames[m.spinnerIndex], timestamp: time.Now()})
+	m.pending = true
 	m.syncViewport()
+	cmds = append(cmds, tea.Tick(120*time.Millisecond, func(time.Time) tea.Msg { return spinnerTickMsg{} }))
 
 	if m.provider == nil {
+		m.pending = false
+		m.clearPending()
 		m.messages = append(m.messages, chatMessage{
 			role:      "assistant",
 			content:   "No provider configured. Run: `noto provider set --key <key>`\nThen pick a model with `/model`",
@@ -758,6 +782,39 @@ func (m *Model) renderSuggestions() string {
 	return sb.String()
 }
 
+func (m *Model) resolvePending(content string) {
+	for i := len(m.messages) - 1; i >= 0; i-- {
+		if m.messages[i].role == "pending" {
+			m.messages[i].role = "assistant"
+			m.messages[i].content = content
+			m.messages[i].timestamp = time.Now()
+			return
+		}
+	}
+	m.messages = append(m.messages, chatMessage{role: "assistant", content: content, timestamp: time.Now()})
+}
+
+func (m *Model) clearPending() {
+	for i := len(m.messages) - 1; i >= 0; i-- {
+		if m.messages[i].role == "pending" {
+			m.messages = append(m.messages[:i], m.messages[i+1:]...)
+			return
+		}
+	}
+}
+
+func (m *Model) updatePendingSpinner() {
+	if !m.pending {
+		return
+	}
+	for i := len(m.messages) - 1; i >= 0; i-- {
+		if m.messages[i].role == "pending" {
+			m.messages[i].content = spinnerFrames[m.spinnerIndex]
+			return
+		}
+	}
+}
+
 // syncViewport rebuilds viewport content and scrolls to bottom.
 func (m *Model) syncViewport() {
 	if !m.ready {
@@ -788,6 +845,8 @@ func (m *Model) renderHistory() string {
 		case "user":
 			sb.WriteString(renderUserBubble(msg.content, "You", ts, termWidth))
 		case "assistant":
+			sb.WriteString(renderAssistantBubble(msg.content, m.activeModel, ts, termWidth))
+		case "pending":
 			sb.WriteString(renderAssistantBubble(msg.content, m.activeModel, ts, termWidth))
 		case "command":
 			sb.WriteString(renderCommandLine(msg.content))
