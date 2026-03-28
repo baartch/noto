@@ -72,29 +72,40 @@ func renderMarkdown(content string, maxWidth int) string {
 
 // renderUserBubble renders a right-aligned user message bubble.
 func renderUserBubble(content, authorName string, ts time.Time, termWidth int) string {
-	maxW := termWidth - 4
-	if maxW > 80 {
-		maxW = 80
+	if termWidth < 20 {
+		termWidth = 80
 	}
 
+	// Bubble occupies at most 70% of terminal width, minimum 40 cols.
+	bubbleW := int(float64(termWidth) * 0.70)
+	if bubbleW < 40 {
+		bubbleW = 40
+	}
+	if bubbleW > termWidth-2 {
+		bubbleW = termWidth - 2
+	}
+	innerW := bubbleW - 4 // subtract horizontal padding (2 each side)
+
+	wrapped := wordWrap(content, innerW)
 	bubble := lipgloss.NewStyle().
 		Background(userBubbleBg).
 		Foreground(userBubbleFg).
 		Padding(0, 2).
-		Width(maxW).
-		Render(wordWrap(content, maxW-4))
+		Width(bubbleW).
+		Render(wrapped)
 
 	label := userLabelStyle.Render(authorName) +
 		"  " + userTimeStyle.Render(ts.Format("15:04"))
 
-	// Right-align both label and bubble.
-	rightPad := termWidth - maxW - 2
-	if rightPad < 0 {
-		rightPad = 0
+	// Right-align: pad = space to push bubble to the right edge.
+	leftPad := termWidth - bubbleW
+	if leftPad < 0 {
+		leftPad = 0
 	}
-	pad := strings.Repeat(" ", rightPad)
+	pad := strings.Repeat(" ", leftPad)
 
-	return pad + label + "\n" + pad + bubble
+	paddedBubble := padLines(bubble, pad)
+	return pad + label + "\n" + paddedBubble
 }
 
 // renderAssistantBubble renders a left-aligned assistant message with markdown.
@@ -179,4 +190,15 @@ func formatTimestamp(t time.Time) string {
 		return t.Format("15:04")
 	}
 	return fmt.Sprintf("%s %s", t.Weekday().String()[:3], t.Format("15:04"))
+}
+
+func padLines(content, pad string) string {
+	if pad == "" {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		lines[i] = pad + line
+	}
+	return strings.Join(lines, "\n")
 }

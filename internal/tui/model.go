@@ -703,7 +703,6 @@ func (m *Model) renderFooter() string {
 	}
 
 	left := strings.Join(leftParts, dim.Render("  "))
-	left = "   " + left
 
 	// Right: profile + model.
 	right := white.Render(m.profileName)
@@ -713,12 +712,16 @@ func (m *Model) renderFooter() string {
 
 	_ = yellow // suppress unused if no cost yet
 
-	margin := 3
-	width := m.width - margin
-	if width < 0 {
-		width = 0
+	margin := lipgloss.Width(m.input.Prompt) + 1
+	if margin < 0 {
+		margin = 0
 	}
-	return footerLine(width, left, right) + strings.Repeat(" ", margin)
+	innerWidth := m.width - margin*2
+	if innerWidth < 0 {
+		innerWidth = 0
+	}
+	pad := strings.Repeat(" ", margin)
+	return pad + footerLine(innerWidth, left, right) + pad
 }
 
 // footerLine pads left/right content to terminal width.
@@ -732,6 +735,7 @@ func footerLine(width int, left, right string) string {
 	}
 	return left + strings.Repeat(" ", gap) + right
 }
+
 
 // renderSuggestions draws the suggestion list with cursor highlighted.
 func (m *Model) renderSuggestions() string {
