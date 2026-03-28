@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
+	"noto/internal/backup"
 	chatpkg "noto/internal/chat"
 	"noto/internal/commands"
 	"noto/internal/observe"
@@ -67,6 +68,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	if err := commands.RegisterModelCommand(registry); err != nil {
+		return err
+	}
+	if err := commands.RegisterBackupCommands(registry); err != nil {
 		return err
 	}
 	dispatcher := chatpkg.NewDispatcher(registry)
@@ -185,6 +189,12 @@ func runChat(_ *cobra.Command, _ []string) error {
 		_, err := profSvc.Select(ctx, profileName)
 		return err
 	}
+	listBackupsFn := func(ctx context.Context) ([]string, error) {
+		return backup.ListBackups(activeProfile.Slug)
+	}
+	backupSelectedFn := func(timestamp string) error {
+		return backup.RestoreAt(activeProfile.Slug, timestamp)
+	}
 
 	m := tui.New(
 		activeProfile.Name, activeModel,
@@ -192,6 +202,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 		dispatcher, execCtx,
 		providerFn, listModelsFn, modelSelectedFn,
 		listProfilesFn, profileSelectedFn,
+		listBackupsFn, backupSelectedFn,
 	)
 	prog = tea.NewProgram(m, tea.WithAltScreen())
 	if _, runErr := prog.Run(); runErr != nil {

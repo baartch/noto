@@ -73,7 +73,20 @@ func Restore(slug string) error {
 		return fmt.Errorf("backup: no backups found for profile %q", slug)
 	}
 
-	dbSrc := filepath.Join(backupsDir, latest+dbSnapshotSuffix)
+	return RestoreAt(slug, latest)
+}
+
+// RestoreAt replaces the profile's DB (and vector index if available) with a specific backup.
+func RestoreAt(slug, timestamp string) error {
+	if timestamp == "" {
+		return fmt.Errorf("backup: timestamp is required")
+	}
+	backupsDir, err := config.ProfileBackupsDir(slug)
+	if err != nil {
+		return fmt.Errorf("backup: get backups dir for %q: %w", slug, err)
+	}
+
+	dbSrc := filepath.Join(backupsDir, timestamp+dbSnapshotSuffix)
 	dbDst, err := config.ProfileDBPath(slug)
 	if err != nil {
 		return err
@@ -82,7 +95,7 @@ func Restore(slug string) error {
 		return fmt.Errorf("backup: restore DB for %q: %w", slug, err)
 	}
 
-	vecSrc := filepath.Join(backupsDir, latest+vecSnapshotSuffix)
+	vecSrc := filepath.Join(backupsDir, timestamp+vecSnapshotSuffix)
 	if _, statErr := os.Stat(vecSrc); statErr == nil {
 		vecDst, err := config.ProfileVectorPath(slug)
 		if err != nil {

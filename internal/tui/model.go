@@ -38,6 +38,12 @@ type ListProfilesFunc func(ctx context.Context) ([]*store.Profile, error)
 // ProfileSelectedFunc is called when the user picks a profile in the picker.
 type ProfileSelectedFunc func(profileName string) error
 
+// ListBackupsFunc returns backup timestamps for the active profile.
+type ListBackupsFunc func(ctx context.Context) ([]string, error)
+
+// BackupSelectedFunc is called when the user picks a backup timestamp.
+type BackupSelectedFunc func(timestamp string) error
+
 // ---- public tea.Msg constructors --------------------------------------------
 
 // NotesSaved returns a tea.Msg that shows the notes saved badge.
@@ -52,6 +58,7 @@ func StatsUpdated(formatted string) tea.Msg { return statsUpdatedMsg{formatted: 
 type providerReplyMsg       struct{ content string; err error }
 type modelsLoadedMsg        struct{ items []pickerItem; err error }
 type profilesLoadedMsg      struct{ items []pickerItem; err error }
+type backupsLoadedMsg       struct{ items []pickerItem; err error }
 type notesSavedMsg          struct{ count int }
 type clearNotesIndicatorMsg struct{}
 type editorFinishedMsg      struct{ err error }
@@ -64,6 +71,7 @@ type pickerKind int
 const (
 	pickerKindModel   pickerKind = iota
 	pickerKindProfile pickerKind = iota
+	pickerKindBackup  pickerKind = iota
 )
 
 // ---- TUI model --------------------------------------------------------------
@@ -101,6 +109,8 @@ type Model struct {
 	modelSelected   ModelSelectedFunc
 	listProfiles    ListProfilesFunc
 	profileSelected ProfileSelectedFunc
+	listBackups     ListBackupsFunc
+	backupSelected  BackupSelectedFunc
 }
 
 type chatMessage struct {
@@ -134,6 +144,8 @@ func New(
 	modelSelected ModelSelectedFunc,
 	listProfiles ListProfilesFunc,
 	profileSelected ProfileSelectedFunc,
+	listBackups ListBackupsFunc,
+	backupSelected BackupSelectedFunc,
 ) Model {
 	ti := textarea.New()
 	ti.Placeholder = "Type a message or /command…"
@@ -166,6 +178,8 @@ func New(
 		modelSelected:   modelSelected,
 		listProfiles:    listProfiles,
 		profileSelected: profileSelected,
+		listBackups:     listBackups,
+		backupSelected:  backupSelected,
 	}
 }
 
@@ -210,6 +224,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case profilesLoadedMsg:
 		if m.picker != nil && m.pickerKind == pickerKindProfile {
+			m.picker.loading = false
+			if msg.err != nil {
+				m.picker.err = msg.err
+			} else {
+				m.picker.items = msg.items
+				m.picker.cursor = 0
+			}
+		}
+
+	case backupsLoadedMsg:
+		if m.picker != nil && m.pickerKind == pickerKindBackup {
 			m.picker.loading = false
 			if msg.err != nil {
 				m.picker.err = msg.err
@@ -388,6 +413,9 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 			if commands.AsErrOpenProfilePicker(result.Err) {
 				return m.openPicker(pickerKindProfile, cmds)
 			}
+			if commands.AsErrOpenBackupPicker(result.Err) {
+				return m.openPicker(pickerKindBackup, cmds)
+			}
 			m.err = result.Err
 		} else if result.Executed && result.Output != "" {
 			m.messages = append(m.messages, chatMessage{
@@ -467,6 +495,25 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 			m.picker.loading = false
 			m.picker.err = fmt.Errorf("no profile service available")
 		}
+
+	case pickerKindBackup:
+		m.picker = &pickerState{title: "Restore backup", loading: true}
+		if m.listBackups != nil {
+			cmds = append(cmds, func() tea.Msg {
+				backups, err := m.listBackups(context.Background())
+				if err != nil {
+					return backupsLoadedMsg{err: err}
+				}
+				items := make([]pickerItem, len(backups))
+				for i, ts := range backups {
+					items[i] = pickerItem{Value: ts}
+				}
+				return backupsLoadedMsg{items: items}
+			})
+		} else {
+			m.picker.loading = false
+			m.picker.err = fmt.Errorf("no backup service available")
+		}
 	}
 
 	return m, tea.Batch(cmds...)
@@ -506,6 +553,15 @@ func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 				} else {
 					m.profileName = chosen
 					m.messages = append(m.messages, chatMessage{role: "command", content: "Switched to profile: " + chosen, timestamp: time.Now()})
+					m.syncViewport()
+				}
+			}
+		case pickerKindBackup:
+			if m.backupSelected != nil {
+				if err := m.backupSelected(chosen); err != nil {
+					m.err = err
+				} else {
+					m.messages = append(m.messages, chatMessage{role: "command", content: "Restored backup: " + chosen, timestamp: time.Now()})
 					m.syncViewport()
 				}
 			}
