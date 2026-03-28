@@ -48,6 +48,7 @@ func NewSession(
 	ctx context.Context,
 	profileID string,
 	baseSystemPrompt string,
+	db *store.DB,
 	convRepo *store.ConversationRepo,
 	msgRepo *store.MessageRepo,
 	noteRepo *store.MemoryNoteRepo,
@@ -57,7 +58,7 @@ func NewSession(
 	onNotes NotesCallback,
 ) (*Session, error) {
 	// Build system prompt with injected memory notes + session summary.
-	cacheRepo := store.NewContextCacheRepo(convRepo)
+	cacheRepo := store.NewContextCacheRepo(db)
 	ret := memory.NewRetrieval(noteRepo, summaryRepo, cacheRepo)
 	rc, err := ret.Assemble(ctx, profileID, baseSystemPrompt)
 	if err != nil {
@@ -91,7 +92,7 @@ func NewSession(
 		noteRepo:       noteRepo,
 		summaryRepo:    summaryRepo,
 		adapter:        adapter,
-		extractor:      memory.NewExtractor(noteRepo, adapter, store.NewContextCacheRepo(convRepo)),
+		extractor:      memory.NewExtractor(noteRepo, adapter, store.NewContextCacheRepo(db)),
 		logger:         logger,
 		history:        recentHistory,
 		onNotes:        onNotes,

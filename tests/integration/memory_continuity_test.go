@@ -18,7 +18,7 @@ func TestMemoryContinuity_ExtractTurn_NoLLM_SavesNothing(t *testing.T) {
 	p, _ := profile.NewService(store.NewProfileRepo(db)).Create(ctx, "Memory Test")
 
 	// With nil adapter, ExtractTurn should return no notes (no LLM = no extraction).
-	extractor := memory.NewExtractor(noteRepo, nil)
+	extractor := memory.NewExtractor(noteRepo, nil, nil)
 	result, err := extractor.ExtractTurn(ctx, p.ID, "", "hello", "hi there")
 	if err != nil {
 		t.Fatalf("ExtractTurn: %v", err)
@@ -51,7 +51,7 @@ func TestMemoryContinuity_ManualNote_AppearsInRetrieval(t *testing.T) {
 	}
 
 	// Retrieval should include the note in the assembled prompt.
-	retrieval := memory.NewRetrieval(noteRepo, summaryRepo)
+	retrieval := memory.NewRetrieval(noteRepo, summaryRepo, nil)
 	rc, err := retrieval.Assemble(ctx, p.ID, "You are a helpful assistant.")
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)

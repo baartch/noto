@@ -142,6 +142,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 			ctx,
 			activeProfile.ID,
 			systemPrompt,
+			profileDB,
 			convRepo, msgRepo, noteRepo, summaryRepo,
 			provider.NewOpenAICompatible(provider.Config{
 				ProviderType: "openai_compatible",
