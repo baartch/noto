@@ -41,6 +41,7 @@ type Session struct {
 	history []*store.Message
 
 	onNotes NotesCallback
+	stats   provider.Stats
 }
 
 // NewSession creates a new conversation, assembles the system prompt with
@@ -155,11 +156,17 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	}
 	s.history = append(s.history, asstMsgRec)
 
+	// Accumulate token/cost stats.
+	s.stats.Add(resp)
+
 	// Fire background extraction — never blocks the reply.
 	go s.extractAsync(userMsg, resp.Content)
 
 	return &SendResult{Reply: resp.Content, LatencyMs: latency}, nil
 }
+
+// Stats returns a snapshot of current session usage stats.
+func (s *Session) Stats() provider.Stats { return s.stats }
 
 // extractAsync runs note extraction and calls onNotes when done.
 func (s *Session) extractAsync(userMsg, assistantMsg string) {

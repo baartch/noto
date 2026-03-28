@@ -27,10 +27,16 @@ type CompletionRequest struct {
 
 // CompletionResponse is the normalized response from a provider.
 type CompletionResponse struct {
-	Content      string
-	Model        string
-	PromptTokens int
-	TotalTokens  int
+	Content          string
+	Model            string
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+	// EstimatedCostUSD is a rough cost estimate based on known model pricing.
+	// Zero if the model is not in the pricing table.
+	EstimatedCostUSD float64
+	// ContextMax is the model's context window size (tokens). Zero if unknown.
+	ContextMax int
 }
 
 // Adapter is the interface all provider implementations must satisfy.

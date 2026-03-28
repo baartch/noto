@@ -43,6 +43,9 @@ type ProfileSelectedFunc func(profileName string) error
 // NotesSaved returns a tea.Msg that shows the notes saved badge.
 func NotesSaved(count int) tea.Msg { return notesSavedMsg{count: count} }
 
+// StatsUpdated returns a tea.Msg that updates the token/cost status in the footer.
+func StatsUpdated(formatted string) tea.Msg { return statsUpdatedMsg{formatted: formatted} }
+
 
 // ---- async tea.Msg types (internal) ----------------------------------------
 
@@ -51,7 +54,8 @@ type modelsLoadedMsg        struct{ items []pickerItem; err error }
 type profilesLoadedMsg      struct{ items []pickerItem; err error }
 type notesSavedMsg          struct{ count int }
 type clearNotesIndicatorMsg struct{}
-type editorFinishedMsg struct{ err error }
+type editorFinishedMsg      struct{ err error }
+type statsUpdatedMsg        struct{ formatted string }
 
 // ---- picker kind ------------------------------------------------------------
 
@@ -235,6 +239,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.messages = append(m.messages, chatMessage{role: "command", content: "System prompt updated.", timestamp: time.Now()})
 			m.syncViewport()
 		}
+
+	// ---- stats update -------------------------------------------------------
+	case statsUpdatedMsg:
+		m.tokenStatus = msg.formatted
 
 	// ---- provider reply -----------------------------------------------------
 	case providerReplyMsg:
@@ -613,20 +621,43 @@ func (m Model) View() string {
 
 // renderFooter draws the bottom status line.
 func (m *Model) renderFooter() string {
-	left := strings.TrimSpace(m.cacheStatus)
-	if left == "" {
-		left = "cache: n/a"
-	}
-	right := strings.TrimSpace(m.profileName)
-	if m.activeModel != "" {
-		right = right + "  [" + m.activeModel + "]"
-	}
-	if m.notesIndicator != "" {
-		left = left + "  " + notesBadge.Render(m.notesIndicator)
-	}
+	dim    := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	green  := lipgloss.NewStyle().Foreground(lipgloss.Color("71"))
+	blue   := lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	yellow := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+	purple := lipgloss.NewStyle().Foreground(lipgloss.Color("135"))
+	white  := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+
+	// Left: token stats + cache status + notes badge.
+	var leftParts []string
+
 	if m.tokenStatus != "" {
-		left = left + "  " + m.tokenStatus
+		leftParts = append(leftParts, blue.Render(m.tokenStatus))
 	}
+
+	cache := strings.TrimSpace(m.cacheStatus)
+	switch {
+	case strings.Contains(cache, "hit"):
+		leftParts = append(leftParts, green.Render("cache:hit"))
+	case strings.Contains(cache, "miss"):
+		leftParts = append(leftParts, yellow.Render("cache:miss"))
+	default:
+		leftParts = append(leftParts, dim.Render("cache:n/a"))
+	}
+
+	if m.notesIndicator != "" {
+		leftParts = append(leftParts, green.Render(m.notesIndicator))
+	}
+
+	left := strings.Join(leftParts, dim.Render("  "))
+
+	// Right: profile + model.
+	right := white.Render(m.profileName)
+	if m.activeModel != "" {
+		right = right + dim.Render("  ") + purple.Render("["+m.activeModel+"]")
+	}
+
+	_ = yellow // suppress unused if no cost yet
 	return footerLine(m.width, left, right)
 }
 

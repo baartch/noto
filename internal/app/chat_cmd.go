@@ -170,6 +170,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 			if err != nil {
 				return "", err
 			}
+			if prog != nil {
+				prog.Send(tui.StatsUpdated(sess.Stats().Format()))
+			}
 			return result.Reply, nil
 		}
 

@@ -94,11 +94,21 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 		return nil, fmt.Errorf("provider: no choices in response")
 	}
 
+	modelName := apiResp.Model
+	if modelName == "" {
+		modelName = a.cfg.Model
+	}
+	completionTokens := apiResp.Usage.TotalTokens - apiResp.Usage.PromptTokens
+	info := modelInfo(modelName)
+
 	return &CompletionResponse{
-		Content:      apiResp.Choices[0].Message.Content,
-		Model:        apiResp.Model,
-		PromptTokens: apiResp.Usage.PromptTokens,
-		TotalTokens:  apiResp.Usage.TotalTokens,
+		Content:          apiResp.Choices[0].Message.Content,
+		Model:            modelName,
+		PromptTokens:     apiResp.Usage.PromptTokens,
+		CompletionTokens: completionTokens,
+		TotalTokens:      apiResp.Usage.TotalTokens,
+		EstimatedCostUSD: estimateCost(modelName, apiResp.Usage.PromptTokens, completionTokens),
+		ContextMax:       info.contextWindow,
 	}, nil
 }
 
@@ -122,7 +132,8 @@ type openAIResponse struct {
 		Message openAIMessage `json:"message"`
 	} `json:"choices"`
 	Usage struct {
-		PromptTokens int `json:"prompt_tokens"`
-		TotalTokens  int `json:"total_tokens"`
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
 	} `json:"usage"`
 }
