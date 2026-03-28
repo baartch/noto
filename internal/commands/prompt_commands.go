@@ -84,7 +84,13 @@ func promptEditHandler(ctx *ExecContext, _ []string) error {
 
 	if ctx.SuspendForEditor == nil {
 		// CLI / non-TUI mode — exec directly.
-		return openInEditor(promptPath)
+		if err := openInEditor(promptPath); err != nil {
+			return err
+		}
+		if ctx.OnPromptChanged != nil {
+			return ctx.OnPromptChanged(ctx.ProfileSlug)
+		}
+		return nil
 	}
 
 	// TUI mode — signal via sentinel error so the TUI can use tea.ExecProcess.

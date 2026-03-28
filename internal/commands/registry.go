@@ -59,7 +59,8 @@ type ExecContext struct {
 	// If nil, editor-based commands are unavailable in the current execution context.
 	SuspendForEditor func(fn func() error) error
 
-
+	// OnPromptChanged is called after a prompt edit to invalidate caches.
+	OnPromptChanged func(profileSlug string) error
 }
 
 // Registry holds all registered commands and provides lookup and listing operations.

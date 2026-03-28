@@ -57,7 +57,8 @@ func NewSession(
 	onNotes NotesCallback,
 ) (*Session, error) {
 	// Build system prompt with injected memory notes + session summary.
-	ret := memory.NewRetrieval(noteRepo, summaryRepo)
+	cacheRepo := store.NewContextCacheRepo(convRepo)
+	ret := memory.NewRetrieval(noteRepo, summaryRepo, cacheRepo)
 	rc, err := ret.Assemble(ctx, profileID, baseSystemPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("session: assemble context: %w", err)
@@ -90,7 +91,7 @@ func NewSession(
 		noteRepo:       noteRepo,
 		summaryRepo:    summaryRepo,
 		adapter:        adapter,
-		extractor:      memory.NewExtractor(noteRepo, adapter),
+		extractor:      memory.NewExtractor(noteRepo, adapter, store.NewContextCacheRepo(convRepo)),
 		logger:         logger,
 		history:        recentHistory,
 		onNotes:        onNotes,

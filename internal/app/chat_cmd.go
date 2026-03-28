@@ -86,6 +86,13 @@ func runChat(_ *cobra.Command, _ []string) error {
 	}
 	dispatcher := chatpkg.NewDispatcher(registry)
 
+	// Per-profile DB: conversations, messages, memory notes, provider config, etc.
+	profileDB, err := openProfileDB(activeProfile.Slug)
+	if err != nil {
+		return fmt.Errorf("chat: open profile db: %w", err)
+	}
+	defer profileDB.Close()
+
 	execCtx := &commands.ExecContext{
 		ProfileID:   activeProfile.ID,
 		ProfileSlug: activeProfile.Slug,
@@ -97,16 +104,14 @@ func runChat(_ *cobra.Command, _ []string) error {
 			return strings.ToLower(strings.TrimSpace(ans)) == "yes"
 		},
 		SuspendForEditor: func(fn func() error) error { return fn() },
-		// OnProfileChanged is intentionally nil — profile name updates
-		// are handled directly by the TUI via the profileSelected return value.
+		OnPromptChanged: func(slug string) error {
+			// Prompt edits invalidate the context cache and mark the vector index stale.
+			cacheRepo := store.NewContextCacheRepo(profileDB)
+			_ = cacheRepo.InvalidateAll(ctx, activeProfile.ID)
+			_ = store.NewVectorManifestRepo(profileDB).SetManifestStatusStr(ctx, activeProfile.ID, "stale")
+			return nil
+		},
 	}
-
-	// Per-profile DB: conversations, messages, memory notes, provider config, etc.
-	profileDB, err := openProfileDB(activeProfile.Slug)
-	if err != nil {
-		return fmt.Errorf("chat: open profile db: %w", err)
-	}
-	defer profileDB.Close()
 
 	// Resolve provider config.
 	providerCfg, decryptedKey := loadProviderConfig(ctx, profileDB, activeProfile.ID)

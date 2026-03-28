@@ -55,14 +55,19 @@ Candidate note:
 %s`
 
 // Extractor extracts memory notes using the LLM and persists them to SQLite.
+type CacheInvalidator interface {
+	InvalidateAll(ctx context.Context, profileID string) error
+}
+
 type Extractor struct {
-	noteRepo *store.MemoryNoteRepo
-	adapter  provider.Adapter // nil = fall back to heuristic only
+	noteRepo    *store.MemoryNoteRepo
+	adapter     provider.Adapter // nil disables extraction
+	invalidator CacheInvalidator
 }
 
 // NewExtractor creates an Extractor. Pass nil adapter to disable LLM extraction.
-func NewExtractor(noteRepo *store.MemoryNoteRepo, adapter provider.Adapter) *Extractor {
-	return &Extractor{noteRepo: noteRepo, adapter: adapter}
+func NewExtractor(noteRepo *store.MemoryNoteRepo, adapter provider.Adapter, invalidator CacheInvalidator) *Extractor {
+	return &Extractor{noteRepo: noteRepo, adapter: adapter, invalidator: invalidator}
 }
 
 // ExtractTurn analyses a single user→assistant exchange and persists any notes.
@@ -116,6 +121,10 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID, 
 			return nil, fmt.Errorf("memory: save note: %w", err)
 		}
 		notes = append(notes, note)
+	}
+
+	if len(notes) > 0 && e.invalidator != nil {
+		_ = e.invalidator.InvalidateAll(ctx, profileID)
 	}
 
 	return &ExtractionResult{Notes: notes}, nil

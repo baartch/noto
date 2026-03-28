@@ -2,8 +2,11 @@ package memory
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"noto/internal/store"
 )
@@ -24,18 +27,39 @@ type RetrievalContext struct {
 }
 
 // Retrieval assembles context for a chat turn from SQLite source-of-truth data.
+type CacheRepository interface {
+	Get(ctx context.Context, profileID, cacheKey string) (*store.ContextCacheEntry, error)
+	Upsert(ctx context.Context, e *store.ContextCacheEntry) error
+	Invalidate(ctx context.Context, profileID, cacheKey string) error
+}
+
 type Retrieval struct {
 	noteRepo    *store.MemoryNoteRepo
 	summaryRepo *store.SessionSummaryRepo
+	cacheRepo   CacheRepository
 }
 
 // NewRetrieval creates a Retrieval service.
-func NewRetrieval(noteRepo *store.MemoryNoteRepo, summaryRepo *store.SessionSummaryRepo) *Retrieval {
-	return &Retrieval{noteRepo: noteRepo, summaryRepo: summaryRepo}
+func NewRetrieval(noteRepo *store.MemoryNoteRepo, summaryRepo *store.SessionSummaryRepo, cacheRepo CacheRepository) *Retrieval {
+	return &Retrieval{noteRepo: noteRepo, summaryRepo: summaryRepo, cacheRepo: cacheRepo}
 }
 
 // Assemble builds the RetrievalContext for a profile, reading from SQLite.
+// It reuses cached context if available and valid.
 func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string) (*RetrievalContext, error) {
+	cacheKey := cacheKeyFor(profileID, systemPrompt)
+
+	if r.cacheRepo != nil {
+		cached, err := r.cacheRepo.Get(ctx, profileID, cacheKey)
+		if err == nil && cached != nil {
+			var cachedCtx RetrievalContext
+			if err := json.Unmarshal([]byte(cached.Payload), &cachedCtx); err == nil {
+				return &cachedCtx, nil
+			}
+			_ = r.cacheRepo.Invalidate(ctx, profileID, cacheKey)
+		}
+	}
+
 	notes, err := r.noteRepo.ListByProfile(ctx, profileID)
 	if err != nil {
 		return nil, fmt.Errorf("memory: list notes: %w", err)
@@ -51,12 +75,27 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 
 	assembled := buildAssembledPrompt(systemPrompt, summaryText, memoryBlock)
 
-	return &RetrievalContext{
+	ctxOut := &RetrievalContext{
 		SystemPrompt:    systemPrompt,
 		MemoryBlock:     memoryBlock,
 		SessionSummary:  summaryText,
 		AssembledPrompt: assembled,
-	}, nil
+	}
+
+	if r.cacheRepo != nil {
+		payload, _ := json.Marshal(ctxOut)
+		expires := time.Now().Add(24 * time.Hour)
+		_ = r.cacheRepo.Upsert(ctx, &store.ContextCacheEntry{
+			ID:        fmt.Sprintf("cc-%x", time.Now().UnixNano()),
+			ProfileID: profileID,
+			CacheKey:  cacheKey,
+			Payload:   string(payload),
+			CreatedAt: time.Now().UTC(),
+			ExpiresAt: &expires,
+		})
+	}
+
+	return ctxOut, nil
 }
 
 func buildMemoryBlock(notes []*store.MemoryNote) string {
@@ -81,3 +120,9 @@ func buildAssembledPrompt(systemPrompt, sessionSummary, memoryBlock string) stri
 	}
 	return strings.Join(parts, "\n")
 }
+
+func cacheKeyFor(profileID, systemPrompt string) string {
+	hash := sha256.Sum256([]byte(profileID + "::" + systemPrompt))
+	return fmt.Sprintf("ctx:%x", hash)
+}
+
