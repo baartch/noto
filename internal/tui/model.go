@@ -307,6 +307,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.Type {
 		case tea.KeyCtrlC:
+			m.input.SetValue("")
+			m.clearSuggestions()
+			return m, nil
+
+		case tea.KeyCtrlD:
 			return m, tea.Quit
 
 		case tea.KeyEsc:
@@ -398,11 +403,14 @@ func (m Model) updateSuggNav(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd
 		}
 		return m.handleSubmit(val, cmds)
 
-	case tea.KeyEsc, tea.KeyCtrlC:
+	case tea.KeyEsc, tea.KeyCtrlC, tea.KeyCtrlD:
 		m.clearSuggestions()
 		m.input.SetValue("")
-		if msg.Type == tea.KeyCtrlC {
+		if msg.Type == tea.KeyCtrlD {
 			return m, tea.Quit
+		}
+		if msg.Type == tea.KeyCtrlC {
+			return m, nil
 		}
 
 	default:
@@ -546,10 +554,15 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 // updatePicker handles keypresses while the picker overlay is open.
 func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	switch msg.Type {
-	case tea.KeyEsc, tea.KeyCtrlC:
+	case tea.KeyEsc, tea.KeyCtrlC, tea.KeyCtrlD:
+		if msg.Type == tea.KeyCtrlD {
+			return m, tea.Quit
+		}
 		m.picker = nil
 		if msg.Type == tea.KeyCtrlC {
-			return m, tea.Quit
+			m.input.SetValue("")
+			m.clearSuggestions()
+			return m, nil
 		}
 
 	case tea.KeyEnter:
