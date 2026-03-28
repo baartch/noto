@@ -304,10 +304,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, tea.Tick(3*time.Second, func(_ time.Time) tea.Msg {
 				return clearNotesIndicatorMsg{}
 			}))
+		} else {
+			m.notesIndicator = ""
 		}
 
 	case notesSavingMsg:
-		m.notesIndicator = "📝 saving…"
+		m.notesIndicator = "📝 validating…"
 
 	case clearNotesIndicatorMsg:
 		m.notesIndicator = ""
