@@ -604,10 +604,7 @@ func (m Model) View() string {
 	// ---- input bar ----
 	inputDivider := dividerStyle.Render(strings.Repeat("─", m.width))
 	inputView := strings.TrimRight(m.input.View(), "\n")
-	inputLine := lipgloss.NewStyle().PaddingLeft(1).Render(inputView) + "\n" +
-		lipgloss.NewStyle().PaddingLeft(2).Render(
-			suggNormalStyle.Render("(Enter to send • Alt+Enter for new line)"),
-		)
+	inputLine := lipgloss.NewStyle().PaddingLeft(1).Render(inputView)
 
 	footer := m.renderFooter()
 
@@ -638,11 +635,11 @@ func (m *Model) renderFooter() string {
 	cache := strings.TrimSpace(m.cacheStatus)
 	switch {
 	case strings.Contains(cache, "hit"):
-		leftParts = append(leftParts, green.Render("cache:hit"))
+		leftParts = append(leftParts, green.Render("ctx:hit"))
 	case strings.Contains(cache, "miss"):
-		leftParts = append(leftParts, yellow.Render("cache:miss"))
+		leftParts = append(leftParts, yellow.Render("ctx:miss"))
 	default:
-		leftParts = append(leftParts, dim.Render("cache:n/a"))
+		leftParts = append(leftParts, dim.Render("ctx:n/a"))
 	}
 
 	if m.notesIndicator != "" {
@@ -650,6 +647,7 @@ func (m *Model) renderFooter() string {
 	}
 
 	left := strings.Join(leftParts, dim.Render("  "))
+	left = "   " + left
 
 	// Right: profile + model.
 	right := white.Render(m.profileName)
@@ -658,7 +656,13 @@ func (m *Model) renderFooter() string {
 	}
 
 	_ = yellow // suppress unused if no cost yet
-	return footerLine(m.width, left, right)
+
+	margin := 3
+	width := m.width - margin
+	if width < 0 {
+		width = 0
+	}
+	return footerLine(width, left, right) + strings.Repeat(" ", margin)
 }
 
 // footerLine pads left/right content to terminal width.
