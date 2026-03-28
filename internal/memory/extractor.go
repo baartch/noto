@@ -36,7 +36,7 @@ type dedupeResult struct {
 }
 
 const extractionPrompt = `Extract memory-worthy facts from this conversation exchange.
-Reply ONLY with JSON (no markdown, no explanation). Language: match the conversation language.
+Reply ONLY with JSON (no markdown, no explanation). Language: match the user's language.
 
 Return shape:
 {"has_new_info": true|false, "confidence": 0.0-1.0, "notes": [
