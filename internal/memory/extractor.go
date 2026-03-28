@@ -16,6 +16,13 @@ type ExtractionResult struct {
 	Notes []*store.MemoryNote
 }
 
+// extractionResponse is the JSON shape the LLM returns for an extraction.
+type extractionResponse struct {
+	HasNewInfo bool           `json:"has_new_info"`
+	Confidence float64        `json:"confidence"`
+	Notes      []extractedItem `json:"notes"`
+}
+
 // extractedItem is the JSON shape the LLM returns per note.
 type extractedItem struct {
 	Category   string `json:"category"`   // fact | progress | blocker | action_item | other
@@ -29,15 +36,18 @@ type dedupeResult struct {
 }
 
 const extractionPrompt = `Extract memory-worthy facts from this conversation exchange.
-Reply ONLY with a JSON array (no markdown, no explanation). Language: match the conversation language.
+Reply ONLY with JSON (no markdown, no explanation). Language: match the conversation language.
 
-Each object: {"category":"fact|progress|blocker|action_item|other","content":"one concise sentence, max 150 chars","importance":1-10}
+Return shape:
+{"has_new_info": true|false, "confidence": 0.0-1.0, "notes": [
+  {"category":"fact|progress|blocker|action_item|other","content":"one concise sentence, max 150 chars","importance":1-10}
+]}
 
 Rules:
+- If nothing is worth remembering, set "has_new_info": false, "confidence": 0, and "notes": []
 - importance 8-10: critical facts about the user (name, role, key goals, decisions)
 - importance 5-7: useful context (preferences, current work, recent events)
 - importance 1-4: minor details
-- Return [] if nothing is worth remembering long-term
 
 Exchange:
 User: %s
@@ -76,10 +86,11 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID, 
 		return &ExtractionResult{}, nil
 	}
 
-	items := e.llmExtract(ctx, userMsg, assistantMsg)
-	if len(items) == 0 {
+	resp := e.llmExtract(ctx, userMsg, assistantMsg)
+	if !resp.HasNewInfo || resp.Confidence < 0.6 || len(resp.Notes) == 0 {
 		return &ExtractionResult{}, nil
 	}
+	items := resp.Notes
 
 	// Semantic de-duplication: filter out notes that are already known.
 	filtered := items
@@ -132,14 +143,14 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID, 
 
 // llmExtract calls the model and parses the JSON response. Never returns an error
 // — failures are silently dropped so a bad extraction never breaks the chat flow.
-func (e *Extractor) llmExtract(ctx context.Context, userMsg, assistantMsg string) []extractedItem {
+func (e *Extractor) llmExtract(ctx context.Context, userMsg, assistantMsg string) extractionResponse {
 	prompt := fmt.Sprintf(extractionPrompt, userMsg, assistantMsg)
 	resp, err := e.adapter.Complete(ctx, provider.CompletionRequest{
 		Messages: []provider.Message{{Role: "user", Content: prompt}},
 		Temperature: 0.2,
 	})
 	if err != nil {
-		return nil
+		return extractionResponse{}
 	}
 
 	raw := strings.TrimSpace(resp.Content)
@@ -148,11 +159,11 @@ func (e *Extractor) llmExtract(ctx context.Context, userMsg, assistantMsg string
 	raw = strings.TrimSuffix(raw, "```")
 	raw = strings.TrimSpace(raw)
 
-	var items []extractedItem
-	if err := json.Unmarshal([]byte(raw), &items); err != nil {
-		return nil
+	var payload extractionResponse
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return extractionResponse{}
 	}
-	return items
+	return payload
 }
 
 // filterNewNotes uses an LLM-based semantic check to remove duplicates.
