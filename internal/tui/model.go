@@ -455,7 +455,7 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 	m.pickerKind = kind
 	switch kind {
 	case pickerKindModel:
-		m.picker = &pickerState{title: "Select model", loading: true}
+		m.picker = &pickerState{title: "Select model", loading: true, width: m.width - 4}
 		if m.listModels != nil {
 			cmds = append(cmds, func() tea.Msg {
 				models, err := m.listModels(context.Background())
@@ -474,7 +474,7 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 		}
 
 	case pickerKindProfile:
-		m.picker = &pickerState{title: "Select profile", loading: true}
+		m.picker = &pickerState{title: "Select profile", loading: true, width: m.width - 4}
 		if m.listProfiles != nil {
 			current := m.profileName
 			cmds = append(cmds, func() tea.Msg {
@@ -497,7 +497,7 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 		}
 
 	case pickerKindBackup:
-		m.picker = &pickerState{title: "Restore backup", loading: true}
+		m.picker = &pickerState{title: "Restore backup", loading: true, width: m.width - 4}
 		if m.listBackups != nil {
 			cmds = append(cmds, func() tea.Msg {
 				backups, err := m.listBackups(context.Background())

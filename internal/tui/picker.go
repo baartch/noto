@@ -41,6 +41,7 @@ type pickerState struct {
 	filter  string
 	loading bool
 	err     error
+	width   int
 }
 
 // filtered returns items whose display string contains the filter (case-insensitive).
@@ -80,17 +81,23 @@ func (p *pickerState) selectedValue() string {
 
 // render draws the picker, fitting within maxHeight terminal rows.
 func (p *pickerState) render(maxHeight int) string {
+	width := p.width
+	if width <= 0 {
+		width = 50
+	}
 	if p.loading {
-		return pickerBorderStyle.Render(pickerHeaderStyle.Render("  Loading…"))
+		return pickerBorderStyle.Render(pickerHeaderStyle.Render(fitLine("  Loading…", width)))
 	}
 	if p.err != nil {
-		return pickerBorderStyle.Render(errStyle.Render("  Error: " + p.err.Error()))
+		return pickerBorderStyle.Render(errStyle.Render(fitLine("  Error: "+p.err.Error(), width)))
 	}
 
 	list := p.filtered()
 	var sb strings.Builder
-	sb.WriteString(pickerHeaderStyle.Render("  "+p.title+"  (↑↓ navigate · type to filter · Enter select · Esc cancel)") + "\n")
-	sb.WriteString(pickerFilterStyle.Render(fmt.Sprintf("  Filter: %s▌\n", p.filter)))
+	header := "  " + p.title + "  (↑↓ navigate · type to filter · Enter select · Esc cancel)"
+	sb.WriteString(pickerHeaderStyle.Render(fitLine(header, width)) + "\n")
+	filterLine := fmt.Sprintf("  Filter: %s▌", p.filter)
+	sb.WriteString(pickerFilterStyle.Render(fitLine(filterLine, width)) + "\n")
 
 	maxRows := maxHeight - 4
 	if maxRows < 3 {
@@ -111,27 +118,39 @@ func (p *pickerState) render(maxHeight int) string {
 	}
 
 	if len(list) == 0 {
-		sb.WriteString(pickerNormalStyle.Render("  (no matches)"))
+		sb.WriteString(pickerNormalStyle.Render(fitLine("  (no matches)", width)))
 	}
 	for i := start; i < end; i++ {
 		it := list[i]
-		prefix := "   "
+		indicator := " "
 		var style lipgloss.Style
 		switch {
 		case i == p.cursor:
-			prefix = " › "
+			indicator = "›"
 			style = pickerCursorStyle
 		case it.Active:
-			prefix = " ● "
+			indicator = "●"
 			style = pickerActiveStyle
 		default:
 			style = pickerNormalStyle
 		}
-		sb.WriteString(style.Render(prefix+it.display()) + "\n")
+		line := "  " + indicator + " " + it.display()
+		sb.WriteString(style.Render(fitLine(line, width)) + "\n")
 	}
 	if len(list) > maxRows {
-		sb.WriteString(pickerNormalStyle.Render(fmt.Sprintf("  … %d items", len(list))))
+		sb.WriteString(pickerNormalStyle.Render(fitLine(fmt.Sprintf("  … %d items", len(list)), width)))
 	}
 
 	return pickerBorderStyle.Render(sb.String())
+}
+
+func fitLine(line string, width int) string {
+	if width <= 0 {
+		return line
+	}
+	pad := width - lipgloss.Width(line)
+	if pad <= 0 {
+		return line
+	}
+	return line + strings.Repeat(" ", pad)
 }
