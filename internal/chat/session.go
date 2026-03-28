@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"noto/internal/backup"
@@ -22,6 +23,9 @@ const (
 // NotesCallback is called after extraction completes.
 type NotesCallback func(count int)
 
+// NotesSavingCallback is called when extraction starts.
+type NotesSavingCallback func()
+
 // Session manages a single chat session.
 type Session struct {
 	profileID      string
@@ -38,15 +42,19 @@ type Session struct {
 	extractor   *memory.Extractor
 	logger      observe.Logger
 
-	backupStop chan struct{}
+	backupStop  chan struct{}
+	pendingNotes int
+	pendingMu    sync.Mutex
+	pendingDone  chan struct{}
 
 	// history is the in-memory context window sent to the provider.
 	// It starts with recent messages from the previous session, then
 	// grows with messages from the current session.
 	history []*store.Message
 
-	onNotes NotesCallback
-	stats   provider.Stats
+	onNotes       NotesCallback
+	onNotesSaving NotesSavingCallback
+	stats         provider.Stats
 }
 
 // NewSession creates a new conversation, assembles the system prompt with
@@ -64,6 +72,7 @@ func NewSession(
 	adapter provider.Adapter,
 	logger observe.Logger,
 	onNotes NotesCallback,
+	onNotesSaving NotesSavingCallback,
 ) (*Session, error) {
 	// Build system prompt with injected memory notes + session summary.
 	cacheRepo := store.NewContextCacheRepo(db)
@@ -106,7 +115,9 @@ func NewSession(
 		logger:         logger,
 		history:        recentHistory,
 		onNotes:        onNotes,
+		onNotesSaving: onNotesSaving,
 		backupStop:     make(chan struct{}),
+		pendingDone:    make(chan struct{}),
 	}
 	if profileSlug != "" {
 		s.startBackupTicker()
@@ -182,17 +193,23 @@ func (s *Session) Stats() provider.Stats { return s.stats }
 
 // extractAsync runs note extraction and calls onNotes when done.
 func (s *Session) extractAsync(userMsg, assistantMsg string) {
+	s.markNotesPending()
+	if s.onNotesSaving != nil {
+		s.onNotesSaving()
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
 	result, err := s.extractor.ExtractTurn(ctx, s.profileID, s.conversationID, userMsg, assistantMsg)
 	if err != nil {
 		s.logger.Errorf("memory extraction failed: %v", err)
+		s.markNotesDone(0)
 		return
 	}
 	if s.onNotes != nil {
 		s.onNotes(len(result.Notes))
 	}
+	s.markNotesDone(len(result.Notes))
 }
 
 // SetModel updates the model used for subsequent provider calls.
@@ -220,6 +237,7 @@ func (s *Session) Close(ctx context.Context) {
 		}
 	}
 
+	s.waitForPendingNotes(4 * time.Second)
 	summaryText := buildSessionSummary(filterConversationMessages(s.history, s.conversationID))
 	if summaryText != "" {
 		handoff := NewSessionHandoff(s.convRepo, s.summaryRepo)
@@ -275,6 +293,42 @@ func filterConversationMessages(messages []*store.Message, conversationID string
 		}
 	}
 	return out
+}
+
+func (s *Session) markNotesPending() {
+	s.pendingMu.Lock()
+	s.pendingNotes++
+	s.pendingMu.Unlock()
+}
+
+func (s *Session) markNotesDone(count int) {
+	s.pendingMu.Lock()
+	if s.pendingNotes > 0 {
+		s.pendingNotes--
+	}
+	remaining := s.pendingNotes
+	s.pendingMu.Unlock()
+
+	if remaining == 0 {
+		select {
+		case s.pendingDone <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (s *Session) waitForPendingNotes(timeout time.Duration) {
+	s.pendingMu.Lock()
+	pending := s.pendingNotes
+	s.pendingMu.Unlock()
+	if pending == 0 {
+		return
+	}
+
+	select {
+	case <-s.pendingDone:
+	case <-time.After(timeout):
+	}
 }
 
 func (s *Session) startBackupTicker() {

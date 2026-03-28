@@ -149,6 +149,11 @@ func runChat(_ *cobra.Command, _ []string) error {
 					prog.Send(tui.NotesSaved(count))
 				}
 			},
+			func() {
+				if prog != nil {
+					prog.Send(tui.NotesSaving())
+				}
+			},
 		)
 		if err != nil {
 			return fmt.Errorf("chat: start session: %w", err)
@@ -246,6 +251,11 @@ func runChat(_ *cobra.Command, _ []string) error {
 					func(count int) {
 						if prog != nil {
 							prog.Send(tui.NotesSaved(count))
+						}
+					},
+					func() {
+						if prog != nil {
+							prog.Send(tui.NotesSaving())
 						}
 					},
 				)

@@ -49,6 +49,9 @@ type BackupSelectedFunc func(timestamp string) error
 // NotesSaved returns a tea.Msg that shows the notes saved badge.
 func NotesSaved(count int) tea.Msg { return notesSavedMsg{count: count} }
 
+// NotesSaving returns a tea.Msg that shows the notes saving indicator.
+func NotesSaving() tea.Msg { return notesSavingMsg{} }
+
 // StatsUpdated returns a tea.Msg that updates the token/cost status in the footer.
 func StatsUpdated(formatted string) tea.Msg { return statsUpdatedMsg{formatted: formatted} }
 
@@ -78,6 +81,7 @@ type modelsLoadedMsg        struct{ items []pickerItem; err error }
 type profilesLoadedMsg      struct{ items []pickerItem; err error }
 type backupsLoadedMsg       struct{ items []pickerItem; err error }
 type notesSavedMsg          struct{ count int }
+type notesSavingMsg         struct{}
 type clearNotesIndicatorMsg struct{}
 type editorFinishedMsg      struct{ err error }
 type statsUpdatedMsg        struct{ formatted string }
@@ -287,6 +291,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return clearNotesIndicatorMsg{}
 			}))
 		}
+
+	case notesSavingMsg:
+		m.notesIndicator = "📝 saving…"
 
 	case clearNotesIndicatorMsg:
 		m.notesIndicator = ""
