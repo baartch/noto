@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"noto/internal/backup"
 	"noto/internal/memory"
 	"noto/internal/observe"
 	"noto/internal/provider"
@@ -23,6 +24,7 @@ type NotesCallback func(count int)
 // Session manages a single chat session.
 type Session struct {
 	profileID      string
+	profileSlug    string
 	conversationID string
 	systemPrompt   string
 	cacheHit       bool
@@ -34,6 +36,8 @@ type Session struct {
 	adapter     provider.Adapter
 	extractor   *memory.Extractor
 	logger      observe.Logger
+
+	backupStop chan struct{}
 
 	// history is the in-memory context window sent to the provider.
 	// It starts with recent messages from the previous session, then
@@ -49,6 +53,7 @@ type Session struct {
 func NewSession(
 	ctx context.Context,
 	profileID string,
+	profileSlug string,
 	baseSystemPrompt string,
 	db *store.DB,
 	convRepo *store.ConversationRepo,
@@ -85,8 +90,9 @@ func NewSession(
 		return nil, fmt.Errorf("session: create conversation: %w", err)
 	}
 
-	return &Session{
+	s := &Session{
 		profileID:      profileID,
+		profileSlug:    profileSlug,
 		conversationID: convID,
 		systemPrompt:   rc.AssembledPrompt,
 		cacheHit:       rc.CacheHit,
@@ -99,7 +105,12 @@ func NewSession(
 		logger:         logger,
 		history:        recentHistory,
 		onNotes:        onNotes,
-	}, nil
+		backupStop:     make(chan struct{}),
+	}
+	if profileSlug != "" {
+		s.startBackupTicker()
+	}
+	return s, nil
 }
 
 // SendResult is the outcome of a single chat turn.
@@ -190,17 +201,50 @@ func (s *Session) SetModel(model string) {
 	}
 }
 
-// CacheStatus returns "hit" or "miss" depending on the startup cache usage.
+// CacheStatus returns a short label for the footer showing whether the
+// memory context was served from cache or rebuilt from SQLite at startup.
 func (s *Session) CacheStatus() string {
 	if s.cacheHit {
-		return "cache: hit"
+		return "ctx:hit"
 	}
-	return "cache: miss"
+	return "ctx:miss"
 }
 
-// Close archives the conversation.
+// Close archives the conversation and snapshots backups.
 func (s *Session) Close(ctx context.Context) {
+	if s.profileSlug != "" {
+		s.stopBackupTicker()
+		if err := backup.Snapshot(s.profileSlug); err != nil {
+			s.logger.Errorf("backup snapshot failed: %v", err)
+		}
+	}
 	_ = s.convRepo.Archive(ctx, s.conversationID)
+}
+
+func (s *Session) startBackupTicker() {
+	ticker := time.NewTicker(30 * time.Minute)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := backup.Snapshot(s.profileSlug); err != nil {
+					s.logger.Errorf("backup snapshot failed: %v", err)
+				}
+			case <-s.backupStop:
+				return
+			}
+		}
+	}()
+}
+
+func (s *Session) stopBackupTicker() {
+	select {
+	case <-s.backupStop:
+		return
+	default:
+		close(s.backupStop)
+	}
 }
 
 // loadRecentHistory returns the last N messages from the most recent archived

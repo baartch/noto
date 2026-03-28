@@ -127,6 +127,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 		sess, sessErr := chatpkg.NewSession(
 			ctx,
 			activeProfile.ID,
+			activeProfile.Slug,
 			systemPrompt,
 			profileDB,
 			convRepo, msgRepo, noteRepo, summaryRepo,
