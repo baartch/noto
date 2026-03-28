@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 
@@ -32,13 +31,14 @@ func NewStartupFlow(svc *profile.Service) *StartupFlow {
 // Resolve runs the startup profile resolution logic:
 //  - Zero profiles: prompts to create the first profile.
 //  - One profile: selects it automatically.
-//  - Multiple profiles: uses the default profile if set; otherwise prompts for selection.
+//  - Multiple profiles: uses the default profile if set; otherwise selects the last-used profile.
 func (f *StartupFlow) Resolve(
 	ctx context.Context,
 	w io.Writer,
 	promptCreateName func() (string, error),
 	promptSelectName func([]*store.Profile) (string, error),
 ) (*StartupResult, error) {
+	_ = promptSelectName
 	profiles, err := f.profileSvc.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("startup: list profiles: %w", err)
@@ -80,18 +80,15 @@ func (f *StartupFlow) Resolve(
 				return &StartupResult{Profile: p, Action: "selected_default"}, nil
 			}
 		}
-		// No default set — prompt user to choose.
-		name, err := promptSelectName(profiles)
+		// No default set — select the last-used profile.
+		p, err := f.profileSvc.LastUsed(ctx)
 		if err != nil {
 			return nil, err
 		}
-		p, err := f.profileSvc.Select(ctx, name)
+		selected, err := f.profileSvc.Select(ctx, p.Name)
 		if err != nil {
-			if errors.Is(err, store.ErrProfileNotFound) {
-				return nil, fmt.Errorf("startup: profile %q not found", name)
-			}
 			return nil, err
 		}
-		return &StartupResult{Profile: p, Action: "selected_default"}, nil
+		return &StartupResult{Profile: selected, Action: "selected_last_used"}, nil
 	}
 }

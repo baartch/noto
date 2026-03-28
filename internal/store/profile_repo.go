@@ -83,6 +83,16 @@ func (r *ProfileRepo) GetDefault(ctx context.Context) (*Profile, error) {
 	`))
 }
 
+// GetLastUsed retrieves the most recently updated profile.
+func (r *ProfileRepo) GetLastUsed(ctx context.Context) (*Profile, error) {
+	return r.scanOne(r.db.QueryRowContext(ctx, `
+		SELECT id, name, slug, system_prompt_path, db_path, is_default, created_at, updated_at
+		FROM profiles
+		ORDER BY updated_at DESC, created_at DESC
+		LIMIT 1
+	`))
+}
+
 // List returns all profiles ordered by name.
 func (r *ProfileRepo) List(ctx context.Context) ([]*Profile, error) {
 	rows, err := r.db.QueryContext(ctx, `
@@ -143,6 +153,23 @@ func (r *ProfileRepo) SetDefault(ctx context.Context, id string) error {
 		}
 		return nil
 	})
+}
+
+// Touch updates the updated_at timestamp for the profile.
+func (r *ProfileRepo) Touch(ctx context.Context, id string) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE profiles
+		SET updated_at = ?
+		WHERE id = ?
+	`, time.Now().UTC(), id)
+	if err != nil {
+		return fmt.Errorf("store: touch profile: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrProfileNotFound
+	}
+	return nil
 }
 
 // Delete removes a profile by ID. Cascades to all child records.

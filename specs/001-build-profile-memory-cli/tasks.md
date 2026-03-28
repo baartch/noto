@@ -51,7 +51,7 @@
 
 **Goal**: Users can start the terminal app, create/select profile, and chat in active profile
 
-**Independent Test**: Launch with zero/one/multiple profiles and verify correct startup routing and successful chat response in active profile
+**Independent Test**: Launch with zero/one/multiple profiles and verify correct startup routing with last-used profile auto-selection and successful chat response in active profile
 
 ### Tests for User Story 1 (REQUIRED) ⚠️
 

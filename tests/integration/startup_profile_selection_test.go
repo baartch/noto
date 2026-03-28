@@ -110,7 +110,7 @@ func TestStartupFlow_MultipleProfiles_UsesDefault(t *testing.T) {
 	}
 }
 
-func TestStartupFlow_MultipleProfiles_NoDefault_PromptsSelect(t *testing.T) {
+func TestStartupFlow_MultipleProfiles_NoDefault_UsesLastUpdated(t *testing.T) {
 	db, close := tempDB(t)
 	defer close()
 
@@ -118,23 +118,26 @@ func TestStartupFlow_MultipleProfiles_NoDefault_PromptsSelect(t *testing.T) {
 	svc := profile.NewService(repo)
 
 	ctx := context.Background()
-	for _, name := range []string{"Red", "Blue"} {
-		if _, err := svc.Create(ctx, name); err != nil {
-			t.Fatalf("create profile: %v", err)
-		}
+	if _, err := svc.Create(ctx, "Red"); err != nil {
+		t.Fatalf("create profile: %v", err)
 	}
-	// Ensure no default by directly checking — after Create, no default is set.
+	if _, err := svc.Create(ctx, "Blue"); err != nil {
+		t.Fatalf("create profile: %v", err)
+	}
+	if _, err := svc.Select(ctx, "Red"); err != nil {
+		t.Fatalf("select profile: %v", err)
+	}
 
 	flow := app.NewStartupFlow(svc)
 	result, err := flow.Resolve(
 		ctx, os.Stdout,
 		func() (string, error) { return "", nil },
-		func(_ []*store.Profile) (string, error) { return "Blue", nil },
+		func(_ []*store.Profile) (string, error) { return "", nil },
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Profile.Name != "Blue" {
-		t.Errorf("expected Blue to be selected, got %s", result.Profile.Name)
+	if result.Profile.Name != "Red" {
+		t.Errorf("expected Red to be selected, got %s", result.Profile.Name)
 	}
 }

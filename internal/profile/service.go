@@ -87,6 +87,9 @@ func (s *Service) Select(ctx context.Context, name string) (*store.Profile, erro
 	if err := s.repo.SetDefault(ctx, p.ID); err != nil {
 		return nil, err
 	}
+	if err := s.repo.Touch(ctx, p.ID); err != nil {
+		return nil, err
+	}
 	p.IsDefault = true
 	return p, nil
 }
@@ -162,6 +165,18 @@ func (s *Service) GetActive(ctx context.Context) (*store.Profile, error) {
 	if err != nil {
 		if errors.Is(err, store.ErrProfileNotFound) {
 			return nil, fmt.Errorf("profile: no active profile set")
+		}
+		return nil, err
+	}
+	return p, nil
+}
+
+// LastUsed returns the most recently updated profile.
+func (s *Service) LastUsed(ctx context.Context) (*store.Profile, error) {
+	p, err := s.repo.GetLastUsed(ctx)
+	if err != nil {
+		if errors.Is(err, store.ErrProfileNotFound) {
+			return nil, fmt.Errorf("profile: no profiles found")
 		}
 		return nil, err
 	}

@@ -30,7 +30,8 @@ profile so I can get role-specific assistance immediately.
 **Why this priority**: Core product value is profile-based consulting chat in terminal.
 
 **Independent Test**: Launch app on a machine with zero, one, and multiple profiles; verify
-startup behavior and successful chat in active profile.
+startup behavior auto-selects the last-used profile (when multiple profiles exist) and successful
+chat in the active profile.
 
 **Acceptance Scenarios**:
 
@@ -38,8 +39,8 @@ startup behavior and successful chat in active profile.
    a first profile before chat starts.
 2. **Given** exactly one profile exists, **When** user starts the app, **Then** that profile is
    auto-selected and chat opens.
-3. **Given** multiple profiles exist, **When** user starts the app, **Then** user is prompted to
-   select a profile or default profile before chat opens.
+3. **Given** multiple profiles exist, **When** user starts the app, **Then** the last-used
+   profile is auto-selected before chat opens.
 4. **Given** an active profile, **When** user sends a message, **Then** the assistant responds
    using the active profile context.
 
@@ -127,7 +128,7 @@ deletion confirmation behavior.
   machine.
 - **FR-004**: System MUST support profile creation when no profile exists.
 - **FR-005**: System MUST auto-select the only profile when exactly one exists.
-- **FR-006**: System MUST prompt for profile/default selection when multiple profiles exist.
+- **FR-006**: System MUST auto-select the last-used profile when multiple profiles exist.
 - **FR-007**: System MUST provide commands to create, list, select, rename, and delete profiles.
 - **FR-008**: System MUST provide commands to show and edit the active profile prompt at any
   time.
@@ -212,8 +213,8 @@ deletion confirmation behavior.
   3 minutes.
 - **SC-002**: 95% of users with one existing profile enter chat in one step (no manual profile
   selection).
-- **SC-003**: 95% of users with multiple profiles can select the intended profile and start chat
-  in under 30 seconds.
+- **SC-003**: 95% of users with multiple profiles enter chat in one step by auto-selecting the
+  last-used profile.
 - **SC-004**: In validation scenarios, at least 90% of prior-session action items and blockers
   are reflected in subsequent same-profile chats.
 - **SC-005**: In repeat-session benchmarks, median time to first contextual response improves by

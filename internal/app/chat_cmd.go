@@ -42,32 +42,17 @@ func runChat(_ *cobra.Command, _ []string) error {
 	profRepo := store.NewProfileRepo(globalDB)
 	profSvc := profile.NewService(profRepo)
 
-	activeProfile, err := profSvc.GetActive(ctx)
+	flow := NewStartupFlow(profSvc)
+	activeProfileResult, err := flow.Resolve(
+		ctx,
+		os.Stdout,
+		func() (string, error) { return "default", nil },
+		func(_ []*store.Profile) (string, error) { return "", nil },
+	)
 	if err != nil {
-		profiles, listErr := profSvc.List(ctx)
-		if listErr != nil {
-			return listErr
-		}
-		switch len(profiles) {
-		case 0:
-			fmt.Println("No profiles found. Creating a default profile…")
-			p, createErr := profSvc.Create(ctx, "default")
-			if createErr != nil {
-				return createErr
-			}
-			if _, selErr := profSvc.Select(ctx, p.Name); selErr != nil {
-				return selErr
-			}
-			activeProfile = p
-		case 1:
-			if _, selErr := profSvc.Select(ctx, profiles[0].Name); selErr != nil {
-				return selErr
-			}
-			activeProfile = profiles[0]
-		default:
-			return fmt.Errorf("multiple profiles exist but none is active — run: noto profile select <name>")
-		}
+		return err
 	}
+	activeProfile := activeProfileResult.Profile
 
 	// Single program holder shared by all async callbacks (notes, profile changes).
 	// Filled just before p.Run() so closures can reference it safely.
