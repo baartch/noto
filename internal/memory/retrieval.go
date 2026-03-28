@@ -50,7 +50,17 @@ func NewRetrieval(noteRepo *store.MemoryNoteRepo, summaryRepo *store.SessionSumm
 // Assemble builds the RetrievalContext for a profile, reading from SQLite.
 // It reuses cached context if available and valid.
 func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string) (*RetrievalContext, error) {
-	cacheKey := cacheKeyFor(profileID, systemPrompt)
+	summaryText := ""
+	summaryID := "none"
+	if r.summaryRepo != nil {
+		summary, err := r.summaryRepo.GetLatestByProfile(ctx, profileID)
+		if err == nil {
+			summaryText = summary.SummaryText
+			summaryID = summary.ID
+		}
+	}
+
+	cacheKey := cacheKeyFor(profileID, systemPrompt, summaryID)
 
 	if r.cacheRepo != nil {
 		cached, err := r.cacheRepo.Get(ctx, profileID, cacheKey)
@@ -67,12 +77,6 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 	notes, err := r.noteRepo.ListByProfile(ctx, profileID)
 	if err != nil {
 		return nil, fmt.Errorf("memory: list notes: %w", err)
-	}
-
-	summary, err := r.summaryRepo.GetLatestByProfile(ctx, profileID)
-	var summaryText string
-	if err == nil {
-		summaryText = summary.SummaryText
 	}
 
 	memoryBlock := buildMemoryBlock(notes)
@@ -126,8 +130,8 @@ func buildAssembledPrompt(systemPrompt, sessionSummary, memoryBlock string) stri
 	return strings.Join(parts, "\n")
 }
 
-func cacheKeyFor(profileID, systemPrompt string) string {
-	hash := sha256.Sum256([]byte(profileID + "::" + systemPrompt))
+func cacheKeyFor(profileID, systemPrompt, summaryID string) string {
+	hash := sha256.Sum256([]byte(profileID + "::" + systemPrompt + "::" + summaryID))
 	return fmt.Sprintf("ctx:%x", hash)
 }
 
