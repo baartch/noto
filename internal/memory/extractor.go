@@ -13,14 +13,17 @@ import (
 
 // ExtractionResult holds the notes extracted from a single exchange.
 type ExtractionResult struct {
-	Notes []*store.MemoryNote
+	Notes   []*store.MemoryNote
+	Updated int
 }
 
 // extractionResponse is the JSON shape the LLM returns for an extraction.
 type extractionResponse struct {
-	HasNewInfo bool           `json:"has_new_info"`
-	Confidence float64        `json:"confidence"`
+	HasNewInfo bool            `json:"has_new_info"`
+	Confidence float64         `json:"confidence"`
 	Notes      []extractedItem `json:"notes"`
+	Action     string          `json:"action"`     // add | update
+	TargetID   string          `json:"target_id"`  // note id when action=update
 }
 
 // extractedItem is the JSON shape the LLM returns per note.
@@ -39,15 +42,20 @@ const extractionPrompt = `Extract memory-worthy facts from this conversation exc
 Reply ONLY with JSON (no markdown, no explanation). Language: match the user's language.
 
 Return shape:
-{"has_new_info": true|false, "confidence": 0.0-1.0, "notes": [
+{"has_new_info": true|false, "confidence": 0.0-1.0, "action": "add|update", "target_id": "", "notes": [
   {"category":"fact|progress|blocker|action_item|other","content":"one concise sentence, max 150 chars","importance":1-10}
 ]}
 
 Rules:
 - If nothing is worth remembering, set "has_new_info": false, "confidence": 0, and "notes": []
+- If the user clarifies/corrects something already captured, set action="update" and pick a target_id from the existing notes list
+- Otherwise use action="add" and leave target_id empty
 - importance 8-10: critical facts about the user (name, role, key goals, decisions)
 - importance 5-7: useful context (preferences, current work, recent events)
 - importance 1-4: minor details
+
+Existing notes (pick target_id from here if updating):
+%s
 
 Exchange:
 User: %s
@@ -86,19 +94,26 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID, 
 		return &ExtractionResult{}, nil
 	}
 
-	resp := e.llmExtract(ctx, userMsg, assistantMsg)
+	var existing []*store.MemoryNote
+	if notes, err := e.noteRepo.ListByProfile(ctx, profileID); err == nil {
+		existing = notes
+	}
+	resp := e.llmExtract(ctx, userMsg, assistantMsg, existing)
 	if !resp.HasNewInfo || resp.Confidence < 0.6 || len(resp.Notes) == 0 {
 		return &ExtractionResult{}, nil
 	}
 	items := resp.Notes
 
+	if resp.Action == "update" && resp.TargetID != "" {
+		if updated, err := e.updateNote(ctx, profileID, resp.TargetID, items); err == nil && updated {
+			return &ExtractionResult{Notes: []*store.MemoryNote{}, Updated: 1}, nil
+		}
+	}
+
 	// Semantic de-duplication: filter out notes that are already known.
 	filtered := items
-	if len(items) > 0 {
-		existing, err := e.noteRepo.ListByProfile(ctx, profileID)
-		if err == nil {
-			filtered = e.filterNewNotes(ctx, items, existing)
-		}
+	if len(items) > 0 && len(existing) > 0 {
+		filtered = e.filterNewNotes(ctx, items, existing)
 	}
 	if len(filtered) == 0 {
 		return &ExtractionResult{}, nil
@@ -143,8 +158,8 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID, 
 
 // llmExtract calls the model and parses the JSON response. Never returns an error
 // — failures are silently dropped so a bad extraction never breaks the chat flow.
-func (e *Extractor) llmExtract(ctx context.Context, userMsg, assistantMsg string) extractionResponse {
-	prompt := fmt.Sprintf(extractionPrompt, userMsg, assistantMsg)
+func (e *Extractor) llmExtract(ctx context.Context, userMsg, assistantMsg string, existing []*store.MemoryNote) extractionResponse {
+	prompt := fmt.Sprintf(extractionPrompt, formatExistingNotes(existing), userMsg, assistantMsg)
 	resp, err := e.adapter.Complete(ctx, provider.CompletionRequest{
 		Messages: []provider.Message{{Role: "user", Content: prompt}},
 		Temperature: 0.2,
@@ -167,6 +182,20 @@ func (e *Extractor) llmExtract(ctx context.Context, userMsg, assistantMsg string
 }
 
 // filterNewNotes uses an LLM-based semantic check to remove duplicates.
+func formatExistingNotes(existing []*store.MemoryNote) string {
+	if len(existing) == 0 {
+		return "(none)"
+	}
+	if len(existing) > 50 {
+		existing = existing[:50]
+	}
+	lines := make([]string, 0, len(existing))
+	for _, n := range existing {
+		lines = append(lines, fmt.Sprintf("- %s | (%s) %s", n.ID, n.Category, n.Content))
+	}
+	return strings.Join(lines, "\n")
+}
+
 func (e *Extractor) filterNewNotes(ctx context.Context, items []extractedItem, existing []*store.MemoryNote) []extractedItem {
 	// Limit to last 50 notes to keep prompt bounded.
 	if len(existing) > 50 {
@@ -213,4 +242,39 @@ func (e *Extractor) filterNewNotes(ctx context.Context, items []extractedItem, e
 		}
 	}
 	return out
+}
+
+func (e *Extractor) updateNote(ctx context.Context, profileID, targetID string, items []extractedItem) (bool, error) {
+	if len(items) == 0 {
+		return false, nil
+	}
+	note, err := e.noteRepo.GetByID(ctx, targetID)
+	if err != nil {
+		return false, err
+	}
+	if note.ProfileID != profileID {
+		return false, nil
+	}
+	item := items[0]
+	if strings.TrimSpace(item.Content) == "" {
+		return false, nil
+	}
+
+	note.Content = item.Content
+	note.Importance = item.Importance
+	cat := store.MemoryCategory(item.Category)
+	switch cat {
+	case store.CategoryFact, store.CategoryProgress, store.CategoryBlocker, store.CategoryActionItem, store.CategoryOther:
+		note.Category = cat
+	default:
+		note.Category = store.CategoryOther
+	}
+
+	if err := e.noteRepo.Update(ctx, note); err != nil {
+		return false, err
+	}
+	if e.invalidator != nil {
+		_ = e.invalidator.InvalidateAll(ctx, profileID)
+	}
+	return true, nil
 }

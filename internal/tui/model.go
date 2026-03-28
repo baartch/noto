@@ -50,7 +50,7 @@ type ExtractorModelSelectedFunc func(modelID string) error
 // ---- public tea.Msg constructors --------------------------------------------
 
 // NotesSaved returns a tea.Msg that shows the notes saved badge.
-func NotesSaved(count int) tea.Msg { return notesSavedMsg{count: count} }
+func NotesSaved(saved, updated int) tea.Msg { return notesSavedMsg{saved: saved, updated: updated} }
 
 // NotesSaving returns a tea.Msg that shows the notes saving indicator.
 func NotesSaving() tea.Msg { return notesSavingMsg{} }
@@ -85,7 +85,7 @@ type providerReplyMsg       struct{ content string; err error }
 type modelsLoadedMsg        struct{ items []pickerItem; err error }
 type profilesLoadedMsg      struct{ items []pickerItem; err error }
 type backupsLoadedMsg       struct{ items []pickerItem; err error }
-type notesSavedMsg          struct{ count int }
+type notesSavedMsg          struct{ saved, updated int }
 type notesSavingMsg         struct{}
 type clearNotesIndicatorMsg struct{}
 type editorFinishedMsg      struct{ err error }
@@ -299,13 +299,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ---- notes badge --------------------------------------------------------
 	case notesSavedMsg:
-		if msg.count > 0 {
-			m.notesIndicator = fmt.Sprintf("📝 %d note(s) saved", msg.count)
+		saved := msg.saved
+		updated := msg.updated
+		switch {
+		case saved > 0 && updated > 0:
+			m.notesIndicator = fmt.Sprintf("📝 %d saved, %d updated", saved, updated)
+		case saved > 0:
+			m.notesIndicator = fmt.Sprintf("📝 %d note(s) saved", saved)
+		case updated > 0:
+			m.notesIndicator = fmt.Sprintf("📝 %d note(s) updated", updated)
+		default:
+			m.notesIndicator = ""
+		}
+		if saved+updated > 0 {
 			cmds = append(cmds, tea.Tick(3*time.Second, func(_ time.Time) tea.Msg {
 				return clearNotesIndicatorMsg{}
 			}))
-		} else {
-			m.notesIndicator = ""
 		}
 
 	case notesSavingMsg:

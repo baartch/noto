@@ -21,7 +21,7 @@ const (
 )
 
 // NotesCallback is called after extraction completes.
-type NotesCallback func(count int)
+type NotesCallback func(saved, updated int)
 
 // NotesSavingCallback is called when extraction starts.
 type NotesSavingCallback func()
@@ -216,9 +216,9 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 		return
 	}
 	if s.onNotes != nil {
-		s.onNotes(len(result.Notes))
+		s.onNotes(len(result.Notes), result.Updated)
 	}
-	s.markNotesDone(len(result.Notes))
+	s.markNotesDone(len(result.Notes) + result.Updated)
 }
 
 // SetModel updates the model used for subsequent provider calls.

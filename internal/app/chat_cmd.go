@@ -75,6 +75,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 	if err := commands.RegisterProviderCommands(registry); err != nil {
 		return err
 	}
+	if err := commands.RegisterMemoryCommands(registry); err != nil {
+		return err
+	}
 	if err := commands.RegisterBackupCommands(registry); err != nil {
 		return err
 	}
@@ -156,9 +159,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 				APIKey:       adapterCfg.APIKey,
 			}),
 			logger,
-			func(count int) {
+			func(saved, updated int) {
 				if prog != nil {
-					prog.Send(tui.NotesSaved(count))
+					prog.Send(tui.NotesSaved(saved, updated))
 				}
 			},
 			func() {
@@ -278,9 +281,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 						APIKey:       adapterCfg.APIKey,
 					}),
 					logger,
-					func(count int) {
+					func(saved, updated int) {
 						if prog != nil {
-							prog.Send(tui.NotesSaved(count))
+							prog.Send(tui.NotesSaved(saved, updated))
 						}
 					},
 					func() {
