@@ -23,5 +23,5 @@ noto provider set \
 Then start a chat session:
 
 ```bash
-noto chat
+noto
 ```

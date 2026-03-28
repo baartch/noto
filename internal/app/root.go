@@ -12,6 +12,12 @@ func RootCmd() *cobra.Command {
 		Long: `Noto is a local-first Go terminal chatbot that provides persistent,
 profile-isolated memory continuity backed by SQLite.`,
 		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if cmd.Flags().NArg() == 0 {
+				return runChat(cmd, nil)
+			}
+			return cmd.Help()
+		},
 	}
 
 	root.AddCommand(profileCmd())
