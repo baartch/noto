@@ -121,7 +121,8 @@ func renderAssistantBubble(content, modelName string, ts time.Time, termWidth in
 		BorderForeground(lipgloss.Color("63")).
 		PaddingLeft(1)
 
-	inner := strings.Join(lines, "\n")
+	// Indent wrapped lines to align with the first line.
+	inner := alignWrappedLines(lines, "  ")
 	boxed := borderStyle.Render(inner)
 
 	modelLabel := ""
@@ -201,4 +202,20 @@ func padLines(content, pad string) string {
 		lines[i] = pad + line
 	}
 	return strings.Join(lines, "\n")
+}
+
+func alignWrappedLines(lines []string, indent string) string {
+	var out []string
+	for i, line := range lines {
+		if i == 0 {
+			out = append(out, line)
+			continue
+		}
+		if strings.TrimSpace(line) == "" {
+			out = append(out, line)
+			continue
+		}
+		out = append(out, indent+line)
+	}
+	return strings.Join(out, "\n")
 }
