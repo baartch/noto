@@ -58,6 +58,8 @@ func runChat(_ *cobra.Command, _ []string) error {
 	// Single program holder shared by all async callbacks (notes, profile changes).
 	// Filled just before p.Run() so closures can reference it safely.
 	var prog *tea.Program
+	var sess *chatpkg.Session
+	var profileDB *store.DB
 
 	// Build command registry + slash dispatcher.
 	registry := commands.NewRegistry()
@@ -76,7 +78,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 	dispatcher := chatpkg.NewDispatcher(registry)
 
 	// Per-profile DB: conversations, messages, memory notes, provider config, etc.
-	profileDB, err := openProfileDB(activeProfile.Slug)
+	profileDB, err = openProfileDB(activeProfile.Slug)
 	if err != nil {
 		return fmt.Errorf("chat: open profile db: %w", err)
 	}
@@ -128,7 +130,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 		summaryRepo := store.NewSessionSummaryRepo(profileDB)
 		logger      := observe.NewNoopLogger()
 
-		sess, sessErr := chatpkg.NewSession(
+		sess, err = chatpkg.NewSession(
 			ctx,
 			activeProfile.ID,
 			activeProfile.Slug,
@@ -148,8 +150,8 @@ func runChat(_ *cobra.Command, _ []string) error {
 				}
 			},
 		)
-		if sessErr != nil {
-			return fmt.Errorf("chat: start session: %w", sessErr)
+		if err != nil {
+			return fmt.Errorf("chat: start session: %w", err)
 		}
 		defer sess.Close(context.Background())
 
@@ -183,11 +185,100 @@ func runChat(_ *cobra.Command, _ []string) error {
 	listProfilesFn := func(ctx context.Context) ([]*store.Profile, error) {
 		return profSvc.List(ctx)
 	}
-	// profileSelectedFn just does the DB work and returns the new name.
-	// The TUI updates its own state from the return value — no prog.Send().
-	profileSelectedFn := func(profileName string) error {
-		_, err := profSvc.Select(ctx, profileName)
-		return err
+	// profileSwitchCmd returns a tea.Cmd that switches profiles asynchronously.
+	profileSwitchCmd := func(profileName string) tea.Cmd {
+		return func() tea.Msg {
+			p, err := profSvc.Select(ctx, profileName)
+			if err != nil {
+				return tui.ProfileSwitchFailed(err)
+			}
+
+			if sess != nil {
+				sess.Close(context.Background())
+			}
+			if profileDB != nil {
+				profileDB.Close()
+			}
+
+			profileDB, err = openProfileDB(p.Slug)
+			if err != nil {
+				return tui.ProfileSwitchFailed(err)
+			}
+
+			providerCfg, decryptedKey := loadProviderConfig(ctx, profileDB, p.ID)
+			activeModel = ""
+			cacheStatus = "cache: n/a"
+			providerFn = nil
+			listModelsFn = nil
+			modelSelectedFn = func(modelID string) error { return nil }
+
+			if providerCfg != nil && decryptedKey != "" {
+				activeModel = providerCfg.EffectiveModel()
+				adapterCfg := provider.Config{
+					ProviderType: "openai_compatible",
+					Endpoint:     providerCfg.Endpoint,
+					APIKey:       decryptedKey,
+				}
+				systemPrompt := loadSystemPrompt(p.Slug)
+				convRepo := store.NewConversationRepo(profileDB)
+				msgRepo := store.NewMessageRepo(profileDB)
+				noteRepo := store.NewMemoryNoteRepo(profileDB)
+				summaryRepo := store.NewSessionSummaryRepo(profileDB)
+				logger := observe.NewNoopLogger()
+
+				sess, err = chatpkg.NewSession(
+					ctx,
+					p.ID,
+					p.Slug,
+					systemPrompt,
+					profileDB,
+					convRepo, msgRepo, noteRepo, summaryRepo,
+					provider.NewOpenAICompatible(provider.Config{
+						ProviderType: "openai_compatible",
+						Endpoint:     adapterCfg.Endpoint,
+						Model:        activeModel,
+						APIKey:       adapterCfg.APIKey,
+					}),
+					logger,
+					func(count int) {
+						if prog != nil {
+							prog.Send(tui.NotesSaved(count))
+						}
+					},
+				)
+				if err != nil {
+					return tui.ProfileSwitchFailed(fmt.Errorf("chat: start session: %w", err))
+				}
+
+				cacheStatus = sess.CacheStatus()
+				providerFn = func(callCtx context.Context, userMsg string) (string, error) {
+					sess.SetModel(activeModel)
+					result, err := sess.Send(callCtx, userMsg)
+					if err != nil {
+						return "", err
+					}
+					if prog != nil {
+						prog.Send(tui.StatsUpdated(sess.Stats().Format()))
+					}
+					return result.Reply, nil
+				}
+
+				listModelsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
+					return provider.ListModels(callCtx, adapterCfg)
+				}
+
+				cfgRepo := store.NewProviderConfigRepo(profileDB)
+				modelSelectedFn = func(modelID string) error {
+					if err := cfgRepo.SetModel(ctx, p.ID, modelID); err != nil {
+						return err
+					}
+					activeModel = modelID
+					return nil
+				}
+			}
+
+			return tui.ProfileSwitched(profileName, activeModel, cacheStatus, "tokens: n/a", providerFn, listModelsFn, modelSelectedFn)
+		}
 	}
 	listBackupsFn := func(ctx context.Context) ([]string, error) {
 		return backup.ListBackups(activeProfile.Slug)
@@ -201,7 +292,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 		cacheStatus, "tokens: n/a",
 		dispatcher, execCtx,
 		providerFn, listModelsFn, modelSelectedFn,
-		listProfilesFn, profileSelectedFn,
+		listProfilesFn, profileSwitchCmd,
 		listBackupsFn, backupSelectedFn,
 	)
 	prog = tea.NewProgram(m, tea.WithAltScreen())

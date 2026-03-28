@@ -35,8 +35,8 @@ type ModelSelectedFunc func(modelID string) error
 // ListProfilesFunc returns all profiles for the profile picker.
 type ListProfilesFunc func(ctx context.Context) ([]*store.Profile, error)
 
-// ProfileSelectedFunc is called when the user picks a profile in the picker.
-type ProfileSelectedFunc func(profileName string) error
+// ProfileSwitchCmd returns a command to switch profiles.
+type ProfileSwitchCmd func(profileName string) tea.Cmd
 
 // ListBackupsFunc returns backup timestamps for the active profile.
 type ListBackupsFunc func(ctx context.Context) ([]string, error)
@@ -52,6 +52,24 @@ func NotesSaved(count int) tea.Msg { return notesSavedMsg{count: count} }
 // StatsUpdated returns a tea.Msg that updates the token/cost status in the footer.
 func StatsUpdated(formatted string) tea.Msg { return statsUpdatedMsg{formatted: formatted} }
 
+// ProfileSwitched updates the TUI state after switching profiles.
+func ProfileSwitched(profileName, activeModel, cacheStatus, tokenStatus string, provider ProviderFunc, listModels ListModelsFunc, modelSelected ModelSelectedFunc) tea.Msg {
+	return profileSwitchedMsg{
+		profileName:   profileName,
+		activeModel:   activeModel,
+		cacheStatus:   cacheStatus,
+		tokenStatus:   tokenStatus,
+		provider:      provider,
+		listModels:    listModels,
+		modelSelected: modelSelected,
+	}
+}
+
+// ProfileSwitchFailed returns a message for failed profile switches.
+func ProfileSwitchFailed(err error) tea.Msg {
+	return profileSwitchFailedMsg{err: err}
+}
+
 
 // ---- async tea.Msg types (internal) ----------------------------------------
 
@@ -63,6 +81,16 @@ type notesSavedMsg          struct{ count int }
 type clearNotesIndicatorMsg struct{}
 type editorFinishedMsg      struct{ err error }
 type statsUpdatedMsg        struct{ formatted string }
+type profileSwitchedMsg     struct {
+	profileName   string
+	activeModel   string
+	cacheStatus   string
+	tokenStatus   string
+	provider      ProviderFunc
+	listModels    ListModelsFunc
+	modelSelected ModelSelectedFunc
+}
+type profileSwitchFailedMsg struct{ err error }
 type spinnerTickMsg         struct{}
 
 // ---- picker kind ------------------------------------------------------------
@@ -113,7 +141,7 @@ type Model struct {
 	listModels      ListModelsFunc
 	modelSelected   ModelSelectedFunc
 	listProfiles    ListProfilesFunc
-	profileSelected ProfileSelectedFunc
+	profileSwitch   ProfileSwitchCmd
 	listBackups     ListBackupsFunc
 	backupSelected  BackupSelectedFunc
 }
@@ -150,7 +178,7 @@ func New(
 	listModels ListModelsFunc,
 	modelSelected ModelSelectedFunc,
 	listProfiles ListProfilesFunc,
-	profileSelected ProfileSelectedFunc,
+	profileSwitch ProfileSwitchCmd,
 	listBackups ListBackupsFunc,
 	backupSelected BackupSelectedFunc,
 ) Model {
@@ -183,9 +211,9 @@ func New(
 		provider:        providerFn,
 		listModels:      listModels,
 		modelSelected:   modelSelected,
-		listProfiles:    listProfiles,
-		profileSelected: profileSelected,
-		listBackups:     listBackups,
+		listProfiles:  listProfiles,
+		profileSwitch: profileSwitch,
+		listBackups:   listBackups,
 		backupSelected:  backupSelected,
 	}
 }
@@ -275,6 +303,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// ---- stats update -------------------------------------------------------
 	case statsUpdatedMsg:
 		m.tokenStatus = msg.formatted
+
+	case profileSwitchedMsg:
+		m.profileName = msg.profileName
+		m.activeModel = msg.activeModel
+		m.cacheStatus = msg.cacheStatus
+		m.tokenStatus = msg.tokenStatus
+		m.provider = msg.provider
+		m.listModels = msg.listModels
+		m.modelSelected = msg.modelSelected
+		m.messages = []chatMessage{{role: "command", content: "Switched to profile: " + msg.profileName, timestamp: time.Now()}}
+		m.err = nil
+		m.clearSuggestions()
+		m.input.SetValue("")
+		m.syncViewport()
+
+	case profileSwitchFailedMsg:
+		m.err = msg.err
+		m.syncViewport()
 
 	case spinnerTickMsg:
 		if m.pending {
@@ -586,14 +632,8 @@ func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 				}
 			}
 		case pickerKindProfile:
-			if m.profileSelected != nil {
-				if err := m.profileSelected(chosen); err != nil {
-					m.err = err
-				} else {
-					m.profileName = chosen
-					m.messages = append(m.messages, chatMessage{role: "command", content: "Switched to profile: " + chosen, timestamp: time.Now()})
-					m.syncViewport()
-				}
+			if m.profileSwitch != nil {
+				cmds = append(cmds, m.profileSwitch(chosen))
 			}
 		case pickerKindBackup:
 			if m.backupSelected != nil {
