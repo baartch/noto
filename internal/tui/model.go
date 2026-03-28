@@ -556,6 +556,8 @@ func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 		chosen := m.picker.selectedValue()
 		kind := m.pickerKind
 		m.picker = nil
+		m.input.SetValue("")
+		m.clearSuggestions()
 		if chosen == "" {
 			return m, tea.Batch(cmds...)
 		}
