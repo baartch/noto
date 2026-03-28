@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -132,6 +133,11 @@ func New(
 	ti.CharLimit = 4096
 	ti.ShowLineNumbers = false
 	ti.SetHeight(3)
+	// Enter sends; Alt+Enter inserts newline.
+	ti.KeyMap.InsertNewline = key.NewBinding(
+		key.WithKeys("alt+enter"),
+		key.WithHelp("alt+enter", "insert newline"),
+	)
 
 	return Model{
 		profileName:     profileName,
@@ -278,7 +284,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport, vpCmd = m.viewport.Update(msg)
 			return m, vpCmd
 
-		case tea.KeyCtrlJ:
+		case tea.KeyEnter:
+			// Send on Enter (newline handled by textarea only via Alt+Enter)
 			val := strings.TrimSpace(m.input.Value())
 			if val == "" {
 				return m, nil
@@ -319,7 +326,7 @@ func (m Model) updateSuggNav(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd
 		m.input.SetValue("/" + m.suggestions[m.suggCursor].CommandPath)
 		m.input.CursorEnd()
 
-	case tea.KeyCtrlJ:
+	case tea.KeyEnter:
 		val := strings.TrimSpace(m.input.Value())
 		m.clearSuggestions()
 		m.err = nil
@@ -593,7 +600,7 @@ func (m Model) View() string {
 	// ---- input bar ----
 	inputDivider := dividerStyle.Render(strings.Repeat("─", m.width))
 	inputLine := "  " + m.input.View() + "\n" +
-		"  " + suggNormalStyle.Render("(Ctrl+J to send • Enter for new line)")
+		"  " + suggNormalStyle.Render("(Enter to send • Alt+Enter for new line)")
 
 	return title + "\n" +
 		divider + "\n" +
