@@ -3,13 +3,19 @@ package integration
 import (
 	"context"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"testing"
+	"time"
 
 	"noto/internal/commands"
 	"noto/internal/parser"
 	"noto/internal/profile"
 	"noto/internal/store"
 	"noto/internal/suggest"
+	"noto/internal/vector"
+	vecfile "noto/internal/vector/file"
+	"noto/internal/vector/hnsw"
 )
 
 // BenchmarkStartup measures profile list retrieval (startup critical path).
@@ -83,4 +89,68 @@ func BenchmarkContextCache_GetMiss(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = cacheRepo.Get(ctx, "nonexistent-profile", "nonexistent-key")
 	}
+}
+
+func BenchmarkVectorLookup_P95(b *testing.B) {
+	index := vector.NewFileIndex("", vecfile.NewNoopCodec(), hnsw.NewNoopGraph())
+	entryCount := 5000
+	dim := 8
+
+	entries := make([]vector.Entry, 0, entryCount)
+	for i := 0; i < entryCount; i++ {
+		vec := make([]float32, dim)
+		for j := 0; j < dim; j++ {
+			vec[j] = float32(i+j) / 1000
+		}
+		entries = append(entries, vector.Entry{
+			ID:             "ve-" + strconv.Itoa(i),
+			ProfileID:      "bench",
+			SourceType:     vector.SourceMemoryNote,
+			SourceID:       "note-" + strconv.Itoa(i),
+			ChunkHash:      "hash",
+			EmbeddingModel: "bench",
+			EmbeddingDim:   dim,
+			Vector:         vec,
+		})
+	}
+
+	if err := index.Rebuild(entries); err != nil {
+		b.Fatalf("rebuild: %v", err)
+	}
+
+	query := make([]float32, dim)
+	for j := 0; j < dim; j++ {
+		query[j] = 0.1
+	}
+
+	b.ResetTimer()
+	var samples []time.Duration
+	for i := 0; i < b.N; i++ {
+		start := time.Now()
+		_, _ = index.Search(query, 10)
+		samples = append(samples, time.Since(start))
+	}
+
+	if len(samples) == 0 {
+		return
+	}
+	p95 := percentile(samples, 0.95)
+	if p95 > 40*time.Millisecond {
+		b.Fatalf("p95 vector lookup too slow: %s", p95)
+	}
+}
+
+func percentile(samples []time.Duration, p float64) time.Duration {
+	if len(samples) == 0 {
+		return 0
+	}
+	idx := int(float64(len(samples)-1) * p)
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(samples) {
+		idx = len(samples) - 1
+	}
+	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+	return samples[idx]
 }

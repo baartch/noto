@@ -4,13 +4,14 @@ import (
 	"context"
 	"testing"
 
+	"noto/internal/provider"
 	"noto/internal/vector"
 )
 
 func TestVectorSync_UpsertAndFlush(t *testing.T) {
-	index := vector.NoopIndex{}
+	index := &stubIndexSync{}
 	profileID := "test-profile"
-	syncer := vector.NewSyncer(index, profileID)
+	syncer := vector.NewSyncer(index, profileID, &stubEmbedder{}, "test-embed")
 
 	ctx := context.Background()
 	notes := []vector.MemoryNoteRecord{
@@ -34,7 +35,7 @@ func TestVectorRetrieval_FallsBackToNoteList(t *testing.T) {
 
 	// Use a noteLister stub.
 	lister := &stubNoteLister{notes: notes}
-	index := vector.NoopIndex{}
+	index := &stubIndexSync{}
 	retrieval := vector.NewHybridRetrieval(index, lister, "profile-1")
 
 	results, err := retrieval.Retrieve(ctx, []float32{0.1, 0.2}, 2)
@@ -67,4 +68,19 @@ type stubNoteLister struct {
 
 func (s *stubNoteLister) ListByProfile(_ context.Context, _ string) ([]vector.MemoryNoteRecord, error) {
 	return s.notes, nil
+}
+
+type stubIndexSync struct{}
+
+func (s *stubIndexSync) Upsert(_ vector.Entry) error { return nil }
+func (s *stubIndexSync) Delete(_ vector.SourceType, _ string) error { return nil }
+func (s *stubIndexSync) Search(_ []float32, _ int) ([]vector.SearchResult, error) { return nil, nil }
+func (s *stubIndexSync) Rebuild(_ []vector.Entry) error { return nil }
+func (s *stubIndexSync) Flush() error { return nil }
+func (s *stubIndexSync) Close() error { return nil }
+
+type stubEmbedder struct{}
+
+func (s *stubEmbedder) Embed(_ context.Context, _ provider.EmbeddingRequest) (*provider.EmbeddingResponse, error) {
+	return &provider.EmbeddingResponse{Embedding: []float32{0.1, 0.2}, Model: "stub"}, nil
 }

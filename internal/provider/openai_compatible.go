@@ -31,6 +31,73 @@ func NewOpenAICompatible(cfg Config) *OpenAICompatible {
 // ProviderType returns the canonical provider type identifier.
 func (a *OpenAICompatible) ProviderType() string { return "openai_compatible" }
 
+// Embed performs an OpenAI-compatible embeddings request.
+func (a *OpenAICompatible) Embed(ctx context.Context, req EmbeddingRequest) (*EmbeddingResponse, error) {
+	endpoint := a.cfg.Endpoint
+	if endpoint == "" {
+		endpoint = "https://api.openai.com/v1/embeddings"
+	}
+
+	model := req.Model
+	if model == "" {
+		model = a.cfg.Model
+	}
+
+	payload := openAIEmbeddingRequest{
+		Model: model,
+		Input: req.Input,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("provider: marshal embedding request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("provider: create embedding request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if a.cfg.APIKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+a.cfg.APIKey)
+	}
+
+	resp, err := a.client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrProviderUnavailable, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, ErrInvalidCredentials
+	}
+	if resp.StatusCode != http.StatusOK {
+		data, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("provider: unexpected status %d: %s", resp.StatusCode, string(data))
+	}
+
+	var apiResp openAIEmbeddingResponse
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		return nil, fmt.Errorf("provider: decode embedding response: %w", err)
+	}
+	if len(apiResp.Data) == 0 {
+		return nil, fmt.Errorf("provider: no embedding data in response")
+	}
+
+	vector := make([]float32, len(apiResp.Data[0].Embedding))
+	for i, v := range apiResp.Data[0].Embedding {
+		vector[i] = float32(v)
+	}
+	modelName := apiResp.Model
+	if modelName == "" {
+		modelName = model
+	}
+
+	return &EmbeddingResponse{
+		Embedding: vector,
+		Model:     modelName,
+	}, nil
+}
+
 // SetModel updates the default model used when the request has no model set.
 func (a *OpenAICompatible) SetModel(model string) { a.cfg.Model = model }
 
@@ -144,4 +211,16 @@ type openAIResponse struct {
 		CompletionTokens int `json:"completion_tokens"`
 		TotalTokens      int `json:"total_tokens"`
 	} `json:"usage"`
+}
+
+type openAIEmbeddingRequest struct {
+	Model string `json:"model"`
+	Input string `json:"input"`
+}
+
+type openAIEmbeddingResponse struct {
+	Model string `json:"model"`
+	Data  []struct {
+		Embedding []float64 `json:"embedding"`
+	} `json:"data"`
 }

@@ -121,6 +121,48 @@ func TestProfileIsolation_DeleteCascades(t *testing.T) {
 	_ = p2Notes // p2 has no notes — just verify no error
 }
 
+// TestProfileIsolation_VectorManifestEntries verifies manifest entries stay profile-scoped.
+func TestProfileIsolation_VectorManifestEntries(t *testing.T) {
+	db, close := tempDB(t)
+	defer close()
+	ctx := context.Background()
+
+	svc := profile.NewService(store.NewProfileRepo(db))
+	manifestRepo := store.NewVectorManifestRepo(db)
+
+	p1, _ := svc.Create(ctx, "Vector Profile 1")
+	p2, _ := svc.Create(ctx, "Vector Profile 2")
+
+	entry := &store.VectorEntry{
+		ID:             "ve-1",
+		ProfileID:      p1.ID,
+		SourceType:     "memory_note",
+		SourceID:       "note-1",
+		ChunkHash:      "hash",
+		EmbeddingModel: "model",
+		EmbeddingDim:   2,
+		VectorRef:      "0",
+	}
+	if err := manifestRepo.UpsertEntry(ctx, entry); err != nil {
+		t.Fatalf("upsert entry: %v", err)
+	}
+
+	entriesP1, err := manifestRepo.ListEntries(ctx, p1.ID)
+	if err != nil {
+		t.Fatalf("list entries p1: %v", err)
+	}
+	if len(entriesP1) != 1 {
+		t.Fatalf("expected 1 entry for p1, got %d", len(entriesP1))
+	}
+	entriesP2, err := manifestRepo.ListEntries(ctx, p2.ID)
+	if err != nil {
+		t.Fatalf("list entries p2: %v", err)
+	}
+	if len(entriesP2) != 0 {
+		t.Fatalf("expected 0 entries for p2, got %d", len(entriesP2))
+	}
+}
+
 // TestDestructiveConfirmation_RequiredText verifies ConfirmDeletion only accepts "yes".
 func TestDestructiveConfirmation_RequiredText(t *testing.T) {
 	cases := []struct {

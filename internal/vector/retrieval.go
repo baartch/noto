@@ -2,7 +2,9 @@ package vector
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math"
 )
 
 // NoteGetter fetches a single memory note by its ID.
@@ -26,6 +28,17 @@ type HybridRetrieval struct {
 	index     Index
 	notes     NoteLister
 	profileID string
+	warnFn    func(error)
+}
+
+// RetrievalOption configures the retrieval behavior.
+type RetrievalOption func(*HybridRetrieval)
+
+// WithWarnFunc registers a warning hook (used for missing/corrupt index).
+func WithWarnFunc(fn func(error)) RetrievalOption {
+	return func(r *HybridRetrieval) {
+		r.warnFn = fn
+	}
 }
 
 // NewHybridRetrieval creates a HybridRetrieval.
@@ -33,19 +46,31 @@ func NewHybridRetrieval(
 	index Index,
 	notes NoteLister,
 	profileID string,
+	opts ...RetrievalOption,
 ) *HybridRetrieval {
-	return &HybridRetrieval{
+	r := &HybridRetrieval{
 		index:     index,
 		notes:     notes,
 		profileID: profileID,
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 // Retrieve performs a semantic search and hydrates results from the note lister.
 // Falls back to top-N notes if the vector layer is unavailable.
 func (r *HybridRetrieval) Retrieve(ctx context.Context, queryVector []float32, k int) ([]*HybridResult, error) {
+	queryVector = normalize(queryVector)
 	results, err := r.index.Search(queryVector, k)
-	if err != nil || len(results) == 0 {
+	if err != nil {
+		if r.warnFn != nil && (errors.Is(err, ErrIndexNotFound) || errors.Is(err, ErrIndexCorrupted)) {
+			r.warnFn(err)
+		}
+		return r.fallback(ctx, k)
+	}
+	if len(results) == 0 {
 		return r.fallback(ctx, k)
 	}
 
@@ -70,6 +95,25 @@ func (r *HybridRetrieval) Retrieve(ctx context.Context, queryVector []float32, k
 		return r.fallback(ctx, k)
 	}
 	return hydrated, nil
+}
+
+func normalize(vec []float32) []float32 {
+	if len(vec) == 0 {
+		return vec
+	}
+	var sum float64
+	for _, v := range vec {
+		sum += float64(v * v)
+	}
+	if sum == 0 {
+		return vec
+	}
+	inv := float32(1 / math.Sqrt(sum))
+	out := make([]float32, len(vec))
+	for i, v := range vec {
+		out[i] = v * inv
+	}
+	return out
 }
 
 func (r *HybridRetrieval) fallback(ctx context.Context, k int) ([]*HybridResult, error) {

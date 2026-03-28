@@ -39,10 +39,25 @@ type CompletionResponse struct {
 	ContextMax int
 }
 
+// EmbeddingRequest is the normalized request payload sent to a provider for embeddings.
+type EmbeddingRequest struct {
+	Input string
+	Model string
+}
+
+// EmbeddingResponse is the normalized response from a provider for embeddings.
+type EmbeddingResponse struct {
+	Embedding []float32
+	Model     string
+}
+
 // Adapter is the interface all provider implementations must satisfy.
 type Adapter interface {
 	// Complete sends a chat completion request and returns the response.
 	Complete(ctx context.Context, req CompletionRequest) (*CompletionResponse, error)
+
+	// Embed sends an embedding request and returns the embedding response.
+	Embed(ctx context.Context, req EmbeddingRequest) (*EmbeddingResponse, error)
 
 	// ProviderType returns the canonical provider type string (e.g. "openai_compatible").
 	ProviderType() string

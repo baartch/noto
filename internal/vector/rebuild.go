@@ -44,7 +44,7 @@ func (rb *Rebuilder) Rebuild(ctx context.Context, notes []MemoryNoteRecord) erro
 			SourceType:     SourceMemoryNote,
 			SourceID:       note.ID,
 			ChunkHash:      ContentHash(note.Content),
-			EmbeddingModel: "noop",
+			EmbeddingModel: "",
 		})
 	}
 

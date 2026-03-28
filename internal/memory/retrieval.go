@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	"noto/internal/store"
+	"noto/internal/vector"
 )
 
 // RetrievalContext is the assembled context payload for a chat turn.
@@ -37,19 +39,45 @@ type CacheRepository interface {
 }
 
 type Retrieval struct {
-	noteRepo    *store.MemoryNoteRepo
-	summaryRepo *store.SessionSummaryRepo
-	cacheRepo   CacheRepository
+	noteRepo        *store.MemoryNoteRepo
+	summaryRepo     *store.SessionSummaryRepo
+	cacheRepo       CacheRepository
+	vectorIndexPath string
+	warnFn          func(error)
+}
+
+// RetrievalOption configures Retrieval behavior.
+type RetrievalOption func(*Retrieval)
+
+// WithVectorIndexPath sets the vector index path for warning checks.
+func WithVectorIndexPath(path string) RetrievalOption {
+	return func(r *Retrieval) {
+		r.vectorIndexPath = path
+	}
+}
+
+// WithWarnFunc registers a warning hook for vector index issues.
+func WithWarnFunc(fn func(error)) RetrievalOption {
+	return func(r *Retrieval) {
+		r.warnFn = fn
+	}
 }
 
 // NewRetrieval creates a Retrieval service.
-func NewRetrieval(noteRepo *store.MemoryNoteRepo, summaryRepo *store.SessionSummaryRepo, cacheRepo CacheRepository) *Retrieval {
-	return &Retrieval{noteRepo: noteRepo, summaryRepo: summaryRepo, cacheRepo: cacheRepo}
+func NewRetrieval(noteRepo *store.MemoryNoteRepo, summaryRepo *store.SessionSummaryRepo, cacheRepo CacheRepository, opts ...RetrievalOption) *Retrieval {
+	r := &Retrieval{noteRepo: noteRepo, summaryRepo: summaryRepo, cacheRepo: cacheRepo}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 // Assemble builds the RetrievalContext for a profile, reading from SQLite.
 // It reuses cached context if available and valid.
 func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string) (*RetrievalContext, error) {
+	if err := r.checkVectorIndex(); err != nil && r.warnFn != nil {
+		r.warnFn(err)
+	}
 	summaryText := ""
 	summaryID := "none"
 	if r.summaryRepo != nil {
@@ -133,5 +161,22 @@ func buildAssembledPrompt(systemPrompt, sessionSummary, memoryBlock string) stri
 func cacheKeyFor(profileID, systemPrompt, summaryID string) string {
 	hash := sha256.Sum256([]byte(profileID + "::" + systemPrompt + "::" + summaryID))
 	return fmt.Sprintf("ctx:%x", hash)
+}
+
+func (r *Retrieval) checkVectorIndex() error {
+	if r.vectorIndexPath == "" {
+		return nil
+	}
+	info, err := os.Stat(r.vectorIndexPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return vector.ErrIndexNotFound
+		}
+		return vector.ErrIndexCorrupted
+	}
+	if info.Size() == 0 {
+		return vector.ErrIndexCorrupted
+	}
+	return nil
 }
 

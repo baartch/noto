@@ -9,6 +9,7 @@ import (
 
 	"noto/internal/backup"
 	"noto/internal/memory"
+	"noto/internal/config"
 	"noto/internal/observe"
 	"noto/internal/provider"
 	"noto/internal/store"
@@ -79,7 +80,16 @@ func NewSession(
 ) (*Session, error) {
 	// Build system prompt with injected memory notes + session summary.
 	cacheRepo := store.NewContextCacheRepo(db)
-	ret := memory.NewRetrieval(noteRepo, summaryRepo, cacheRepo)
+	vecPath, _ := config.ProfileVectorPath(profileSlug)
+	ret := memory.NewRetrieval(
+		noteRepo,
+		summaryRepo,
+		cacheRepo,
+		memory.WithVectorIndexPath(vecPath),
+		memory.WithWarnFunc(func(err error) {
+			logger.Infof("vector index issue: %v", err)
+		}),
+	)
 	rc, err := ret.Assemble(ctx, profileID, baseSystemPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("session: assemble context: %w", err)

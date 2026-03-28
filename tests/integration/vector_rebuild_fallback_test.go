@@ -12,6 +12,19 @@ type stubManifestStatusSetter struct {
 	lastStatus string
 }
 
+type stubIndex struct{
+	err error
+}
+
+func (s *stubIndex) Upsert(_ vector.Entry) error { return nil }
+func (s *stubIndex) Delete(_ vector.SourceType, _ string) error { return nil }
+func (s *stubIndex) Search(_ []float32, _ int) ([]vector.SearchResult, error) {
+	return nil, s.err
+}
+func (s *stubIndex) Rebuild(_ []vector.Entry) error { return nil }
+func (s *stubIndex) Flush() error { return nil }
+func (s *stubIndex) Close() error { return nil }
+
 func (s *stubManifestStatusSetter) SetManifestStatusStr(_ context.Context, _ string, status string) error {
 	s.lastStatus = status
 	return nil
@@ -20,7 +33,7 @@ func (s *stubManifestStatusSetter) SetManifestStatusStr(_ context.Context, _ str
 func TestVectorRebuild_SetsStatusReady(t *testing.T) {
 	ctx := context.Background()
 	setter := &stubManifestStatusSetter{}
-	index := vector.NoopIndex{}
+	index := &stubIndex{}
 	profileID := "rebuild-profile"
 
 	rebuilder := vector.NewRebuilder(setter, index, profileID)
@@ -40,7 +53,7 @@ func TestVectorRebuild_SetsStatusReady(t *testing.T) {
 func TestVectorRebuild_EmptyNotes_StillSucceeds(t *testing.T) {
 	ctx := context.Background()
 	setter := &stubManifestStatusSetter{}
-	index := vector.NoopIndex{}
+	index := &stubIndex{}
 
 	rebuilder := vector.NewRebuilder(setter, index, "profile-empty")
 	if err := rebuilder.Rebuild(ctx, nil); err != nil {
@@ -58,7 +71,7 @@ func TestVectorFallback_NoIndex_ReturnsNotesFromList(t *testing.T) {
 		{ID: "b", Content: "B"},
 	}
 	lister := &stubNoteLister{notes: notes}
-	index := vector.NoopIndex{}
+	index := &stubIndex{}
 	retrieval := vector.NewHybridRetrieval(index, lister, "fallback-profile")
 
 	results, err := retrieval.Retrieve(ctx, nil, 10)
@@ -67,6 +80,27 @@ func TestVectorFallback_NoIndex_ReturnsNotesFromList(t *testing.T) {
 	}
 	if len(results) != 2 {
 		t.Errorf("expected 2 fallback results, got %d", len(results))
+	}
+}
+
+func TestVectorFallback_MissingIndex_Warns(t *testing.T) {
+	ctx := context.Background()
+	notes := []vector.MemoryNoteRecord{{ID: "a", Content: "A"}}
+	lister := &stubNoteLister{notes: notes}
+	index := &stubIndex{err: vector.ErrIndexNotFound}
+	warned := false
+	retrieval := vector.NewHybridRetrieval(index, lister, "warn-profile", vector.WithWarnFunc(func(err error) {
+		if err == vector.ErrIndexNotFound || err == vector.ErrIndexCorrupted {
+			warned = true
+		}
+	}))
+
+	_, err := retrieval.Retrieve(ctx, []float32{0.1, 0.2}, 1)
+	if err != nil {
+		t.Fatalf("Retrieve: %v", err)
+	}
+	if !warned {
+		t.Fatalf("expected warning on missing index")
 	}
 }
 
