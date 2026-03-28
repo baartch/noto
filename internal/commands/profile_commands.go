@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"text/tabwriter"
 
 	"noto/internal/store"
 )
@@ -29,6 +30,13 @@ func RegisterProfileCommands(r *Registry, svc ProfileService) error {
 			Description: "Create a new profile with the given name",
 			Scope:       ScopeGlobal,
 			Handler:     profileCreateHandler(svc),
+		},
+		{
+			Path:        "profile list",
+			Usage:       "profile list",
+			Description: "List all profiles",
+			Scope:       ScopeGlobal,
+			Handler:     profileListHandler(svc),
 		},
 		{
 			Path:        "profile select",
@@ -86,6 +94,25 @@ func (e *ErrOpenProfilePicker) Error() string { return "open-profile-picker" }
 func AsErrOpenProfilePicker(err error) bool {
 	var e *ErrOpenProfilePicker
 	return errors.As(err, &e)
+}
+
+func profileListHandler(svc ProfileService) HandlerFunc {
+	return func(ctx *ExecContext, _ []string) error {
+		profiles, err := svc.List(context.Background())
+		if err != nil {
+			return err
+		}
+		w := tabwriter.NewWriter(ctx.Output, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "NAME\tSLUG\tACTIVE")
+		for _, p := range profiles {
+			active := ""
+			if p.IsDefault {
+				active = "●"
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\n", p.Name, p.Slug, active)
+		}
+		return w.Flush()
+	}
 }
 
 func profileSelectHandler(svc ProfileService) HandlerFunc {
