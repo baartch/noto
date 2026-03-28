@@ -56,10 +56,23 @@ func TestRecovery_MissingDB_RestoresFromBackup(t *testing.T) {
 }
 
 func TestRecovery_HealthyDB_NoAction(t *testing.T) {
-	result := backup.Recover("nonexistent-slug-xyz", os.Stdout)
-	// No backups exist for this slug, so it should report "failed" (backup restore failed)
-	// or "none" if db exists. Since it doesn't exist, it will try restore and fail.
-	if result.Action == "" {
-		t.Error("expected a non-empty action")
+	dir := t.TempDir()
+	t.Setenv("NOTO_APP_DIR", dir)
+
+	// Create a minimal DB to validate.
+	slug := "healthy-profile"
+	dbPath := filepath.Join(dir, "profiles", slug, "memory.db")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.OpenForTesting(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	result := backup.Recover(slug, os.Stdout)
+	if result.Action != "none" {
+		t.Errorf("expected action=none, got %s", result.Action)
 	}
 }
