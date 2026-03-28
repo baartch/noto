@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -67,7 +67,7 @@ const (
 type Model struct {
 	profileName string
 	activeModel string
-	input       textinput.Model
+	input       textarea.Model
 	viewport    viewport.Model
 	messages    []chatMessage
 	width       int
@@ -126,10 +126,12 @@ func New(
 	listProfiles ListProfilesFunc,
 	profileSelected ProfileSelectedFunc,
 ) Model {
-	ti := textinput.New()
+	ti := textarea.New()
 	ti.Placeholder = "Type a message or /command…"
 	ti.Focus()
 	ti.CharLimit = 4096
+	ti.ShowLineNumbers = false
+	ti.SetHeight(3)
 
 	return Model{
 		profileName:     profileName,
@@ -147,7 +149,7 @@ func New(
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return textinput.Blink }
+func (m Model) Init() tea.Cmd { return textarea.Blink }
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -158,9 +160,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.input.Width = msg.Width - 4
+		m.input.SetWidth(msg.Width - 4)
 		// header(1) + divider(1) + inputDivider(1) + inputLine(1) + padding(1) = 5
-		vpH := msg.Height - 5
+		vpH := msg.Height - 7 // header+divider+inputDivider+input+hint
 		if vpH < 1 {
 			vpH = 1
 		}
@@ -276,7 +278,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport, vpCmd = m.viewport.Update(msg)
 			return m, vpCmd
 
-		case tea.KeyEnter:
+		case tea.KeyCtrlJ:
 			val := strings.TrimSpace(m.input.Value())
 			if val == "" {
 				return m, nil
@@ -317,7 +319,7 @@ func (m Model) updateSuggNav(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd
 		m.input.SetValue("/" + m.suggestions[m.suggCursor].CommandPath)
 		m.input.CursorEnd()
 
-	case tea.KeyEnter:
+	case tea.KeyCtrlJ:
 		val := strings.TrimSpace(m.input.Value())
 		m.clearSuggestions()
 		m.err = nil
@@ -590,7 +592,8 @@ func (m Model) View() string {
 
 	// ---- input bar ----
 	inputDivider := dividerStyle.Render(strings.Repeat("─", m.width))
-	inputLine := "  " + m.input.View()
+	inputLine := "  " + m.input.View() + "\n" +
+		"  " + suggNormalStyle.Render("(Ctrl+J to send • Enter for new line)")
 
 	return title + "\n" +
 		divider + "\n" +
