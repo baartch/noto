@@ -23,6 +23,11 @@ type extractedItem struct {
 	Importance int    `json:"importance"` // 1-10
 }
 
+type dedupeResult struct {
+	IsNew  bool   `json:"is_new"`
+	Reason string `json:"reason"`
+}
+
 const extractionPrompt = `Extract memory-worthy facts from this conversation exchange.
 Reply ONLY with a JSON array (no markdown, no explanation). Language: match the conversation language.
 
@@ -38,6 +43,17 @@ Exchange:
 User: %s
 Assistant: %s`
 
+const dedupePrompt = `You are a memory deduplication assistant. Given a candidate note and a list of existing notes, decide if the candidate is NEW.
+Reply ONLY with JSON: {"is_new": true|false, "reason": "short reason"}
+
+Consider paraphrases as duplicates (same meaning, different wording). Only mark true if the candidate adds new information.
+
+Existing notes:
+%s
+
+Candidate note:
+%s`
+
 // Extractor extracts memory notes using the LLM and persists them to SQLite.
 type Extractor struct {
 	noteRepo *store.MemoryNoteRepo
@@ -51,19 +67,29 @@ func NewExtractor(noteRepo *store.MemoryNoteRepo, adapter provider.Adapter) *Ext
 
 // ExtractTurn analyses a single user→assistant exchange and persists any notes.
 func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID, userMsg, assistantMsg string) (*ExtractionResult, error) {
-	var items []extractedItem
-
-	if e.adapter != nil {
-		items = e.llmExtract(ctx, userMsg, assistantMsg)
+	if e.adapter == nil {
+		return &ExtractionResult{}, nil
 	}
 
-	// Nothing from LLM (or no adapter) — nothing to save.
+	items := e.llmExtract(ctx, userMsg, assistantMsg)
 	if len(items) == 0 {
 		return &ExtractionResult{}, nil
 	}
 
+	// Semantic de-duplication: filter out notes that are already known.
+	filtered := items
+	if len(items) > 0 {
+		existing, err := e.noteRepo.ListByProfile(ctx, profileID)
+		if err == nil {
+			filtered = e.filterNewNotes(ctx, items, existing)
+		}
+	}
+	if len(filtered) == 0 {
+		return &ExtractionResult{}, nil
+	}
+
 	var notes []*store.MemoryNote
-	for _, item := range items {
+	for _, item := range filtered {
 		if strings.TrimSpace(item.Content) == "" {
 			continue
 		}
@@ -100,16 +126,13 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID, 
 func (e *Extractor) llmExtract(ctx context.Context, userMsg, assistantMsg string) []extractedItem {
 	prompt := fmt.Sprintf(extractionPrompt, userMsg, assistantMsg)
 	resp, err := e.adapter.Complete(ctx, provider.CompletionRequest{
-		Messages: []provider.Message{
-			{Role: "user", Content: prompt},
-		},
-		Temperature: 0.2, // low temperature for consistent structured output
+		Messages: []provider.Message{{Role: "user", Content: prompt}},
+		Temperature: 0.2,
 	})
 	if err != nil {
 		return nil
 	}
 
-	// Strip markdown code fences if the model wrapped the JSON.
 	raw := strings.TrimSpace(resp.Content)
 	raw = strings.TrimPrefix(raw, "```json")
 	raw = strings.TrimPrefix(raw, "```")
@@ -121,4 +144,53 @@ func (e *Extractor) llmExtract(ctx context.Context, userMsg, assistantMsg string
 		return nil
 	}
 	return items
+}
+
+// filterNewNotes uses an LLM-based semantic check to remove duplicates.
+func (e *Extractor) filterNewNotes(ctx context.Context, items []extractedItem, existing []*store.MemoryNote) []extractedItem {
+	// Limit to last 50 notes to keep prompt bounded.
+	if len(existing) > 50 {
+		existing = existing[len(existing)-50:]
+	}
+
+	var existingLines []string
+	for _, n := range existing {
+		existingLines = append(existingLines, fmt.Sprintf("- (%s) %s", n.Category, n.Content))
+	}
+	existingBlock := strings.Join(existingLines, "\n")
+	if existingBlock == "" {
+		return items
+	}
+
+	var out []extractedItem
+	for _, item := range items {
+		if strings.TrimSpace(item.Content) == "" {
+			continue
+		}
+		prompt := fmt.Sprintf(dedupePrompt, existingBlock, item.Content)
+		resp, err := e.adapter.Complete(ctx, provider.CompletionRequest{
+			Messages: []provider.Message{{Role: "user", Content: prompt}},
+			Temperature: 0.0,
+		})
+		if err != nil {
+			// If dedupe fails, keep the note (fail-open) so we don't lose data.
+			out = append(out, item)
+			continue
+		}
+		raw := strings.TrimSpace(resp.Content)
+		raw = strings.TrimPrefix(raw, "```json")
+		raw = strings.TrimPrefix(raw, "```")
+		raw = strings.TrimSuffix(raw, "```")
+		raw = strings.TrimSpace(raw)
+
+		var result dedupeResult
+		if err := json.Unmarshal([]byte(raw), &result); err != nil {
+			out = append(out, item)
+			continue
+		}
+		if result.IsNew {
+			out = append(out, item)
+		}
+	}
+	return out
 }
