@@ -506,7 +506,7 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 				}
 				items := make([]pickerItem, len(backups))
 				for i, ts := range backups {
-					items[i] = pickerItem{Value: ts}
+					items[i] = pickerItem{Value: ts, Label: formatBackupTimestamp(ts)}
 				}
 				return backupsLoadedMsg{items: items}
 			})
@@ -736,6 +736,13 @@ func footerLine(width int, left, right string) string {
 	return left + strings.Repeat(" ", gap) + right
 }
 
+func formatBackupTimestamp(ts string) string {
+	parsed, err := time.Parse("20060102T150405Z", ts)
+	if err != nil {
+		return ts
+	}
+	return parsed.UTC().Format("2006-01-02 15:04:05 UTC")
+}
 
 // renderSuggestions draws the suggestion list with cursor highlighted.
 func (m *Model) renderSuggestions() string {
