@@ -192,6 +192,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 			if err != nil {
 				return tui.ProfileSwitchFailed(err)
 			}
+			activeProfile = p
+			execCtx.ProfileID = p.ID
+			execCtx.ProfileSlug = p.Slug
 
 			if sess != nil {
 				sess.Close(context.Background())
