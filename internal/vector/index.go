@@ -341,6 +341,17 @@ func (f *FileIndex) linearSearch(query []float32, k int) []SearchResult {
 	return scores
 }
 
+// SeedEntries loads manifest entries into the index lookup maps.
+func (f *FileIndex) SeedEntries(entries []Entry) {
+	for _, entry := range entries {
+		key := entryKey(entry.SourceType, entry.SourceID)
+		f.entries[key] = entry
+		if entry.VectorRef != "" {
+			f.refToKey[entry.VectorRef] = key
+		}
+	}
+}
+
 func (f *FileIndex) entryKeyByID(id string) string {
 	for key, entry := range f.entries {
 		if entry.ID == id {

@@ -107,9 +107,9 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 		return nil, fmt.Errorf("memory: list notes: %w", err)
 	}
 
-	memoryBlock := buildMemoryBlock(notes)
+	memoryBlock := BuildMemoryBlock(notes)
 
-	assembled := buildAssembledPrompt(systemPrompt, summaryText, memoryBlock)
+	assembled := AssemblePrompt(systemPrompt, summaryText, memoryBlock)
 
 	ctxOut := &RetrievalContext{
 		SystemPrompt:    systemPrompt,
@@ -135,7 +135,8 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 	return ctxOut, nil
 }
 
-func buildMemoryBlock(notes []*store.MemoryNote) string {
+// BuildMemoryBlock formats notes into the memory block for prompts.
+func BuildMemoryBlock(notes []*store.MemoryNote) string {
 	if len(notes) == 0 {
 		return ""
 	}
@@ -147,7 +148,8 @@ func buildMemoryBlock(notes []*store.MemoryNote) string {
 	return sb.String()
 }
 
-func buildAssembledPrompt(systemPrompt, sessionSummary, memoryBlock string) string {
+// AssemblePrompt merges system prompt, summary, and memory block into the final prompt.
+func AssemblePrompt(systemPrompt, sessionSummary, memoryBlock string) string {
 	parts := []string{systemPrompt}
 	if sessionSummary != "" {
 		parts = append(parts, "\n## Previous Session Summary\n"+sessionSummary)

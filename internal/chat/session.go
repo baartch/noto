@@ -2,23 +2,29 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"noto/internal/backup"
-	"noto/internal/memory"
 	"noto/internal/config"
+	"noto/internal/memory"
 	"noto/internal/observe"
 	"noto/internal/provider"
 	"noto/internal/store"
+	"noto/internal/vector"
+	vecfile "noto/internal/vector/file"
+	"noto/internal/vector/hnsw"
 )
 
 const (
 	// recentHistoryMessages is the number of messages from the most recent
 	// previous conversation to prepend to context on session start.
 	recentHistoryMessages = 20
+	// vectorTopK is the number of vector results to fetch for context.
+	vectorTopK = 6
 )
 
 // NotesCallback is called after extraction completes.
@@ -44,6 +50,11 @@ type Session struct {
 	extractor        *memory.Extractor
 	extractorAdapter provider.Adapter
 	logger      observe.Logger
+	baseSystemPrompt string
+	sessionSummary   string
+	db               *store.DB
+	vectorIndexPath  string
+	vectorIndex      vector.Index
 
 	backupStop  chan struct{}
 	pendingNotes int
@@ -114,25 +125,30 @@ func NewSession(
 	}
 
 	s := &Session{
-		profileID:      profileID,
-		profileSlug:    profileSlug,
-		conversationID: convID,
-		systemPrompt:   rc.AssembledPrompt,
-		cacheHit:       rc.CacheHit,
-		convRepo:       convRepo,
-		msgRepo:        msgRepo,
-		noteRepo:       noteRepo,
-		summaryRepo:    summaryRepo,
-		adapter:        adapter,
+		profileID:        profileID,
+		profileSlug:      profileSlug,
+		conversationID:   convID,
+		systemPrompt:     rc.AssembledPrompt,
+		cacheHit:         rc.CacheHit,
+		convRepo:         convRepo,
+		msgRepo:          msgRepo,
+		noteRepo:         noteRepo,
+		summaryRepo:      summaryRepo,
+		adapter:          adapter,
 		extractorAdapter: extractorAdapter,
-		cacheRepo:       store.NewContextCacheRepo(db),
+		cacheRepo:        store.NewContextCacheRepo(db),
 		extractor:        memory.NewExtractor(noteRepo, adapter, store.NewContextCacheRepo(db)),
-		logger:         logger,
-		history:        recentHistory,
-		onNotes:        onNotes,
-		onNotesSaving: onNotesSaving,
-		backupStop:     make(chan struct{}),
-		pendingDone:    make(chan struct{}),
+		logger:           logger,
+		history:          recentHistory,
+		onNotes:          onNotes,
+		onNotesSaving:    onNotesSaving,
+		backupStop:       make(chan struct{}),
+		pendingDone:      make(chan struct{}),
+		baseSystemPrompt: baseSystemPrompt,
+		sessionSummary:   rc.SessionSummary,
+		db:               db,
+		vectorIndexPath:  vecPath,
+		vectorIndex:      vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)),
 	}
 	if profileSlug != "" {
 		s.startBackupTicker()
@@ -164,8 +180,15 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	s.history = append(s.history, userMsgRec)
 
 	// Build provider request.
+	systemPrompt := s.systemPrompt
+	if s.adapter != nil {
+		if notes, err := s.relevantNotes(ctx, userMsg); err == nil && len(notes) > 0 {
+			memoryBlock := memory.BuildMemoryBlock(notes)
+			systemPrompt = memory.AssemblePrompt(s.baseSystemPrompt, s.sessionSummary, memoryBlock)
+		}
+	}
 	msgs := make([]provider.Message, 0, len(s.history)+1)
-	msgs = append(msgs, provider.Message{Role: "system", Content: s.systemPrompt})
+	msgs = append(msgs, provider.Message{Role: "system", Content: systemPrompt})
 	for _, m := range s.history {
 		msgs = append(msgs, provider.Message{Role: string(m.Role), Content: m.Content})
 	}
@@ -205,6 +228,85 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 
 // Stats returns a snapshot of current session usage stats.
 func (s *Session) Stats() provider.Stats { return s.stats }
+
+func (s *Session) relevantNotes(ctx context.Context, userMsg string) ([]*store.MemoryNote, error) {
+	if s.adapter == nil || s.noteRepo == nil || s.vectorIndex == nil {
+		return nil, nil
+	}
+	embedResp, err := s.adapter.Embed(ctx, provider.EmbeddingRequest{Input: userMsg})
+	if err != nil {
+		return nil, fmt.Errorf("session: embed query: %w", err)
+	}
+
+	manifestRepo := store.NewVectorManifestRepo(s.db)
+	entries, err := manifestRepo.ListEntries(ctx, s.profileID)
+	if err != nil {
+		return nil, fmt.Errorf("session: list vector entries: %w", err)
+	}
+	vectorEntries := make([]vector.Entry, 0, len(entries))
+	for _, e := range entries {
+		vectorEntries = append(vectorEntries, vector.Entry{
+			ID:             e.ID,
+			ProfileID:      e.ProfileID,
+			SourceType:     vector.SourceType(e.SourceType),
+			SourceID:       e.SourceID,
+			ChunkHash:      e.ChunkHash,
+			EmbeddingModel: e.EmbeddingModel,
+			EmbeddingDim:   e.EmbeddingDim,
+			VectorRef:      e.VectorRef,
+		})
+	}
+	fileIndex, ok := s.vectorIndex.(*vector.FileIndex)
+	if ok {
+		fileIndex.WithProfile(s.profileID)
+		fileIndex.SeedEntries(vectorEntries)
+		if err := fileIndex.Load(); err != nil {
+			if errors.Is(err, vector.ErrIndexNotFound) || errors.Is(err, vector.ErrIndexCorrupted) {
+				s.logger.Infof("vector index issue: %v", err)
+				return nil, nil
+			}
+			return nil, err
+		}
+	}
+
+	retrieval := vector.NewHybridRetrieval(s.vectorIndex, noteLister{repo: s.noteRepo}, s.profileID)
+	results, err := retrieval.Retrieve(ctx, embedResp.Embedding, vectorTopK)
+	if err != nil {
+		return nil, err
+	}
+
+	noteList, err := s.noteRepo.ListByProfile(ctx, s.profileID)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]*store.MemoryNote, len(noteList))
+	for _, note := range noteList {
+		byID[note.ID] = note
+	}
+	out := make([]*store.MemoryNote, 0, len(results))
+	for _, res := range results {
+		if note, ok := byID[res.Note.ID]; ok {
+			out = append(out, note)
+		}
+	}
+	return out, nil
+}
+
+type noteLister struct {
+	repo *store.MemoryNoteRepo
+}
+
+func (n noteLister) ListByProfile(ctx context.Context, profileID string) ([]vector.MemoryNoteRecord, error) {
+	notes, err := n.repo.ListByProfile(ctx, profileID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]vector.MemoryNoteRecord, 0, len(notes))
+	for _, note := range notes {
+		out = append(out, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
+	}
+	return out, nil
+}
 
 // extractAsync runs note extraction and calls onNotes when done.
 func (s *Session) extractAsync(userMsg, assistantMsg string) {
