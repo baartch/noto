@@ -98,16 +98,24 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 	if modelName == "" {
 		modelName = a.cfg.Model
 	}
-	completionTokens := apiResp.Usage.TotalTokens - apiResp.Usage.PromptTokens
+	promptTokens := apiResp.Usage.PromptTokens
+	completionTokens := apiResp.Usage.CompletionTokens
+	if completionTokens == 0 && apiResp.Usage.TotalTokens > 0 {
+		completionTokens = apiResp.Usage.TotalTokens - promptTokens
+	}
+	totalTokens := apiResp.Usage.TotalTokens
+	if totalTokens == 0 {
+		totalTokens = promptTokens + completionTokens
+	}
 	info := modelInfo(modelName)
 
 	return &CompletionResponse{
 		Content:          apiResp.Choices[0].Message.Content,
 		Model:            modelName,
-		PromptTokens:     apiResp.Usage.PromptTokens,
+		PromptTokens:     promptTokens,
 		CompletionTokens: completionTokens,
-		TotalTokens:      apiResp.Usage.TotalTokens,
-		EstimatedCostUSD: estimateCost(modelName, apiResp.Usage.PromptTokens, completionTokens),
+		TotalTokens:      totalTokens,
+		EstimatedCostUSD: estimateCost(modelName, promptTokens, completionTokens),
 		ContextMax:       info.contextWindow,
 	}, nil
 }
