@@ -133,6 +133,11 @@ func New(
 	ti.CharLimit = 4096
 	ti.ShowLineNumbers = false
 	ti.SetHeight(3)
+	ti.Prompt = "  "
+	promptStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	ti.FocusedStyle.Prompt = promptStyle
+	ti.BlurredStyle.Prompt = promptStyle
+	ti.Cursor.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
 	// Enter sends; Alt+Enter inserts newline.
 	ti.KeyMap.InsertNewline = key.NewBinding(
 		key.WithKeys("alt+enter"),
@@ -168,7 +173,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.input.SetWidth(msg.Width - 4)
 		// header(1) + divider(1) + inputDivider(1) + inputLine(1) + padding(1) = 5
-		vpH := msg.Height - 7 // header+divider+inputDivider+input+hint
+		vpH := msg.Height - 8 // header+divider+inputDivider+input+hint+padding
 		if vpH < 1 {
 			vpH = 1
 		}
@@ -599,8 +604,11 @@ func (m Model) View() string {
 
 	// ---- input bar ----
 	inputDivider := dividerStyle.Render(strings.Repeat("─", m.width))
-	inputLine := "  " + m.input.View() + "\n" +
-		"  " + suggNormalStyle.Render("(Enter to send • Alt+Enter for new line)")
+	inputView := strings.TrimRight(m.input.View(), "\n")
+	inputLine := lipgloss.NewStyle().PaddingLeft(1).Render(inputView) + "\n" +
+		lipgloss.NewStyle().PaddingLeft(2).Render(
+			suggNormalStyle.Render("(Enter to send • Alt+Enter for new line)"),
+		)
 
 	return title + "\n" +
 		divider + "\n" +
