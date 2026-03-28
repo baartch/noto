@@ -1,3 +1,5 @@
+dev_helpers
+
 # Go build artefacts
 bin/
 *.exe
