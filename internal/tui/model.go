@@ -179,7 +179,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.input.SetWidth(msg.Width - 4)
 		// header(1) + divider(1) + inputDivider(1) + inputLine(1) + padding(1) = 5
-		vpH := msg.Height - 8 // header+divider+inputDivider+input+hint+padding
+		vpH := msg.Height - 5 // inputDivider+input+hint+footer
 		if vpH < 1 {
 			vpH = 1
 		}
@@ -576,21 +576,6 @@ func (m Model) View() string {
 		return "\n  Initialising…"
 	}
 
-	// ---- header bar ----
-	modelPart := ""
-	if m.activeModel != "" {
-		modelPart = "  " + modelBadge.Render("["+m.activeModel+"]")
-	}
-	notesPart := ""
-	if m.notesIndicator != "" {
-		notesPart = "  " + notesBadge.Render(m.notesIndicator)
-	}
-	title := headerStyle.Render("Noto") +
-		"  " + lipgloss.NewStyle().Foreground(lipgloss.Color("63")).Render(m.profileName) +
-		modelPart + notesPart +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("237")).Render("  ·  /model  /profile select  Ctrl+C")
-	divider := dividerStyle.Render(strings.Repeat("─", m.width))
-
 	// ---- middle: picker or suggestions ----
 	var mid strings.Builder
 	if m.picker != nil {
@@ -616,13 +601,14 @@ func (m Model) View() string {
 			suggNormalStyle.Render("(Enter to send • Alt+Enter for new line)"),
 		)
 
-	return title + "\n" +
-		divider + "\n" +
-		m.viewport.View() + "\n" +
+	footer := m.renderFooter()
+
+	return m.viewport.View() + "\n" +
 		mid.String() +
 		errBlock +
 		inputDivider + "\n" +
-		inputLine
+		inputLine + "\n" +
+		footer
 }
 
 // renderFooter draws the bottom status line.
