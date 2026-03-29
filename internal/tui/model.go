@@ -577,7 +577,7 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// openPicker initialises the picker overlay and fires the async data fetch.
+// openPicker initializes the picker overlay and fires the async data fetch.
 func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	m.pickerKind = kind
 	switch kind {

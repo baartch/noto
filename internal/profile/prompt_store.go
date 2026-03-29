@@ -30,7 +30,7 @@ func (ps *PromptStore) GetSystemPrompt() (string, error) {
 	}
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		// Initialise with default.
+		// Initialize with default.
 		if err2 := ps.SetSystemPrompt(defaultSystemPrompt); err2 != nil {
 			return "", err2
 		}
