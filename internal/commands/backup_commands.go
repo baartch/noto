@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 
 	"noto/internal/backup"
@@ -30,7 +31,7 @@ func RegisterBackupCommands(r *Registry) error {
 
 func backupRestoreHandler(ctx *ExecContext, args []string) error {
 	if ctx.ProfileSlug == "" {
-		return fmt.Errorf("no active profile")
+		return errors.New("no active profile")
 	}
 	if len(args) == 0 {
 		return &ErrOpenBackupPicker{}

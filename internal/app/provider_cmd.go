@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -40,7 +41,7 @@ func providerSetCmd() *cobra.Command {
   noto provider set --key sk-... --model gpt-4o --extractor-model gpt-4o-mini`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if apiKey == "" {
-				return fmt.Errorf("--key is required")
+				return errors.New("--key is required")
 			}
 
 			ctx := context.Background()
@@ -245,7 +246,7 @@ func resolveActiveProfile(ctx context.Context, db *store.DB) (*store.Profile, er
 	svc := profileServiceAdapter{repo: store.NewProfileRepo(db)}
 	p, err := svc.GetActive(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("no active profile — run: noto profile select <name>")
+		return nil, errors.New("no active profile — run: noto profile select <name>")
 	}
 	return p, nil
 }

@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -79,7 +80,7 @@ func Restore(slug string) error {
 // RestoreAt replaces the profile's DB (and vector index if available) with a specific backup.
 func RestoreAt(slug, timestamp string) error {
 	if timestamp == "" {
-		return fmt.Errorf("backup: timestamp is required")
+		return errors.New("backup: timestamp is required")
 	}
 	backupsDir, err := config.ProfileBackupsDir(slug)
 	if err != nil {

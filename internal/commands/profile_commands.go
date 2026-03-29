@@ -72,7 +72,7 @@ func RegisterProfileCommands(r *Registry, svc ProfileService) error {
 func profileCreateHandler(svc ProfileService) HandlerFunc {
 	return func(ctx *ExecContext, args []string) error {
 		if len(args) == 0 {
-			return fmt.Errorf("usage: profile create <name>")
+			return errors.New("usage: profile create <name>")
 		}
 		name := strings.Join(args, " ")
 		p, err := svc.Create(context.Background(), name)
@@ -143,7 +143,7 @@ func profileSelectHandler(svc ProfileService) HandlerFunc {
 func profileRenameHandler(svc ProfileService) HandlerFunc {
 	return func(ctx *ExecContext, args []string) error {
 		if len(args) < 2 {
-			return fmt.Errorf("usage: profile rename <old> <new>")
+			return errors.New("usage: profile rename <old> <new>")
 		}
 		p, err := svc.Rename(context.Background(), args[0], args[1])
 		if err != nil {
@@ -159,7 +159,7 @@ func profileRenameHandler(svc ProfileService) HandlerFunc {
 func profileDeleteHandler(svc ProfileService) HandlerFunc {
 	return func(ctx *ExecContext, args []string) error {
 		if len(args) == 0 {
-			return fmt.Errorf("usage: profile delete <name>")
+			return errors.New("usage: profile delete <name>")
 		}
 		name := args[0]
 		err := svc.Delete(context.Background(), name, func(prompt string) bool {

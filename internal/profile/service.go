@@ -33,7 +33,7 @@ func NewService(repo *store.ProfileRepo) *Service {
 // Create creates a new profile with the given name.
 func (s *Service) Create(ctx context.Context, name string) (*store.Profile, error) {
 	if strings.TrimSpace(name) == "" {
-		return nil, fmt.Errorf("profile: name must not be empty")
+		return nil, errors.New("profile: name must not be empty")
 	}
 	slug := toSlug(name)
 	id := newID()
@@ -96,7 +96,7 @@ func (s *Service) Select(ctx context.Context, name string) (*store.Profile, erro
 // Rename renames a profile, updating slug and filesystem paths.
 func (s *Service) Rename(ctx context.Context, oldName, newName string) (*store.Profile, error) {
 	if strings.TrimSpace(newName) == "" {
-		return nil, fmt.Errorf("profile: new name must not be empty")
+		return nil, errors.New("profile: new name must not be empty")
 	}
 	p, err := s.repo.GetByName(ctx, oldName)
 	if err != nil {
@@ -163,7 +163,7 @@ func (s *Service) GetActive(ctx context.Context) (*store.Profile, error) {
 	p, err := s.repo.GetDefault(ctx)
 	if err != nil {
 		if errors.Is(err, store.ErrProfileNotFound) {
-			return nil, fmt.Errorf("profile: no active profile set")
+			return nil, errors.New("profile: no active profile set")
 		}
 		return nil, err
 	}
@@ -175,7 +175,7 @@ func (s *Service) LastUsed(ctx context.Context) (*store.Profile, error) {
 	p, err := s.repo.GetLastUsed(ctx)
 	if err != nil {
 		if errors.Is(err, store.ErrProfileNotFound) {
-			return nil, fmt.Errorf("profile: no profiles found")
+			return nil, errors.New("profile: no profiles found")
 		}
 		return nil, err
 	}

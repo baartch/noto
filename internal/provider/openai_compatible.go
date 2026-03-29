@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -90,7 +91,7 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 	}
 
 	if len(apiResp.Choices) == 0 {
-		return nil, fmt.Errorf("provider: no choices in response")
+		return nil, errors.New("provider: no choices in response")
 	}
 
 	modelName := apiResp.Model

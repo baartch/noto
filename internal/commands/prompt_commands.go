@@ -55,7 +55,7 @@ func RegisterPromptCommands(r *Registry) error {
 
 func promptShowHandler(ctx *ExecContext, _ []string) error {
 	if ctx.ProfileSlug == "" {
-		return fmt.Errorf("no active profile")
+		return errors.New("no active profile")
 	}
 	ps := profile.NewPromptStore(ctx.ProfileSlug)
 	content, err := ps.GetSystemPrompt()
@@ -70,7 +70,7 @@ func promptShowHandler(ctx *ExecContext, _ []string) error {
 
 func promptEditHandler(ctx *ExecContext, _ []string) error {
 	if ctx.ProfileSlug == "" {
-		return fmt.Errorf("no active profile")
+		return errors.New("no active profile")
 	}
 
 	ps := profile.NewPromptStore(ctx.ProfileSlug)

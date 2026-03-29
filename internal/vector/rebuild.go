@@ -39,7 +39,7 @@ func (rb *Rebuilder) Rebuild(ctx context.Context, notes []MemoryNoteRecord) erro
 	entries := make([]Entry, 0, len(notes))
 	for _, note := range notes {
 		entries = append(entries, Entry{
-			ID:             fmt.Sprintf("ve-%s", note.ID),
+			ID:             "ve-" + note.ID,
 			ProfileID:      rb.profileID,
 			SourceType:     SourceMemoryNote,
 			SourceID:       note.ID,

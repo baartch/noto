@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"noto/internal/config"
@@ -32,7 +33,7 @@ func RegisterProviderCommands(r *Registry) error {
 
 func providerExtractorModelHandler(ctx *ExecContext, args []string) error {
 	if ctx.ProfileSlug == "" || ctx.ProfileID == "" {
-		return fmt.Errorf("no active profile")
+		return errors.New("no active profile")
 	}
 	if len(args) == 0 {
 		return &ErrOpenExtractorModelPicker{}

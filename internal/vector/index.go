@@ -2,7 +2,6 @@ package vector
 
 import (
 	"errors"
-	"fmt"
 )
 
 // ErrIndexNotFound is returned when the vector index file does not exist for a profile.
@@ -132,10 +131,10 @@ type Manifest struct {
 // ValidateManifest checks that a manifest's required fields are present.
 func ValidateManifest(m *Manifest) error {
 	if m.ProfileID == "" {
-		return fmt.Errorf("vector: manifest missing profile_id")
+		return errors.New("vector: manifest missing profile_id")
 	}
 	if m.IndexPath == "" {
-		return fmt.Errorf("vector: manifest missing index_path")
+		return errors.New("vector: manifest missing index_path")
 	}
 	return nil
 }

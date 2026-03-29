@@ -84,10 +84,10 @@ func (r *VectorManifestRepo) GetManifest(ctx context.Context, profileID string) 
 // UpsertManifest inserts or replaces the vector index manifest for a profile.
 func (r *VectorManifestRepo) UpsertManifest(ctx context.Context, m *VectorManifest) error {
 	if m.ProfileID == "" {
-		return fmt.Errorf("store: manifest missing profile_id")
+		return errors.New("store: manifest missing profile_id")
 	}
 	if m.IndexPath == "" {
-		return fmt.Errorf("store: manifest missing index_path")
+		return errors.New("store: manifest missing index_path")
 	}
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO vector_index_manifest

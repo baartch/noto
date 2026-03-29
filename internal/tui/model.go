@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -597,7 +598,7 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 			})
 		} else {
 			m.picker.loading = false
-			m.picker.err = fmt.Errorf("no provider configured")
+			m.picker.err = errors.New("no provider configured")
 		}
 
 	case pickerKindProfile:
@@ -620,7 +621,7 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 			})
 		} else {
 			m.picker.loading = false
-			m.picker.err = fmt.Errorf("no profile service available")
+			m.picker.err = errors.New("no profile service available")
 		}
 
 	case pickerKindBackup:
@@ -639,7 +640,7 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 			})
 		} else {
 			m.picker.loading = false
-			m.picker.err = fmt.Errorf("no backup service available")
+			m.picker.err = errors.New("no backup service available")
 		}
 	case pickerKindExtractorModel:
 		m.picker = &pickerState{title: "Select extractor model", loading: true, width: m.width - 4}
@@ -658,7 +659,7 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 			})
 		} else {
 			m.picker.loading = false
-			m.picker.err = fmt.Errorf("no provider configured")
+			m.picker.err = errors.New("no provider configured")
 		}
 	}
 

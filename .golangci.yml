@@ -12,6 +12,9 @@ linters:
     - gocritic
     - govet
     - ineffassign
+    - perfsprint
+    - predeclared
+    - prealloc
     - staticcheck
     - unused
     - misspell
