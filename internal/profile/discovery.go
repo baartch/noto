@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 
 	"noto/internal/config"
@@ -57,11 +58,19 @@ func DiscoverProfiles() ([]*store.Profile, []DiscoveryWarning, error) {
 		if err != nil {
 			return nil, nil, err
 		}
+		systemPromptPath := meta.SystemPromptPath
+		if !filepath.IsAbs(systemPromptPath) {
+			profileDir, err := config.ProfileDir(slug)
+			if err != nil {
+				return nil, nil, err
+			}
+			systemPromptPath = filepath.Join(profileDir, systemPromptPath)
+		}
 		p := &store.Profile{
 			ID:               meta.ID,
 			Name:             meta.Name,
 			Slug:             meta.Slug,
-			SystemPromptPath: meta.SystemPromptPath,
+			SystemPromptPath: systemPromptPath,
 			DBPath:           dbPath,
 			IsDefault:        meta.Slug == activeSlug,
 			CreatedAt:        meta.CreatedAt,

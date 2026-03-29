@@ -50,10 +50,10 @@
 
 ### Implementation for User Story 1
 
-- [ ] T011 [P] [US1] Persist metadata file on profile create in internal/profile/service.go
-- [ ] T012 [US1] Update profile rename to update metadata file in internal/profile/service.go
-- [ ] T013 [US1] Update profile delete to remove metadata file in internal/profile/service.go
-- [ ] T014 [US1] Ensure prompt paths in metadata align with internal/profile/prompt_store.go
+- [X] T011 [P] [US1] Persist metadata file on profile create in internal/profile/service.go
+- [X] T012 [US1] Update profile rename to update metadata file in internal/profile/service.go
+- [X] T013 [US1] Update profile delete to remove metadata file in internal/profile/service.go
+- [X] T014 [US1] Ensure prompt paths in metadata align with internal/profile/prompt_store.go
 
 **Checkpoint**: User Story 1 should be fully functional and testable independently
 

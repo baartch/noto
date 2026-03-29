@@ -32,6 +32,15 @@ func DefaultSystemPromptRelPath() string {
 	return filepath.Join(config.PromptsDirName, config.SystemPromptName)
 }
 
+// DefaultSystemPromptPath returns the default absolute path for a profile's system prompt.
+func DefaultSystemPromptPath(slug string) (string, error) {
+	profileDir, err := config.ProfileDir(slug)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(profileDir, DefaultSystemPromptRelPath()), nil
+}
+
 // MetadataPath returns the absolute path to the metadata file for a profile slug.
 func MetadataPath(slug string) (string, error) {
 	profileDir, err := config.ProfileDir(slug)
@@ -112,6 +121,20 @@ func validateMetadata(meta *Metadata) error {
 	}
 	if strings.TrimSpace(meta.SystemPromptPath) == "" {
 		return errors.New("profile: metadata system prompt path must not be empty")
+	}
+	return nil
+}
+
+func removeMetadata(slug string) error {
+	path, err := MetadataPath(slug)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("profile: remove metadata: %w", err)
 	}
 	return nil
 }

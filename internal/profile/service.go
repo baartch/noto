@@ -38,7 +38,7 @@ func (s *Service) Create(ctx context.Context, name string) (*store.Profile, erro
 	slug := toSlug(name)
 	id := newID()
 
-	systemPromptPath, err := config.ProfileSystemPromptPath(slug)
+	systemPromptPath, err := DefaultSystemPromptPath(slug)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (s *Service) Create(ctx context.Context, name string) (*store.Profile, erro
 		Slug:             p.Slug,
 		CreatedAt:        p.CreatedAt,
 		UpdatedAt:        p.UpdatedAt,
-		SystemPromptPath: p.SystemPromptPath,
+		SystemPromptPath: DefaultSystemPromptRelPath(),
 	}); err != nil {
 		return nil, err
 	}
@@ -120,20 +120,26 @@ func (s *Service) Rename(ctx context.Context, oldName, newName string) (*store.P
 	}
 
 	newSlug := toSlug(newName)
-	newSystemPromptPath, _ := config.ProfileSystemPromptPath(newSlug)
+	newSystemPromptPath, _ := DefaultSystemPromptPath(newSlug)
 	newDBPath, _ := config.ProfileDBPath(newSlug)
 
 	p.Name = newName
 	p.Slug = newSlug
 	p.SystemPromptPath = newSystemPromptPath
 	p.DBPath = newDBPath
+	p.UpdatedAt = time.Now().UTC()
 
-	if err := s.repo.Update(ctx, p); err != nil {
-		if errors.Is(err, store.ErrProfileNameConflict) {
-			return nil, fmt.Errorf("profile: a profile named %q already exists", newName)
-		}
+	if err := WriteMetadata(&Metadata{
+		ID:               p.ID,
+		Name:             p.Name,
+		Slug:             p.Slug,
+		CreatedAt:        p.CreatedAt,
+		UpdatedAt:        p.UpdatedAt,
+		SystemPromptPath: DefaultSystemPromptRelPath(),
+	}); err != nil {
 		return nil, err
 	}
+
 	return p, nil
 }
 
@@ -156,7 +162,7 @@ func (s *Service) Delete(ctx context.Context, name string, confirm func(string) 
 		return err
 	}
 
-	msg := fmt.Sprintf("Are you sure you want to permanently delete profile %q and all its data? [yes/no]", name)
+	msg := fmt.Sprintf("Are you sure you want to permanently delete profile %q and all its data?", name)
 	if confirm != nil && !confirm(msg) {
 		return ErrConfirmationRequired
 	}
@@ -168,7 +174,11 @@ func (s *Service) Delete(ctx context.Context, name string, confirm func(string) 
 		}
 	}
 
-	return s.repo.Delete(ctx, p.ID)
+	if err := removeMetadata(p.Slug); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // GetActive returns the currently active (default) profile.
