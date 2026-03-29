@@ -6,6 +6,7 @@ import (
 	"io"
 )
 
+// Magic identifies the vector file format version.
 const Magic = "NOTOVEC1"
 
 // Header describes the on-disk vector file header.
@@ -36,6 +37,7 @@ func NewBinaryCodec() *BinaryCodec {
 	return &BinaryCodec{}
 }
 
+// ReadHeader reads the vector file header.
 func (c *BinaryCodec) ReadHeader(r io.Reader) (*Header, error) {
 	magic := make([]byte, len(Magic))
 	if _, err := io.ReadFull(r, magic); err != nil {
@@ -71,6 +73,7 @@ func (c *BinaryCodec) ReadHeader(r io.Reader) (*Header, error) {
 	return &header, nil
 }
 
+// WriteHeader writes the vector file header.
 func (c *BinaryCodec) WriteHeader(w io.Writer, h Header) error {
 	if _, err := w.Write([]byte(Magic)); err != nil {
 		return fmt.Errorf("vector: write magic: %w", err)
@@ -96,6 +99,7 @@ func (c *BinaryCodec) WriteHeader(w io.Writer, h Header) error {
 	return nil
 }
 
+// ReadVectors reads vector data from the file.
 func (c *BinaryCodec) ReadVectors(r io.Reader, count int, dim int) ([]float32, error) {
 	if count == 0 || dim == 0 {
 		return nil, nil
@@ -108,6 +112,7 @@ func (c *BinaryCodec) ReadVectors(r io.Reader, count int, dim int) ([]float32, e
 	return data, nil
 }
 
+// WriteVectors writes vector data to the file.
 func (c *BinaryCodec) WriteVectors(w io.Writer, vectors []float32, _ int) error {
 	if len(vectors) == 0 {
 		return nil
@@ -118,6 +123,7 @@ func (c *BinaryCodec) WriteVectors(w io.Writer, vectors []float32, _ int) error 
 	return nil
 }
 
+// ReadGraph reads the serialized graph bytes.
 func (c *BinaryCodec) ReadGraph(r io.Reader) ([]byte, error) {
 	var size uint64
 	if err := binary.Read(r, binary.LittleEndian, &size); err != nil {
@@ -136,6 +142,7 @@ func (c *BinaryCodec) ReadGraph(r io.Reader) ([]byte, error) {
 	return buf, nil
 }
 
+// WriteGraph writes the serialized graph bytes.
 func (c *BinaryCodec) WriteGraph(w io.Writer, data []byte) error {
 	size := uint64(len(data))
 	if err := binary.Write(w, binary.LittleEndian, size); err != nil {
