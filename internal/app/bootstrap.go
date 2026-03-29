@@ -19,7 +19,7 @@ type Container struct {
 	Metrics  observe.MetricsEmitter
 }
 
-// Bootstrap initialises the application for the given profile slug.
+// Bootstrap initializes the application for the given profile slug.
 // It creates required directories, opens the SQLite database, applies migrations,
 // registers all canonical commands, and wires the logger and metrics emitter.
 func Bootstrap(slug string, logOutput io.Writer) (*Container, error) {

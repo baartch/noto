@@ -22,7 +22,7 @@ func NewPromptStore(slug string) *PromptStore {
 }
 
 // GetSystemPrompt reads the profile's system prompt file.
-// If the file does not exist, it initialises it with the default prompt.
+// If the file does not exist, it initializes it with the default prompt.
 func (ps *PromptStore) GetSystemPrompt() (string, error) {
 	path, err := config.ProfileSystemPromptPath(ps.slug)
 	if err != nil {

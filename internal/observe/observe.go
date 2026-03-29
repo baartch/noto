@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// EventType categorises an observability event.
+// EventType categorizes an observability event.
 type EventType string
 
 // Known observability event types.

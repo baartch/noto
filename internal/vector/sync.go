@@ -22,7 +22,7 @@ type ManifestEntryUpserter interface {
 	UpsertEntry(ctx context.Context, e *Entry) error
 }
 
-// Syncer synchronises SQLite memory sources into the vector index.
+// Syncer synchronizes SQLite memory sources into the vector index.
 type Syncer struct {
 	index     Index
 	profileID string

@@ -19,7 +19,7 @@ func NewDeleteFlow(service *Service) *DeleteFlow {
 }
 
 // Run executes the deletion flow, writing prompts to w and reading input from r.
-// Returns an error if deletion is cancelled or fails.
+// Returns an error if deletion is canceled or fails.
 func (f *DeleteFlow) Run(ctx context.Context, profileName string, w io.Writer, r io.Reader) error {
 	confirm := func(_ string) bool {
 		return ConfirmDeletion(w, r, profileName)

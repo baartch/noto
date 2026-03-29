@@ -48,7 +48,7 @@ type Adapter interface {
 	ProviderType() string
 }
 
-// Config holds the configuration needed to initialise a provider adapter.
+// Config holds the configuration needed to initialize a provider adapter.
 type Config struct {
 	ProviderType string
 	Endpoint     string

@@ -797,7 +797,7 @@ func (m *Model) clearSuggestions() {
 // View implements tea.Model.
 func (m Model) View() string {
 	if !m.ready {
-		return "\n  Initialising…"
+		return "\n  Initializing…"
 	}
 
 	// ---- middle: picker or suggestions ----
