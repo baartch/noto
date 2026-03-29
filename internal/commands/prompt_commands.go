@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -100,6 +101,7 @@ func promptEditHandler(ctx *ExecContext, _ []string) error {
 }
 
 func openInEditor(path string) error {
+	ctx := context.Background()
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
 		editor = os.Getenv("VISUAL")
@@ -107,7 +109,7 @@ func openInEditor(path string) error {
 	if editor == "" {
 		editor = "vi"
 	}
-	cmd := exec.Command(editor, path)
+	cmd := exec.CommandContext(ctx, editor, path)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

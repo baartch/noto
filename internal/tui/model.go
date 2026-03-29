@@ -766,7 +766,7 @@ func (m Model) openEditor(path string, cmds []tea.Cmd) tea.Cmd {
 	if editor == "" {
 		editor = "vi"
 	}
-	c := exec.Command(editor, path)
+	c := exec.CommandContext(context.Background(), editor, path)
 	cmds = append(cmds, tea.ExecProcess(c, func(err error) tea.Msg {
 		return editorFinishedMsg{err: err}
 	}))

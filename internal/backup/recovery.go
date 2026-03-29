@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"io"
@@ -106,6 +107,7 @@ func integrityCheck(path string) (bool, string, error) {
 }
 
 func attemptRepair(path string) (bool, error) {
+	ctx := context.Background()
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return false, err
@@ -114,13 +116,13 @@ func attemptRepair(path string) (bool, error) {
 		_ = db.Close()
 	}()
 
-	if _, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
+	if _, err := db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
 		return false, fmt.Errorf("checkpoint: %w", err)
 	}
-	if _, err := db.Exec(`REINDEX;`); err != nil {
+	if _, err := db.ExecContext(ctx, `REINDEX;`); err != nil {
 		return false, fmt.Errorf("reindex: %w", err)
 	}
-	if _, err := db.Exec(`VACUUM;`); err != nil {
+	if _, err := db.ExecContext(ctx, `VACUUM;`); err != nil {
 		return false, fmt.Errorf("vacuum: %w", err)
 	}
 
