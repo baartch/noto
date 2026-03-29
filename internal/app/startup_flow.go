@@ -29,9 +29,9 @@ func NewStartupFlow(svc *profile.Service) *StartupFlow {
 }
 
 // Resolve runs the startup profile resolution logic:
-//  - Zero profiles: prompts to create the first profile.
-//  - One profile: selects it automatically.
-//  - Multiple profiles: uses the default profile if set; otherwise selects the last-used profile.
+//   - Zero profiles: prompts to create the first profile.
+//   - One profile: selects it automatically.
+//   - Multiple profiles: uses the default profile if set; otherwise selects the last-used profile.
 func (f *StartupFlow) Resolve(
 	ctx context.Context,
 	w io.Writer,

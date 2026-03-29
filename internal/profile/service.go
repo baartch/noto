@@ -19,7 +19,6 @@ var ErrProfileInUse = errors.New("profile: cannot delete the only remaining prof
 var ErrConfirmationRequired = errors.New("profile: explicit confirmation required")
 
 // slugRe is the regex for a valid profile slug.
-var slugRe = regexp.MustCompile(`^[a-z0-9-]+$`)
 
 // Service manages the profile lifecycle.
 type Service struct {

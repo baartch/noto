@@ -26,10 +26,10 @@ const (
 type MemoryNote struct {
 	ID               string
 	ProfileID        string
-	ConversationID   string  // empty string means NULL in the DB
+	ConversationID   string // empty string means NULL in the DB
 	Category         MemoryCategory
 	Content          string
-	Importance       int // 1–10
+	Importance       int    // 1–10
 	SourceMessageIDs string // JSON array
 	CreatedAt        time.Time
 	UpdatedAt        time.Time

@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -20,13 +19,11 @@ var (
 	userTimeStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
 	// Assistant bubble
-	asstBubbleBg   = lipgloss.Color("235") // dark grey
-	asstBubbleFg   = lipgloss.Color("252")
 	asstLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("78")).Bold(true)
 	asstTimeStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
 	// Command output
-	cmdLineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("243")).Italic(true)
+	cmdLineStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("243")).Italic(true)
 	cmdPrefixStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 )
 
@@ -185,14 +182,6 @@ func wordWrap(text string, maxWidth int) string {
 
 // formatTimestamp returns a display timestamp for a message.
 // Shows time today, or "Mon 15:04" for older messages.
-func formatTimestamp(t time.Time) string {
-	now := time.Now()
-	if t.Year() == now.Year() && t.YearDay() == now.YearDay() {
-		return t.Format("15:04")
-	}
-	return fmt.Sprintf("%s %s", t.Weekday().String()[:3], t.Format("15:04"))
-}
-
 func padLines(content, pad string) string {
 	if pad == "" {
 		return content

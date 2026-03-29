@@ -22,7 +22,8 @@ func (s *Stats) Add(resp *CompletionResponse) {
 }
 
 // Format returns a compact status-line string like:
-//   ↑12.4k ↓3.2k  $0.042  68%/200k
+//
+//	↑12.4k ↓3.2k  $0.042  68%/200k
 func (s Stats) Format() string {
 	in := formatTokens(s.TokensIn)
 	out := formatTokens(s.TokensOut)

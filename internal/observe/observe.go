@@ -110,7 +110,7 @@ func (l *JSONLogger) Errorf(format string, args ...any) {
 // NoopMetrics discards all metric observations.
 type NoopMetrics struct{}
 
-func (NoopMetrics) Inc(_ string)                {}
+func (NoopMetrics) Inc(_ string)                    {}
 func (NoopMetrics) RecordLatency(_ string, _ int64) {}
 
 // ---- convenience helpers ----------------------------------------------------

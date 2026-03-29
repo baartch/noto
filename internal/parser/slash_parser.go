@@ -9,10 +9,10 @@ import (
 type TokenKind int
 
 const (
-	TokenSlash   TokenKind = iota // the leading '/'
-	TokenWord                     // a command segment or argument word
-	TokenString                   // a quoted string argument
-	TokenEOF                      // end of input
+	TokenSlash  TokenKind = iota // the leading '/'
+	TokenWord                    // a command segment or argument word
+	TokenString                  // a quoted string argument
+	TokenEOF                     // end of input
 )
 
 // Token is a single lexed element from slash input.

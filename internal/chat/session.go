@@ -34,17 +34,17 @@ type Session struct {
 	systemPrompt   string
 	cacheHit       bool
 
-	convRepo    *store.ConversationRepo
-	msgRepo     *store.MessageRepo
-	noteRepo    *store.MemoryNoteRepo
-	cacheRepo   *store.ContextCacheRepo
-	summaryRepo *store.SessionSummaryRepo
+	convRepo         *store.ConversationRepo
+	msgRepo          *store.MessageRepo
+	noteRepo         *store.MemoryNoteRepo
+	cacheRepo        *store.ContextCacheRepo
+	summaryRepo      *store.SessionSummaryRepo
 	adapter          provider.Adapter
 	extractor        *memory.Extractor
 	extractorAdapter provider.Adapter
-	logger      observe.Logger
+	logger           observe.Logger
 
-	backupStop  chan struct{}
+	backupStop   chan struct{}
 	pendingNotes int
 	pendingMu    sync.Mutex
 	pendingDone  chan struct{}
@@ -104,25 +104,25 @@ func NewSession(
 	}
 
 	s := &Session{
-		profileID:      profileID,
-		profileSlug:    profileSlug,
-		conversationID: convID,
-		systemPrompt:   rc.AssembledPrompt,
-		cacheHit:       rc.CacheHit,
-		convRepo:       convRepo,
-		msgRepo:        msgRepo,
-		noteRepo:       noteRepo,
-		summaryRepo:    summaryRepo,
-		adapter:        adapter,
+		profileID:        profileID,
+		profileSlug:      profileSlug,
+		conversationID:   convID,
+		systemPrompt:     rc.AssembledPrompt,
+		cacheHit:         rc.CacheHit,
+		convRepo:         convRepo,
+		msgRepo:          msgRepo,
+		noteRepo:         noteRepo,
+		summaryRepo:      summaryRepo,
+		adapter:          adapter,
 		extractorAdapter: extractorAdapter,
-		cacheRepo:       store.NewContextCacheRepo(db),
+		cacheRepo:        store.NewContextCacheRepo(db),
 		extractor:        memory.NewExtractor(noteRepo, adapter, store.NewContextCacheRepo(db)),
-		logger:         logger,
-		history:        recentHistory,
-		onNotes:        onNotes,
-		onNotesSaving: onNotesSaving,
-		backupStop:     make(chan struct{}),
-		pendingDone:    make(chan struct{}),
+		logger:           logger,
+		history:          recentHistory,
+		onNotes:          onNotes,
+		onNotesSaving:    onNotesSaving,
+		backupStop:       make(chan struct{}),
+		pendingDone:      make(chan struct{}),
 	}
 	if profileSlug != "" {
 		s.startBackupTicker()

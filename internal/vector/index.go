@@ -87,8 +87,8 @@ type Index interface {
 // It is used during initial wiring before a real index implementation is available.
 type NoopIndex struct{}
 
-func (NoopIndex) Upsert(_ Entry) error                             { return nil }
-func (NoopIndex) Delete(_ SourceType, _ string) error              { return nil }
+func (NoopIndex) Upsert(_ Entry) error                              { return nil }
+func (NoopIndex) Delete(_ SourceType, _ string) error               { return nil }
 func (NoopIndex) Search(_ []float32, _ int) ([]SearchResult, error) { return nil, nil }
 func (NoopIndex) Rebuild(_ []Entry) error                           { return nil }
 func (NoopIndex) Flush() error                                      { return nil }

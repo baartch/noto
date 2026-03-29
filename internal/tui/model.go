@@ -78,19 +78,30 @@ func ProfileSwitchFailed(err error) tea.Msg {
 	return profileSwitchFailedMsg{err: err}
 }
 
-
 // ---- async tea.Msg types (internal) ----------------------------------------
 
-type providerReplyMsg       struct{ content string; err error }
-type modelsLoadedMsg        struct{ items []pickerItem; err error }
-type profilesLoadedMsg      struct{ items []pickerItem; err error }
-type backupsLoadedMsg       struct{ items []pickerItem; err error }
-type notesSavedMsg          struct{ saved, updated int }
-type notesSavingMsg         struct{}
+type providerReplyMsg struct {
+	content string
+	err     error
+}
+type modelsLoadedMsg struct {
+	items []pickerItem
+	err   error
+}
+type profilesLoadedMsg struct {
+	items []pickerItem
+	err   error
+}
+type backupsLoadedMsg struct {
+	items []pickerItem
+	err   error
+}
+type notesSavedMsg struct{ saved, updated int }
+type notesSavingMsg struct{}
 type clearNotesIndicatorMsg struct{}
-type editorFinishedMsg      struct{ err error }
-type statsUpdatedMsg        struct{ formatted string }
-type profileSwitchedMsg     struct {
+type editorFinishedMsg struct{ err error }
+type statsUpdatedMsg struct{ formatted string }
+type profileSwitchedMsg struct {
 	profileName            string
 	activeModel            string
 	extractorModel         string
@@ -102,16 +113,16 @@ type profileSwitchedMsg     struct {
 	extractorModelSelected ExtractorModelSelectedFunc
 }
 type profileSwitchFailedMsg struct{ err error }
-type spinnerTickMsg         struct{}
+type spinnerTickMsg struct{}
 
 // ---- picker kind ------------------------------------------------------------
 
 type pickerKind int
 
 const (
-	pickerKindModel   pickerKind = iota
-	pickerKindProfile pickerKind = iota
-	pickerKindBackup  pickerKind = iota
+	pickerKindModel          pickerKind = iota
+	pickerKindProfile        pickerKind = iota
+	pickerKindBackup         pickerKind = iota
 	pickerKindExtractorModel pickerKind = iota
 )
 
@@ -147,16 +158,16 @@ type Model struct {
 	pending      bool
 	spinnerIndex int
 
-	dispatcher      *chat.Dispatcher
-	execCtx         *commands.ExecContext
-	provider        ProviderFunc
-	listModels      ListModelsFunc
-	modelSelected   ModelSelectedFunc
-	listProfiles    ListProfilesFunc
-	profileSwitch   ProfileSwitchCmd
-	listBackups     ListBackupsFunc
-	backupSelected  BackupSelectedFunc
-	extractorModel string
+	dispatcher             *chat.Dispatcher
+	execCtx                *commands.ExecContext
+	provider               ProviderFunc
+	listModels             ListModelsFunc
+	modelSelected          ModelSelectedFunc
+	listProfiles           ListProfilesFunc
+	profileSwitch          ProfileSwitchCmd
+	listBackups            ListBackupsFunc
+	backupSelected         BackupSelectedFunc
+	extractorModel         string
 	extractorModelSelected ExtractorModelSelectedFunc
 }
 
@@ -173,8 +184,6 @@ var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 var (
 	headerStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Bold(false)
 	errStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
-	modelBadge      = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
-	notesBadge      = lipgloss.NewStyle().Foreground(lipgloss.Color("71"))
 	suggNormalStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	suggSelectStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("63")).Bold(true)
 	dividerStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
@@ -216,22 +225,22 @@ func New(
 	)
 
 	return Model{
-		profileName:     profileName,
-		activeModel:     activeModel,
-		cacheStatus:     cacheStatus,
-		tokenStatus:     tokenStatus,
-		input:           ti,
-		suggCursor:      -1,
-		dispatcher:      dispatcher,
-		execCtx:         execCtx,
-		provider:        providerFn,
-		listModels:      listModels,
-		modelSelected:   modelSelected,
-		listProfiles:  listProfiles,
-		profileSwitch: profileSwitch,
-		listBackups:   listBackups,
-		backupSelected:  backupSelected,
-		extractorModel:  extractorModel,
+		profileName:            profileName,
+		activeModel:            activeModel,
+		cacheStatus:            cacheStatus,
+		tokenStatus:            tokenStatus,
+		input:                  ti,
+		suggCursor:             -1,
+		dispatcher:             dispatcher,
+		execCtx:                execCtx,
+		provider:               providerFn,
+		listModels:             listModels,
+		modelSelected:          modelSelected,
+		listProfiles:           listProfiles,
+		profileSwitch:          profileSwitch,
+		listBackups:            listBackups,
+		backupSelected:         backupSelected,
+		extractorModel:         extractorModel,
 		extractorModelSelected: extractorModelSelected,
 	}
 }
@@ -822,12 +831,12 @@ func (m Model) View() string {
 
 // renderFooter draws the bottom status line.
 func (m *Model) renderFooter() string {
-	dim    := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	green  := lipgloss.NewStyle().Foreground(lipgloss.Color("71"))
-	blue   := lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	green := lipgloss.NewStyle().Foreground(lipgloss.Color("71"))
+	blue := lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
 	yellow := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 	purple := lipgloss.NewStyle().Foreground(lipgloss.Color("135"))
-	white  := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	white := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 
 	// Left: token stats + cache status + notes badge.
 	var leftParts []string

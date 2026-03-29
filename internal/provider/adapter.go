@@ -50,8 +50,8 @@ type Adapter interface {
 
 // Config holds the configuration needed to initialise a provider adapter.
 type Config struct {
-	ProviderType  string
-	Endpoint      string
-	Model         string
-	APIKey        string // decrypted at runtime; never persisted in plain text
+	ProviderType string
+	Endpoint     string
+	Model        string
+	APIKey       string // decrypted at runtime; never persisted in plain text
 }

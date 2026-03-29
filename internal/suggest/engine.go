@@ -67,9 +67,10 @@ func (e *Engine) Suggest(prefix string) []Suggestion {
 
 // scoreMatch returns a rank score for a candidate path given the typed prefix.
 // Lower scores are better:
-//   0 = exact match
-//   1 = exact prefix of first segment
-//   2 = prefix match anywhere in path
+//
+//	0 = exact match
+//	1 = exact prefix of first segment
+//	2 = prefix match anywhere in path
 func scoreMatch(path, prefix string) int {
 	if path == prefix {
 		return 0

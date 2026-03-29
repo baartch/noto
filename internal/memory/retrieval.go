@@ -114,7 +114,7 @@ func buildMemoryBlock(notes []*store.MemoryNote) string {
 	var sb strings.Builder
 	sb.WriteString("## Memory Notes\n")
 	for _, n := range notes {
-		sb.WriteString(fmt.Sprintf("- [%s] %s\n", n.Category, n.Content))
+		fmt.Fprintf(&sb, "- [%s] %s\n", n.Category, n.Content)
 	}
 	return sb.String()
 }
@@ -134,4 +134,3 @@ func cacheKeyFor(profileID, systemPrompt, summaryID string) string {
 	hash := sha256.Sum256([]byte(profileID + "::" + systemPrompt + "::" + summaryID))
 	return fmt.Sprintf("ctx:%x", hash)
 }
-

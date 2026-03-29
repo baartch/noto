@@ -51,10 +51,7 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 		Temperature: req.Temperature,
 	}
 	for _, m := range req.Messages {
-		payload.Messages = append(payload.Messages, openAIMessage{
-			Role:    m.Role,
-			Content: m.Content,
-		})
+		payload.Messages = append(payload.Messages, openAIMessage(m))
 	}
 
 	body, err := json.Marshal(payload)

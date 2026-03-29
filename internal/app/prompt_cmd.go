@@ -49,7 +49,11 @@ func runPromptCommand(ctx context.Context, commandPath string, args []string) er
 	if err != nil {
 		return err
 	}
-	defer globalDB.Close()
+	defer func() {
+		if err := globalDB.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "prompt: close global db: %v\n", err)
+		}
+	}()
 
 	profSvc := profile.NewService(store.NewProfileRepo(globalDB))
 	activeProfile, err := profSvc.GetActive(ctx)
@@ -61,7 +65,11 @@ func runPromptCommand(ctx context.Context, commandPath string, args []string) er
 	if err != nil {
 		return err
 	}
-	defer profileDB.Close()
+	defer func() {
+		if err := profileDB.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "prompt: close profile db: %v\n", err)
+		}
+	}()
 
 	registry := commands.NewRegistry()
 	if err := commands.RegisterPromptCommands(registry); err != nil {
@@ -74,9 +82,9 @@ func runPromptCommand(ctx context.Context, commandPath string, args []string) er
 	}
 
 	execCtx := &commands.ExecContext{
-		ProfileID:   activeProfile.ID,
-		ProfileSlug: activeProfile.Slug,
-		Output:      os.Stdout,
+		ProfileID:        activeProfile.ID,
+		ProfileSlug:      activeProfile.Slug,
+		Output:           os.Stdout,
 		SuspendForEditor: func(fn func() error) error { return fn() },
 		OnPromptChanged: func(slug string) error {
 			cacheRepo := store.NewContextCacheRepo(profileDB)
