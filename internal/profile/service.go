@@ -23,7 +23,7 @@ var ErrConfirmationRequired = errors.New("profile: explicit confirmation require
 // slugRe is the regex for a valid profile slug.
 
 // Service manages the profile lifecycle.
-type Service struct {}
+type Service struct{}
 
 // NewService creates a new profile Service.
 func NewService(_ *store.ProfileRepo) *Service {

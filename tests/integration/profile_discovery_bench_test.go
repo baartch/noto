@@ -16,7 +16,7 @@ func BenchmarkProfileDiscovery_List100(b *testing.B) {
 	ctx := context.Background()
 	svc := profile.NewService(store.NewProfileRepo(db))
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		if _, err := svc.Create(ctx, fmt.Sprintf("Profile %d", i)); err != nil {
 			b.Fatalf("create profile: %v", err)
 		}

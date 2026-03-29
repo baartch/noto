@@ -11,8 +11,8 @@ import (
 
 // ActiveProfile stores instance-local active profile selection.
 type ActiveProfile struct {
-	Slug          string    `json:"slug"`
-	LastSelected  time.Time `json:"last_selected"`
+	Slug         string    `json:"slug"`
+	LastSelected time.Time `json:"last_selected"`
 }
 
 // ErrActiveProfileNotFound is returned when no active profile is recorded.
