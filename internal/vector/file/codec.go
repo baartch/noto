@@ -2,6 +2,7 @@ package file
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 )
@@ -44,7 +45,7 @@ func (c *BinaryCodec) ReadHeader(r io.Reader) (*Header, error) {
 		return nil, fmt.Errorf("vector: read magic: %w", err)
 	}
 	if string(magic) != Magic {
-		return nil, fmt.Errorf("vector: invalid magic")
+		return nil, errors.New("vector: invalid magic")
 	}
 
 	profileID, err := readString(r)

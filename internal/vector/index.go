@@ -123,7 +123,7 @@ func (f *FileIndex) WithProfile(profileID string) {
 // Load reads memory.vec into memory if it exists.
 func (f *FileIndex) Load() error {
 	if f.codec == nil {
-		return fmt.Errorf("vector: codec not configured")
+		return errors.New("vector: codec not configured")
 	}
 	file, err := os.Open(f.path)
 	if err != nil {
@@ -193,7 +193,7 @@ func (f *FileIndex) Upsert(entry Entry) error {
 			return fmt.Errorf("vector: invalid vector_ref: %w", err)
 		}
 		if idx >= len(f.vectors) {
-			return fmt.Errorf("vector: vector_ref out of range")
+			return errors.New("vector: vector_ref out of range")
 		}
 		f.vectors[idx] = entry.Vector
 	}
@@ -228,7 +228,7 @@ func (f *FileIndex) Search(query []float32, k int) ([]SearchResult, error) {
 		return nil, nil
 	}
 	if f.embeddingDim > 0 && len(query) != f.embeddingDim {
-		return nil, fmt.Errorf("vector: query dim mismatch")
+		return nil, errors.New("vector: query dim mismatch")
 	}
 
 	if f.graph != nil {
@@ -273,7 +273,7 @@ func (f *FileIndex) Flush() error {
 		return nil
 	}
 	if f.codec == nil {
-		return fmt.Errorf("vector: codec not configured")
+		return errors.New("vector: codec not configured")
 	}
 	if err := os.MkdirAll(filepath.Dir(f.path), 0o755); err != nil {
 		return fmt.Errorf("vector: ensure index dir: %w", err)

@@ -81,7 +81,7 @@ func (a *OpenAICompatible) Embed(ctx context.Context, req EmbeddingRequest) (*Em
 		return nil, fmt.Errorf("provider: decode embedding response: %w", err)
 	}
 	if len(apiResp.Data) == 0 {
-		return nil, fmt.Errorf("provider: no embedding data in response")
+		return nil, errors.New("provider: no embedding data in response")
 	}
 
 	vector := make([]float32, len(apiResp.Data[0].Embedding))

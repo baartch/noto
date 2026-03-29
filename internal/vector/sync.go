@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 
 	"noto/internal/provider"
@@ -56,7 +57,7 @@ func (s *Syncer) SyncNotes(ctx context.Context, notes []MemoryNoteRecord) error 
 			EmbeddingModel: s.embeddingModel,
 		}
 		if s.embedder == nil {
-			return fmt.Errorf("vector: embedder not configured")
+			return errors.New("vector: embedder not configured")
 		}
 		resp, err := s.embedder.Embed(ctx, provider.EmbeddingRequest{Input: note.Content, Model: s.embeddingModel})
 		if err != nil {

@@ -136,13 +136,13 @@ func (r *VectorManifestRepo) SetManifestStatus(ctx context.Context, profileID st
 // UpsertEntry inserts or updates a vector index entry.
 func (r *VectorManifestRepo) UpsertEntry(ctx context.Context, e *VectorEntry) error {
 	if e.ProfileID == "" {
-		return fmt.Errorf("store: vector entry missing profile_id")
+		return errors.New("store: vector entry missing profile_id")
 	}
 	if e.SourceType == "" || e.SourceID == "" {
-		return fmt.Errorf("store: vector entry missing source")
+		return errors.New("store: vector entry missing source")
 	}
 	if e.VectorRef == "" {
-		return fmt.Errorf("store: vector entry missing vector_ref")
+		return errors.New("store: vector entry missing vector_ref")
 	}
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO vector_index_entries

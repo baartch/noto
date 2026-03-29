@@ -3,6 +3,7 @@ package hnsw
 import (
 	"bytes"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -39,7 +40,7 @@ func (g *SimpleGraph) Insert(id string, vector []float32) error {
 		g.Dim = len(vector)
 	}
 	if len(vector) != g.Dim {
-		return fmt.Errorf("hnsw: dim mismatch")
+		return errors.New("hnsw: dim mismatch")
 	}
 	g.Nodes = append(g.Nodes, Node{ID: id, Vector: vector})
 	return nil
@@ -54,7 +55,7 @@ func (g *SimpleGraph) Search(query []float32, k int) ([]string, []float32, error
 		return nil, nil, nil
 	}
 	if len(query) != g.Dim {
-		return nil, nil, fmt.Errorf("hnsw: query dim mismatch")
+		return nil, nil, errors.New("hnsw: query dim mismatch")
 	}
 	results := make([]result, 0, len(g.Nodes))
 	for _, n := range g.Nodes {
