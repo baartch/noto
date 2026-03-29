@@ -17,9 +17,9 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [X] T001 Review existing profile metadata usage in internal/profile and internal/store (notes in specs/002-portable-profiles/research.md)
-- [X] T002 [P] Inventory global DB profile table usage in internal/app, internal/store, internal/commands
-- [X] T003 [P] Confirm profile directory layout in internal/config and document in specs/002-portable-profiles/research.md
+- [x] T001 Review existing profile metadata usage in internal/profile and internal/store (notes in specs/002-portable-profiles/research.md)
+- [x] T002 [P] Inventory global DB profile table usage in internal/app, internal/store, internal/commands
+- [x] T003 [P] Confirm profile directory layout in internal/config and document in specs/002-portable-profiles/research.md
 
 ---
 
@@ -27,11 +27,11 @@
 
 **Purpose**: Core infrastructure that MUST be complete before ANY user story can be implemented
 
-- [X] T004 Define profile metadata file format in internal/profile/metadata.go
-- [X] T005 [P] Add profile metadata read/write helpers in internal/profile/metadata.go
-- [X] T006 [P] Add active profile selection config file helpers in internal/config/active_profile.go
-- [X] T007 Update profile discovery to scan profile directories in internal/profile/discovery.go
-- [X] T008 Update CLI/TUI profile listing to use discovery helpers in internal/commands/profile_commands.go and internal/app/profile_cmd.go
+- [x] T004 Define profile metadata file format in internal/profile/metadata.go
+- [x] T005 [P] Add profile metadata read/write helpers in internal/profile/metadata.go
+- [x] T006 [P] Add active profile selection config file helpers in internal/config/active_profile.go
+- [x] T007 Update profile discovery to scan profile directories in internal/profile/discovery.go
+- [x] T008 Update CLI/TUI profile listing to use discovery helpers in internal/commands/profile_commands.go and internal/app/profile_cmd.go
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -45,15 +45,15 @@
 
 ### Tests for User Story 1 (REQUIRED) ⚠️
 
-- [X] T009 [P] [US1] Integration test for portable profile load in tests/integration/profile_portability_test.go
-- [X] T010 [P] [US1] Integration test for metadata file creation in tests/integration/profile_metadata_test.go
+- [x] T009 [P] [US1] Integration test for portable profile load in tests/integration/profile_portability_test.go
+- [x] T010 [P] [US1] Integration test for metadata file creation in tests/integration/profile_metadata_test.go
 
 ### Implementation for User Story 1
 
-- [X] T011 [P] [US1] Persist metadata file on profile create in internal/profile/service.go
-- [X] T012 [US1] Update profile rename to update metadata file in internal/profile/service.go
-- [X] T013 [US1] Update profile delete to remove metadata file in internal/profile/service.go
-- [X] T014 [US1] Ensure prompt paths in metadata align with internal/profile/prompt_store.go
+- [x] T011 [P] [US1] Persist metadata file on profile create in internal/profile/service.go
+- [x] T012 [US1] Update profile rename to update metadata file in internal/profile/service.go
+- [x] T013 [US1] Update profile delete to remove metadata file in internal/profile/service.go
+- [x] T014 [US1] Ensure prompt paths in metadata align with internal/profile/prompt_store.go
 
 **Checkpoint**: User Story 1 should be fully functional and testable independently
 
@@ -67,13 +67,13 @@
 
 ### Tests for User Story 2 (REQUIRED) ⚠️
 
-- [X] T015 [P] [US2] Integration test for global DB exclusion in tests/integration/profile_global_db_test.go
+- [x] T015 [P] [US2] Integration test for global DB exclusion in tests/integration/profile_global_db_test.go
 
 ### Implementation for User Story 2
 
-- [X] T016 [US2] Remove global profile table usage in internal/store/profile_repo.go and internal/app/db.go
-- [X] T017 [US2] Remove global DB migrations (legacy removed)
-- [X] T018 [US2] Update profile selection paths to avoid global DB in internal/profile/service.go
+- [x] T016 [US2] Remove global profile table usage in internal/store/profile_repo.go and internal/app/db.go
+- [x] T017 [US2] Remove global DB migrations (legacy removed)
+- [x] T018 [US2] Update profile selection paths to avoid global DB in internal/profile/service.go
 
 **Checkpoint**: User Story 2 should be fully functional and testable independently
 
@@ -87,14 +87,14 @@
 
 ### Tests for User Story 3 (REQUIRED) ⚠️
 
-- [X] T019 [P] [US3] Integration test for profile listing via directory scan in tests/integration/profile_discovery_test.go
-- [X] T020 [P] [US3] Integration test for duplicate names disambiguation in tests/integration/profile_duplicate_names_test.go
+- [x] T019 [P] [US3] Integration test for profile listing via directory scan in tests/integration/profile_discovery_test.go
+- [x] T020 [P] [US3] Integration test for duplicate names disambiguation in tests/integration/profile_duplicate_names_test.go
 
 ### Implementation for User Story 3
 
-- [X] T021 [US3] Implement directory scan listing in internal/profile/discovery.go
-- [X] T022 [US3] Use slug disambiguation in listing/selection in internal/commands/profile_commands.go
-- [X] T023 [US3] Persist active profile selection to local config in internal/profile/service.go and internal/config/active_profile.go
+- [x] T021 [US3] Implement directory scan listing in internal/profile/discovery.go
+- [x] T022 [US3] Use slug disambiguation in listing/selection in internal/commands/profile_commands.go
+- [x] T023 [US3] Persist active profile selection to local config in internal/profile/service.go and internal/config/active_profile.go
 
 **Checkpoint**: User Story 3 should be fully functional and testable independently
 
@@ -104,10 +104,10 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [X] T024 [P] Update quickstart docs in specs/002-portable-profiles/quickstart.md
-- [X] T025 Validate UX messaging consistency in internal/commands/profile_commands.go and internal/app/profile_cmd.go
-- [X] T026 Performance check for directory scan in tests/integration/profile_discovery_bench_test.go
-- [ ] T027 Run quickstart.md validation steps manually and note results in specs/002-portable-profiles/quickstart.md
+- [x] T024 [P] Update quickstart docs in specs/002-portable-profiles/quickstart.md
+- [x] T025 Validate UX messaging consistency in internal/commands/profile_commands.go and internal/app/profile_cmd.go
+- [x] T026 Performance check for directory scan in tests/integration/profile_discovery_bench_test.go
+- [x] T027 Run quickstart.md validation steps manually and note results in specs/002-portable-profiles/quickstart.md
 
 ---
 
