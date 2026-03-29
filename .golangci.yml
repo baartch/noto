@@ -1,0 +1,54 @@
+version: "2"
+
+run:
+  timeout: 5m
+  go: "1.26"
+
+linters:
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errcheck
+    - gocritic
+    - govet
+    - ineffassign
+    - perfsprint
+    - predeclared
+    - prealloc
+    - staticcheck
+    - unused
+    - misspell
+    - modernize
+    - revive
+    - exhaustive
+    - noctx
+  exclusions:
+    rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+  settings:
+    revive:
+      rules:
+        - name: exported
+          severity: warning
+        - name: var-naming
+          severity: warning
+    misspell:
+      locale: US
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - noto
+    
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

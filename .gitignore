@@ -1,0 +1,36 @@
+dev_helpers
+
+# Go build artefacts
+bin/
+*.exe
+*.test
+*.out
+vendor/
+
+# Go module cache (go.sum should be committed — do not ignore it)
+
+# Noto local data (never commit user data)
+~/.noto/
+
+# Environment files
+.env
+.env.*
+*.local
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Test artefacts
+/coverage/
+*.coverprofile
+
+# Compiled SQLite artefacts (CGo build temps)
+*.o
+*.a
