@@ -116,6 +116,7 @@ noto chat                       # start interactive chat session
 /profile delete <name>
 /prompt show
 /prompt edit
+/model extractor <model>
 ```
 
 Type `/` to see all available commands. Type `/pro` to see profile-related commands.

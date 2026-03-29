@@ -79,6 +79,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 	if err := commands.RegisterProviderCommands(registry); err != nil {
 		return err
 	}
+	if err := commands.RegisterModelExtractorCommand(registry); err != nil {
+		return err
+	}
 	if err := commands.RegisterMemoryCommands(registry); err != nil {
 		return err
 	}

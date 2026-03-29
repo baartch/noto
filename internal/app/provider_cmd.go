@@ -21,7 +21,6 @@ func providerCmd() *cobra.Command {
 	cmd.AddCommand(providerSetCmd())
 	cmd.AddCommand(providerShowCmd())
 	cmd.AddCommand(providerClearCmd())
-	cmd.AddCommand(providerExtractorModelCmd())
 	return cmd
 }
 
@@ -188,36 +187,6 @@ func providerClearCmd() *cobra.Command {
 	}
 }
 
-func providerExtractorModelCmd() *cobra.Command {
-	var model string
-	return &cobra.Command{
-		Use:   "extractor-model",
-		Short: "Set the extractor model for the active profile",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			model = args[0]
-			ctx := context.Background()
-			globalDB, profileDB, activeProfile, err := openBothDBs(ctx)
-			if err != nil {
-				return err
-			}
-			defer func() {
-				_ = globalDB.Close()
-			}()
-			defer func() {
-				_ = profileDB.Close()
-			}()
-
-			repo := store.NewProviderConfigRepo(profileDB)
-			if err := repo.SetExtractorModel(ctx, activeProfile.ID, model); err != nil {
-				return err
-			}
-			fmt.Printf("Extractor model set for profile %q: %s\n", activeProfile.Name, model)
-			return nil
-		},
-	}
-}
-
 // ---- helpers ----------------------------------------------------------------
 
 // openBothDBs opens the global DB, resolves the active profile, then opens
@@ -265,4 +234,3 @@ func maskKey(key string) string {
 	}
 	return key[:4]
 }
-

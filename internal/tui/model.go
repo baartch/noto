@@ -520,7 +520,7 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	if strings.TrimSpace(val) == "/model" {
 		return m.openPicker(pickerKindModel, cmds)
 	}
-	if strings.TrimSpace(val) == "/provider extractor-model" {
+	if strings.TrimSpace(val) == "/model extractor" {
 		return m.openPicker(pickerKindExtractorModel, cmds)
 	}
 
