@@ -31,7 +31,7 @@
 - [X] T005 [P] Add profile metadata read/write helpers in internal/profile/metadata.go
 - [X] T006 [P] Add active profile selection config file helpers in internal/config/active_profile.go
 - [X] T007 Update profile discovery to scan profile directories in internal/profile/discovery.go
-- [ ] T008 Update CLI/TUI profile listing to use discovery helpers in internal/commands/profile_commands.go and internal/app/profile_cmd.go
+- [X] T008 Update CLI/TUI profile listing to use discovery helpers in internal/commands/profile_commands.go and internal/app/profile_cmd.go
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 

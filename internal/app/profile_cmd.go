@@ -79,10 +79,14 @@ func profileListCmd() *cobra.Command {
 			}
 			for _, p := range profiles {
 				def := ""
+				label := p.Name
 				if p.IsDefault {
 					def = "*"
 				}
-				if _, err := fmt.Fprintf(w, "%s\t%s\t%s\n", p.Name, p.Slug, def); err != nil {
+				if p.Name != p.Slug {
+					label = fmt.Sprintf("%s (%s)", p.Name, p.Slug)
+				}
+				if _, err := fmt.Fprintf(w, "%s\t%s\t%s\n", label, p.Slug, def); err != nil {
 					return err
 				}
 			}
