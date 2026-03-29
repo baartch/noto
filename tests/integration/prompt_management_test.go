@@ -9,6 +9,7 @@ import (
 func TestPromptStore_GetDefault_WhenFileAbsent(t *testing.T) {
 	// Use a temp slug that won't have a real file on disk.
 	slug := "test-prompt-slug-" + t.Name()
+	t.Setenv("NOTO_APP_DIR", t.TempDir())
 	ps := profile.NewPromptStore(slug)
 
 	content, err := ps.GetSystemPrompt()
@@ -22,6 +23,7 @@ func TestPromptStore_GetDefault_WhenFileAbsent(t *testing.T) {
 
 func TestPromptStore_SetAndGet(t *testing.T) {
 	slug := "test-prompt-set-" + t.Name()
+	t.Setenv("NOTO_APP_DIR", t.TempDir())
 	ps := profile.NewPromptStore(slug)
 
 	custom := "You are a specialized assistant for software architecture."
@@ -40,6 +42,7 @@ func TestPromptStore_SetAndGet(t *testing.T) {
 
 func TestPromptStore_PromptVersion_ChangesAfterUpdate(t *testing.T) {
 	slug := "test-prompt-version-" + t.Name()
+	t.Setenv("NOTO_APP_DIR", t.TempDir())
 	ps := profile.NewPromptStore(slug)
 
 	if err := ps.SetSystemPrompt("version 1"); err != nil {
