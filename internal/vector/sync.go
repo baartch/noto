@@ -31,7 +31,7 @@ type Embedder interface {
 	Embed(ctx context.Context, req provider.EmbeddingRequest) (*provider.EmbeddingResponse, error)
 }
 
-// Syncer synchronises SQLite memory sources into the vector index.
+// Syncer synchronizes SQLite memory sources into the vector index.
 type Syncer struct {
 	index          Index
 	profileID      string

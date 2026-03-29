@@ -72,12 +72,14 @@ func (s *stubNoteLister) ListByProfile(_ context.Context, _ string) ([]vector.Me
 
 type stubIndexSync struct{}
 
-func (s *stubIndexSync) Upsert(_ vector.Entry) error { return nil }
+func (s *stubIndexSync) Upsert(_ vector.Entry) error                { return nil }
 func (s *stubIndexSync) Delete(_ vector.SourceType, _ string) error { return nil }
-func (s *stubIndexSync) Search(_ []float32, _ int) ([]vector.SearchResult, error) { return nil, nil }
+func (s *stubIndexSync) Search(_ []float32, _ int) ([]vector.SearchResult, error) {
+	return nil, nil
+}
 func (s *stubIndexSync) Rebuild(_ []vector.Entry) error { return nil }
-func (s *stubIndexSync) Flush() error { return nil }
-func (s *stubIndexSync) Close() error { return nil }
+func (s *stubIndexSync) Flush() error                   { return nil }
+func (s *stubIndexSync) Close() error                   { return nil }
 
 type stubEmbedder struct{}
 

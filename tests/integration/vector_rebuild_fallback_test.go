@@ -12,18 +12,18 @@ type stubManifestStatusSetter struct {
 	lastStatus string
 }
 
-type stubIndex struct{
+type stubIndex struct {
 	err error
 }
 
-func (s *stubIndex) Upsert(_ vector.Entry) error { return nil }
+func (s *stubIndex) Upsert(_ vector.Entry) error                { return nil }
 func (s *stubIndex) Delete(_ vector.SourceType, _ string) error { return nil }
 func (s *stubIndex) Search(_ []float32, _ int) ([]vector.SearchResult, error) {
 	return nil, s.err
 }
 func (s *stubIndex) Rebuild(_ []vector.Entry) error { return nil }
-func (s *stubIndex) Flush() error { return nil }
-func (s *stubIndex) Close() error { return nil }
+func (s *stubIndex) Flush() error                   { return nil }
+func (s *stubIndex) Close() error                   { return nil }
 
 func (s *stubManifestStatusSetter) SetManifestStatusStr(_ context.Context, _ string, status string) error {
 	s.lastStatus = status
