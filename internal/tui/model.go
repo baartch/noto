@@ -60,7 +60,7 @@ func NotesSaving() tea.Msg { return notesSavingMsg{} }
 func StatsUpdated(formatted string) tea.Msg { return statsUpdatedMsg{formatted: formatted} }
 
 // ProfileSwitched updates the TUI state after switching profiles.
-func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, tokenStatus string, provider ProviderFunc, listModels ListModelsFunc, modelSelected ModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc) profileSwitchedMsg {
+func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, tokenStatus string, provider ProviderFunc, listModels ListModelsFunc, modelSelected ModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, history []string) profileSwitchedMsg {
 	return profileSwitchedMsg{
 		profileName:            profileName,
 		activeModel:            activeModel,
@@ -71,6 +71,7 @@ func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, toke
 		listModels:             listModels,
 		modelSelected:          modelSelected,
 		extractorModelSelected: extractorModelSelected,
+		history:                history,
 	}
 }
 
@@ -112,6 +113,7 @@ type profileSwitchedMsg struct {
 	listModels             ListModelsFunc
 	modelSelected          ModelSelectedFunc
 	extractorModelSelected ExtractorModelSelectedFunc
+	history                []string
 }
 type profileSwitchFailedMsg struct{ err error }
 type spinnerTickMsg struct{}
@@ -147,6 +149,11 @@ type Model struct {
 	suggestions []suggest.Suggestion
 	suggCursor  int
 	suggActive  bool
+
+	// input history
+	history      []string
+	historyIndex int
+	historyDraft string
 
 	// picker overlay
 	picker     *pickerState
@@ -207,6 +214,7 @@ func New(
 	listBackups ListBackupsFunc,
 	backupSelected BackupSelectedFunc,
 	extractorModelSelected ExtractorModelSelectedFunc,
+	inputHistory []string,
 ) Model {
 	ti := textarea.New()
 	ti.Placeholder = "Type a message or /command…"
@@ -225,6 +233,10 @@ func New(
 		key.WithHelp("alt+enter", "insert newline"),
 	)
 
+	if inputHistory == nil {
+		inputHistory = []string{}
+	}
+
 	return Model{
 		profileName:            profileName,
 		activeModel:            activeModel,
@@ -232,6 +244,8 @@ func New(
 		tokenStatus:            tokenStatus,
 		input:                  ti,
 		suggCursor:             -1,
+		history:                inputHistory,
+		historyIndex:           len(inputHistory),
 		dispatcher:             dispatcher,
 		execCtx:                execCtx,
 		provider:               providerFn,
@@ -354,6 +368,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.listModels = msg.listModels
 		m.modelSelected = msg.modelSelected
 		m.extractorModelSelected = msg.extractorModelSelected
+		m.history = msg.history
+		m.historyIndex = len(msg.history)
+		m.historyDraft = ""
 		m.messages = []chatMessage{{role: "command", content: "Switched to profile: " + msg.profileName, timestamp: time.Now()}}
 		m.err = nil
 		m.clearSuggestions()
@@ -419,6 +436,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input.CursorEnd()
 				return m, nil
 			}
+			if m.navigateHistory(-1) {
+				return m, nil
+			}
 			var vpCmd tea.Cmd
 			m.viewport, vpCmd = m.viewport.Update(msg)
 			return m, vpCmd
@@ -429,6 +449,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.suggCursor = 0
 				m.input.SetValue("/" + m.suggestions[m.suggCursor].CommandPath)
 				m.input.CursorEnd()
+				return m, nil
+			}
+			if m.navigateHistory(1) {
 				return m, nil
 			}
 			var vpCmd tea.Cmd
@@ -449,6 +472,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.input.SetValue("")
 			m.clearSuggestions()
 			m.err = nil
+			m.recordHistory(val)
 			return m.handleSubmit(val, cmds)
 		}
 	}
@@ -791,6 +815,51 @@ func (m *Model) clearSuggestions() {
 	m.suggestions = nil
 	m.suggCursor = -1
 	m.suggActive = false
+}
+
+func (m *Model) recordHistory(val string) {
+	if strings.TrimSpace(val) == "" {
+		return
+	}
+	if len(m.history) == 0 || m.history[len(m.history)-1] != val {
+		m.history = append(m.history, val)
+	}
+	m.historyIndex = len(m.history)
+	m.historyDraft = ""
+}
+
+func (m *Model) navigateHistory(delta int) bool {
+	if len(m.history) == 0 {
+		return false
+	}
+	if m.historyIndex == 0 && delta < 0 {
+		return false
+	}
+	if m.historyIndex == len(m.history) && delta > 0 {
+		return false
+	}
+
+	if m.historyIndex == len(m.history) {
+		m.historyDraft = m.input.Value()
+	}
+
+	m.historyIndex += delta
+	if m.historyIndex < 0 {
+		m.historyIndex = 0
+	}
+	if m.historyIndex > len(m.history) {
+		m.historyIndex = len(m.history)
+	}
+
+	if m.historyIndex == len(m.history) {
+		m.input.SetValue(m.historyDraft)
+		m.input.CursorEnd()
+		return true
+	}
+
+	m.input.SetValue(m.history[m.historyIndex])
+	m.input.CursorEnd()
+	return true
 }
 
 // View implements tea.Model.

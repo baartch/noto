@@ -115,6 +115,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 	activeModel := ""
 	extractorModel := ""
 	cacheStatus := "cache: n/a"
+	inputHistory := loadInputHistory(ctx, profileDB, activeProfile.ID)
 
 	var providerFn tui.ProviderFunc
 	var listModelsFn tui.ListModelsFunc
@@ -247,6 +248,8 @@ func runChat(_ *cobra.Command, _ []string) error {
 			listModelsFn = nil
 			modelSelectedFn = func(modelID string) error { return nil }
 			extractorModelSelectedFn = func(modelID string) error { return nil }
+			inputHistory = loadInputHistory(ctx, profileDB, p.ID)
+			inputHistory = loadInputHistory(ctx, profileDB, p.ID)
 
 			if providerCfg != nil && decryptedKey != "" {
 				activeModel = providerCfg.EffectiveModel()
@@ -335,7 +338,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 				}
 			}
 
-			return tui.ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, "tokens: n/a", providerFn, listModelsFn, modelSelectedFn, extractorModelSelectedFn)
+			return tui.ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, "tokens: n/a", providerFn, listModelsFn, modelSelectedFn, extractorModelSelectedFn, inputHistory)
 		}
 	}
 	listBackupsFn := func(ctx context.Context) ([]string, error) {
@@ -353,6 +356,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 		listProfilesFn, profileSwitchCmd,
 		listBackupsFn, backupSelectedFn,
 		extractorModelSelectedFn,
+		inputHistory,
 	)
 	prog = tea.NewProgram(m, tea.WithAltScreen())
 	if _, runErr := prog.Run(); runErr != nil {
@@ -373,6 +377,16 @@ func loadSystemPrompt(slug string) string {
 }
 
 // loadProviderConfig reads the active provider config and decrypts the API key.
+func loadInputHistory(ctx context.Context, db *store.DB, profileID string) []string {
+	repo := store.NewMessageRepo(db)
+	msgs, err := repo.ListRecentUserMessages(ctx, profileID, 50)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "chat: load input history: %v\n", err)
+		return nil
+	}
+	return msgs
+}
+
 func loadProviderConfig(ctx context.Context, db *store.DB, profileID string) (*store.ProviderConfig, string) {
 	apiKey := os.Getenv("NOTO_API_KEY")
 	if apiKey != "" {

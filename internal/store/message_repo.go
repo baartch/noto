@@ -94,3 +94,41 @@ func (r *MessageRepo) CountByConversation(ctx context.Context, conversationID st
 	}
 	return n, nil
 }
+
+// ListRecentUserMessages returns recent user message contents for a profile.
+func (r *MessageRepo) ListRecentUserMessages(ctx context.Context, profileID string, limit int) ([]string, error) {
+	if limit <= 0 {
+		return []string{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT m.content
+		FROM messages m
+		JOIN conversations c ON m.conversation_id = c.id
+		WHERE c.profile_id = ? AND m.role = 'user'
+		ORDER BY m.created_at DESC
+		LIMIT ?
+	`, profileID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: list recent user messages: %w", err)
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	var out []string
+	for rows.Next() {
+		var content string
+		if err := rows.Scan(&content); err != nil {
+			return nil, fmt.Errorf("store: scan recent user message: %w", err)
+		}
+		out = append(out, content)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out, nil
+}
