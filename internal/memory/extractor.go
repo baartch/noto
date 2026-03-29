@@ -203,7 +203,7 @@ func (e *Extractor) filterNewNotes(ctx context.Context, items []extractedItem, e
 		existing = existing[len(existing)-50:]
 	}
 
-	var existingLines []string
+	existingLines := make([]string, 0, len(existing))
 	for _, n := range existing {
 		existingLines = append(existingLines, fmt.Sprintf("- (%s) %s", n.Category, n.Content))
 	}
