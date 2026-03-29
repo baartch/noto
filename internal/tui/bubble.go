@@ -38,12 +38,8 @@ var cachedRenderer mdRenderer
 func renderMarkdown(content string, maxWidth int) string {
 	// Clamp to a readable width.
 	w := maxWidth - 6 // subtract bubble padding
-	if w < 40 {
-		w = 40
-	}
-	if w > 120 {
-		w = 120
-	}
+	w = max(w, 40)
+	w = min(w, 120)
 
 	if cachedRenderer.r == nil || cachedRenderer.width != w {
 		// Use an explicit dark style instead of WithAutoStyle().
@@ -75,12 +71,8 @@ func renderUserBubble(content, authorName string, ts time.Time, termWidth int) s
 
 	// Bubble occupies at most 70% of terminal width, minimum 40 cols.
 	bubbleW := int(float64(termWidth) * 0.70)
-	if bubbleW < 40 {
-		bubbleW = 40
-	}
-	if bubbleW > termWidth-2 {
-		bubbleW = termWidth - 2
-	}
+	bubbleW = max(bubbleW, 40)
+	bubbleW = min(bubbleW, termWidth-2)
 	innerW := bubbleW - 4 // subtract horizontal padding (2 each side)
 
 	wrapped := wordWrap(content, innerW)
@@ -96,9 +88,7 @@ func renderUserBubble(content, authorName string, ts time.Time, termWidth int) s
 
 	// Right-align: pad = space to push bubble to the right edge.
 	leftPad := termWidth - bubbleW
-	if leftPad < 0 {
-		leftPad = 0
-	}
+	leftPad = max(leftPad, 0)
 	pad := strings.Repeat(" ", leftPad)
 
 	paddedBubble := padLines(bubble, pad)

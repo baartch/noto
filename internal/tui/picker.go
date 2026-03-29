@@ -100,14 +100,10 @@ func (p *pickerState) render(maxHeight int) string {
 	sb.WriteString(pickerFilterStyle.Render(fitLine(filterLine, width)) + "\n")
 
 	maxRows := maxHeight - 4
-	if maxRows < 3 {
-		maxRows = 3
-	}
+	maxRows = max(maxRows, 3)
 
 	start := p.cursor - maxRows/2
-	if start < 0 {
-		start = 0
-	}
+	start = max(start, 0)
 	end := start + maxRows
 	if end > len(list) {
 		end = len(list)

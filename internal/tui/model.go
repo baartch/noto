@@ -260,9 +260,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input.SetWidth(msg.Width - 4)
 		// header(1) + divider(1) + inputDivider(1) + inputLine(1) + padding(1) = 5
 		vpH := msg.Height - 5 // inputDivider+input+hint+footer
-		if vpH < 1 {
-			vpH = 1
-		}
+		vpH = max(vpH, 1)
 		if !m.ready {
 			m.viewport = viewport.New(msg.Width, vpH)
 			m.viewport.SetContent(m.renderHistory())
@@ -804,9 +802,7 @@ func (m Model) View() string {
 	var mid strings.Builder
 	if m.picker != nil {
 		ph := m.height / 2
-		if ph < 6 {
-			ph = 6
-		}
+		ph = max(ph, 6)
 		mid.WriteString(m.picker.render(ph) + "\n")
 	} else if len(m.suggestions) > 0 {
 		mid.WriteString(m.renderSuggestions())
