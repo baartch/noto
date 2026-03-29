@@ -71,6 +71,7 @@ func Recover(slug string, w io.Writer) RecoveryResult {
 }
 
 func integrityCheck(path string) (bool, string, error) {
+	ctx := context.Background()
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return false, "", err
@@ -79,7 +80,7 @@ func integrityCheck(path string) (bool, string, error) {
 		_ = db.Close()
 	}()
 
-	rows, err := db.Query(`PRAGMA integrity_check;`)
+	rows, err := db.QueryContext(ctx, `PRAGMA integrity_check;`)
 	if err != nil {
 		return false, "", err
 	}
