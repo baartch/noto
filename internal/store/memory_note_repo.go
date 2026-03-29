@@ -14,6 +14,7 @@ var ErrMemoryNoteNotFound = errors.New("store: memory note not found")
 // MemoryCategory classifies the type of knowledge captured in a note.
 type MemoryCategory string
 
+// Known memory note categories.
 const (
 	CategoryFact       MemoryCategory = "fact"
 	CategoryProgress   MemoryCategory = "progress"

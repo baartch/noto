@@ -14,6 +14,7 @@ var ErrManifestNotFound = errors.New("store: vector manifest not found")
 // VectorManifestStatus describes the health of a profile's vector index.
 type VectorManifestStatus string
 
+// Known vector manifest status values.
 const (
 	VectorManifestReady      VectorManifestStatus = "ready"
 	VectorManifestStale      VectorManifestStatus = "stale"

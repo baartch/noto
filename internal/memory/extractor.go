@@ -72,11 +72,12 @@ Existing notes:
 Candidate note:
 %s`
 
-// Extractor extracts memory notes using the LLM and persists them to SQLite.
+// CacheInvalidator invalidates cached memory retrieval context.
 type CacheInvalidator interface {
 	InvalidateAll(ctx context.Context, profileID string) error
 }
 
+// Extractor extracts memory notes using the LLM and persists them to SQLite.
 type Extractor struct {
 	noteRepo    *store.MemoryNoteRepo
 	adapter     provider.Adapter // nil disables extraction

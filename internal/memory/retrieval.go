@@ -29,13 +29,14 @@ type RetrievalContext struct {
 	CacheHit bool
 }
 
-// Retrieval assembles context for a chat turn from SQLite source-of-truth data.
+// CacheRepository manages cached assembled prompt payloads.
 type CacheRepository interface {
 	Get(ctx context.Context, profileID, cacheKey string) (*store.ContextCacheEntry, error)
 	Upsert(ctx context.Context, e *store.ContextCacheEntry) error
 	Invalidate(ctx context.Context, profileID, cacheKey string) error
 }
 
+// Retrieval assembles context for a chat turn from SQLite source-of-truth data.
 type Retrieval struct {
 	noteRepo    *store.MemoryNoteRepo
 	summaryRepo *store.SessionSummaryRepo

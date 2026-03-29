@@ -14,6 +14,7 @@ var ErrConversationNotFound = errors.New("store: conversation not found")
 // ConversationStatus represents the lifecycle state of a conversation.
 type ConversationStatus string
 
+// Known conversation status values.
 const (
 	ConversationActive   ConversationStatus = "active"
 	ConversationArchived ConversationStatus = "archived"

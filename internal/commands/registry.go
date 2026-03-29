@@ -9,6 +9,7 @@ import (
 // Scope defines whether a command operates on a specific profile or globally.
 type Scope string
 
+// Supported command scope values.
 const (
 	ScopeProfile Scope = "profile"
 	ScopeGlobal  Scope = "global"

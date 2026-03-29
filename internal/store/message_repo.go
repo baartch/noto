@@ -13,6 +13,7 @@ var ErrMessageNotFound = errors.New("store: message not found")
 // MessageRole defines the turn role in a conversation.
 type MessageRole string
 
+// Known message roles.
 const (
 	RoleUser      MessageRole = "user"
 	RoleAssistant MessageRole = "assistant"
