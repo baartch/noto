@@ -160,14 +160,15 @@ func wordWrap(text string, maxWidth int) string {
 
 	for _, word := range words {
 		wLen := utf8.RuneCountInString(word)
-		if lineLen == 0 {
+		switch {
+		case lineLen == 0:
 			current.WriteString(word)
 			lineLen = wLen
-		} else if lineLen+1+wLen <= maxWidth {
+		case lineLen+1+wLen <= maxWidth:
 			current.WriteByte(' ')
 			current.WriteString(word)
 			lineLen += 1 + wLen
-		} else {
+		default:
 			lines = append(lines, current.String())
 			current.Reset()
 			current.WriteString(word)
