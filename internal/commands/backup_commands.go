@@ -39,6 +39,8 @@ func backupRestoreHandler(ctx *ExecContext, args []string) error {
 	if err := backup.RestoreAt(ctx.ProfileSlug, timestamp); err != nil {
 		return err
 	}
-	fmt.Fprintf(ctx.Output, "Restored backup %s. Restart chat to reload data.\n", timestamp)
+	if _, err := fmt.Fprintf(ctx.Output, "Restored backup %s. Restart chat to reload data.\n", timestamp); err != nil {
+		return err
+	}
 	return nil
 }

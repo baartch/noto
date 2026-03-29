@@ -47,7 +47,9 @@ func (f *StartupFlow) Resolve(
 	switch len(profiles) {
 	case 0:
 		// No profiles — must create one.
-		fmt.Fprintln(w, "Welcome to Noto! Let's create your first profile.")
+		if _, err := fmt.Fprintln(w, "Welcome to Noto! Let's create your first profile."); err != nil {
+			return nil, err
+		}
 		name, err := promptCreateName()
 		if err != nil {
 			return nil, err

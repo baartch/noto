@@ -102,7 +102,9 @@ func (r *ProfileRepo) List(ctx context.Context) ([]*Profile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("store: list profiles: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var profiles []*Profile
 	for rows.Next() {

@@ -84,7 +84,9 @@ func (r *SessionSummaryRepo) ListByProfile(ctx context.Context, profileID string
 	if err != nil {
 		return nil, fmt.Errorf("store: list session summaries: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var summaries []*SessionSummary
 	for rows.Next() {

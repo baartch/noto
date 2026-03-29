@@ -61,7 +61,9 @@ func promptShowHandler(ctx *ExecContext, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("prompt show: %w", err)
 	}
-	fmt.Fprintln(ctx.Output, content)
+	if _, err := fmt.Fprintln(ctx.Output, content); err != nil {
+		return err
+	}
 	return nil
 }
 

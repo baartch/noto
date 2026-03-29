@@ -79,7 +79,9 @@ func profileCreateHandler(svc ProfileService) HandlerFunc {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(ctx.Output, "Created profile %q (slug: %s)\n", p.Name, p.Slug)
+		if _, err := fmt.Fprintf(ctx.Output, "Created profile %q (slug: %s)\n", p.Name, p.Slug); err != nil {
+			return err
+		}
 		return nil
 	}
 }
@@ -103,13 +105,17 @@ func profileListHandler(svc ProfileService) HandlerFunc {
 			return err
 		}
 		w := tabwriter.NewWriter(ctx.Output, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "NAME\tSLUG\tACTIVE")
+		if _, err := fmt.Fprintln(w, "NAME\tSLUG\tACTIVE"); err != nil {
+			return err
+		}
 		for _, p := range profiles {
 			active := ""
 			if p.IsDefault {
 				active = "●"
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\n", p.Name, p.Slug, active)
+			if _, err := fmt.Fprintf(w, "%s\t%s\t%s\n", p.Name, p.Slug, active); err != nil {
+				return err
+			}
 		}
 		return w.Flush()
 	}
@@ -124,7 +130,9 @@ func profileSelectHandler(svc ProfileService) HandlerFunc {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(ctx.Output, "Active profile: %q\n", p.Name)
+			if _, err := fmt.Fprintf(ctx.Output, "Active profile: %q\n", p.Name); err != nil {
+				return err
+			}
 			return nil
 		}
 		// No args — signal the TUI to open the interactive picker.
@@ -141,7 +149,9 @@ func profileRenameHandler(svc ProfileService) HandlerFunc {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(ctx.Output, "Renamed to %q\n", p.Name)
+		if _, err := fmt.Fprintf(ctx.Output, "Renamed to %q\n", p.Name); err != nil {
+			return err
+		}
 		return nil
 	}
 }
@@ -161,7 +171,9 @@ func profileDeleteHandler(svc ProfileService) HandlerFunc {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(ctx.Output, "Deleted profile %q\n", name)
+		if _, err := fmt.Fprintf(ctx.Output, "Deleted profile %q\n", name); err != nil {
+			return err
+		}
 		return nil
 	}
 }

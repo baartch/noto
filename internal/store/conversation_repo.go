@@ -69,7 +69,9 @@ func (r *ConversationRepo) ListByProfile(ctx context.Context, profileID string) 
 	if err != nil {
 		return nil, fmt.Errorf("store: list conversations: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var convs []*Conversation
 	for rows.Next() {

@@ -47,12 +47,16 @@ func providerExtractorModelHandler(ctx *ExecContext, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	repo := store.NewProviderConfigRepo(db)
 	if err := repo.SetExtractorModel(context.Background(), ctx.ProfileID, model); err != nil {
 		return err
 	}
-	fmt.Fprintf(ctx.Output, "Extractor model set to: %s\n", model)
+	if _, err := fmt.Fprintf(ctx.Output, "Extractor model set to: %s\n", model); err != nil {
+		return err
+	}
 	return nil
 }

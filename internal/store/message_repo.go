@@ -62,7 +62,9 @@ func (r *MessageRepo) ListByConversation(ctx context.Context, conversationID str
 	if err != nil {
 		return nil, fmt.Errorf("store: list messages: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var msgs []*Message
 	for rows.Next() {

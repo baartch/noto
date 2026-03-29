@@ -27,7 +27,9 @@ func (f *DeleteFlow) Run(ctx context.Context, profileName string, w io.Writer, r
 	if err := f.service.Delete(ctx, profileName, confirm); err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "Profile %q deleted.\n", profileName)
+	if _, err := fmt.Fprintf(w, "Profile %q deleted.\n", profileName); err != nil {
+		return err
+	}
 	return nil
 }
 

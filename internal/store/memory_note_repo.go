@@ -98,7 +98,9 @@ func (r *MemoryNoteRepo) ListByProfile(ctx context.Context, profileID string) ([
 	if err != nil {
 		return nil, fmt.Errorf("store: list memory notes: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var notes []*MemoryNote
 	for rows.Next() {

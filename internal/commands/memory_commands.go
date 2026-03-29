@@ -42,7 +42,9 @@ func memoryEditHandler(ctx *ExecContext, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	repo := store.NewMemoryNoteRepo(db)
 	note, err := repo.GetByID(context.Background(), noteID)
@@ -61,6 +63,8 @@ func memoryEditHandler(ctx *ExecContext, args []string) error {
 	if ctx.OnPromptChanged != nil {
 		_ = ctx.OnPromptChanged(ctx.ProfileSlug)
 	}
-	fmt.Fprintf(ctx.Output, "Updated note %s\n", noteID)
+	if _, err := fmt.Fprintf(ctx.Output, "Updated note %s\n", noteID); err != nil {
+		return err
+	}
 	return nil
 }

@@ -178,7 +178,9 @@ func (r *VectorManifestRepo) ListEntries(ctx context.Context, profileID string) 
 	if err != nil {
 		return nil, fmt.Errorf("store: list vector entries: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var entries []*VectorEntry
 	for rows.Next() {

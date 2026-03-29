@@ -48,8 +48,12 @@ func providerSetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer globalDB.Close()
-			defer profileDB.Close()
+			defer func() {
+				_ = globalDB.Close()
+			}()
+			defer func() {
+				_ = profileDB.Close()
+			}()
 
 			passphrase, err := security.MachinePassphrase()
 			if err != nil {
@@ -118,8 +122,12 @@ func providerShowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer globalDB.Close()
-			defer profileDB.Close()
+			defer func() {
+				_ = globalDB.Close()
+			}()
+			defer func() {
+				_ = profileDB.Close()
+			}()
 
 			repo := store.NewProviderConfigRepo(profileDB)
 			cfg, err := repo.GetActive(ctx, activeProfile.ID)
@@ -162,8 +170,12 @@ func providerClearCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer globalDB.Close()
-			defer profileDB.Close()
+			defer func() {
+				_ = globalDB.Close()
+			}()
+			defer func() {
+				_ = profileDB.Close()
+			}()
 
 			if err := deactivateProviderConfigs(ctx, profileDB, activeProfile.ID); err != nil {
 				return err
@@ -187,8 +199,12 @@ func providerExtractorModelCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer globalDB.Close()
-			defer profileDB.Close()
+			defer func() {
+				_ = globalDB.Close()
+			}()
+			defer func() {
+				_ = profileDB.Close()
+			}()
 
 			repo := store.NewProviderConfigRepo(profileDB)
 			if err := repo.SetExtractorModel(ctx, activeProfile.ID, model); err != nil {
@@ -212,13 +228,13 @@ func openBothDBs(ctx context.Context) (*store.DB, *store.DB, *store.Profile, err
 
 	activeProfile, err := resolveActiveProfile(ctx, globalDB)
 	if err != nil {
-		globalDB.Close()
+		_ = globalDB.Close()
 		return nil, nil, nil, err
 	}
 
 	profileDB, err := openProfileDB(activeProfile.Slug)
 	if err != nil {
-		globalDB.Close()
+		_ = globalDB.Close()
 		return nil, nil, nil, fmt.Errorf("provider: open profile db: %w", err)
 	}
 
