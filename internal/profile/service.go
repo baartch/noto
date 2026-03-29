@@ -59,19 +59,32 @@ func (s *Service) Create(ctx context.Context, name string) (*store.Profile, erro
 		SystemPromptPath: systemPromptPath,
 		DBPath:           dbPath,
 		IsDefault:        false,
+		CreatedAt:        time.Now().UTC(),
+		UpdatedAt:        time.Now().UTC(),
 	}
-	if err := s.repo.Create(ctx, p); err != nil {
-		if errors.Is(err, store.ErrProfileNameConflict) {
-			return nil, fmt.Errorf("profile: a profile named %q already exists", name)
-		}
+
+	if err := WriteMetadata(&Metadata{
+		ID:               p.ID,
+		Name:             p.Name,
+		Slug:             p.Slug,
+		CreatedAt:        p.CreatedAt,
+		UpdatedAt:        p.UpdatedAt,
+		SystemPromptPath: p.SystemPromptPath,
+	}); err != nil {
 		return nil, err
 	}
+
 	return p, nil
 }
 
 // List returns all profiles.
 func (s *Service) List(ctx context.Context) ([]*store.Profile, error) {
-	return s.repo.List(ctx)
+	_ = ctx
+	profiles, _, err := DiscoverProfiles()
+	if err != nil {
+		return nil, err
+	}
+	return profiles, nil
 }
 
 // Select sets the given profile as default (active).

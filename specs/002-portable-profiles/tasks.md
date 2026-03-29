@@ -17,9 +17,9 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Review existing profile metadata usage in internal/profile and internal/store (notes in specs/002-portable-profiles/research.md)
-- [ ] T002 [P] Inventory global DB profile table usage in internal/app, internal/store, internal/commands
-- [ ] T003 [P] Confirm profile directory layout in internal/config and document in specs/002-portable-profiles/research.md
+- [X] T001 Review existing profile metadata usage in internal/profile and internal/store (notes in specs/002-portable-profiles/research.md)
+- [X] T002 [P] Inventory global DB profile table usage in internal/app, internal/store, internal/commands
+- [X] T003 [P] Confirm profile directory layout in internal/config and document in specs/002-portable-profiles/research.md
 
 ---
 
@@ -27,10 +27,10 @@
 
 **Purpose**: Core infrastructure that MUST be complete before ANY user story can be implemented
 
-- [ ] T004 Define profile metadata file format in internal/profile/metadata.go
-- [ ] T005 [P] Add profile metadata read/write helpers in internal/profile/metadata.go
-- [ ] T006 [P] Add active profile selection config file helpers in internal/config/active_profile.go
-- [ ] T007 Update profile discovery to scan profile directories in internal/profile/discovery.go
+- [X] T004 Define profile metadata file format in internal/profile/metadata.go
+- [X] T005 [P] Add profile metadata read/write helpers in internal/profile/metadata.go
+- [X] T006 [P] Add active profile selection config file helpers in internal/config/active_profile.go
+- [X] T007 Update profile discovery to scan profile directories in internal/profile/discovery.go
 - [ ] T008 Update CLI/TUI profile listing to use discovery helpers in internal/commands/profile_commands.go and internal/app/profile_cmd.go
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
