@@ -45,8 +45,8 @@
 
 ### Tests for User Story 1 (REQUIRED) ⚠️
 
-- [ ] T009 [P] [US1] Integration test for portable profile load in tests/integration/profile_portability_test.go
-- [ ] T010 [P] [US1] Integration test for metadata file creation in tests/integration/profile_metadata_test.go
+- [X] T009 [P] [US1] Integration test for portable profile load in tests/integration/profile_portability_test.go
+- [X] T010 [P] [US1] Integration test for metadata file creation in tests/integration/profile_metadata_test.go
 
 ### Implementation for User Story 1
 

@@ -27,6 +27,11 @@ type Metadata struct {
 	SystemPromptPath string    `json:"system_prompt_path"`
 }
 
+// DefaultSystemPromptRelPath returns the prompt path relative to the profile directory.
+func DefaultSystemPromptRelPath() string {
+	return filepath.Join(config.PromptsDirName, config.SystemPromptName)
+}
+
 // MetadataPath returns the absolute path to the metadata file for a profile slug.
 func MetadataPath(slug string) (string, error) {
 	profileDir, err := config.ProfileDir(slug)
