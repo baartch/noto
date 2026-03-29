@@ -14,7 +14,7 @@ layer (not source of truth), rebuildable from SQLite.
 
 ## Technical Context
 
-**Language/Version**: Go 1.23+  
+**Language/Version**: Go 1.26+  
 **Primary Dependencies**: Cobra (command definitions), Bubble Tea + Bubbles + Lip Gloss (TUI),
 provider adapter layer for OpenAI-compatible APIs, `modernc.org/sqlite`, local vector index library
 (TBD in implementation; single-file ANN index)  
@@ -35,7 +35,7 @@ out-of-scope: multi-user sync, cloud backup, vector as source-of-truth
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+_GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 
 - **Code Quality Gate**: PASS
   - Single command registry shared by CLI and slash execution paths.
@@ -55,6 +55,7 @@ out-of-scope: multi-user sync, cloud backup, vector as source-of-truth
   - Existing startup/retrieval/cache/recovery budgets preserved.
 
 **Post-Design Re-check**: PASS
+
 - `research.md` defines slash parity architecture and parser behavior.
 - `data-model.md` includes slash command and suggestion event entities.
 - `contracts/cli-commands.md` codifies slash grammar + suggestion contract.
@@ -116,5 +117,5 @@ separation from SQLite source-of-truth storage.
 > **Fill ONLY if Constitution Check has violations that must be justified**
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| None | N/A | N/A |
+| --------- | ---------- | ------------------------------------ |
+| None      | N/A        | N/A                                  |
