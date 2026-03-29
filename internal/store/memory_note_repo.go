@@ -14,6 +14,7 @@ var ErrMemoryNoteNotFound = errors.New("store: memory note not found")
 // MemoryCategory classifies the type of knowledge captured in a note.
 type MemoryCategory string
 
+// Known memory note categories.
 const (
 	CategoryFact       MemoryCategory = "fact"
 	CategoryProgress   MemoryCategory = "progress"
@@ -26,10 +27,10 @@ const (
 type MemoryNote struct {
 	ID               string
 	ProfileID        string
-	ConversationID   string  // empty string means NULL in the DB
+	ConversationID   string // empty string means NULL in the DB
 	Category         MemoryCategory
 	Content          string
-	Importance       int // 1–10
+	Importance       int    // 1–10
 	SourceMessageIDs string // JSON array
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
@@ -47,7 +48,7 @@ func NewMemoryNoteRepo(db *DB) *MemoryNoteRepo {
 
 // Create inserts a new memory note.
 func (r *MemoryNoteRepo) Create(ctx context.Context, n *MemoryNote) error {
-	var convID interface{}
+	var convID any
 	if n.ConversationID != "" {
 		convID = n.ConversationID
 	}
@@ -98,7 +99,9 @@ func (r *MemoryNoteRepo) ListByProfile(ctx context.Context, profileID string) ([
 	if err != nil {
 		return nil, fmt.Errorf("store: list memory notes: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var notes []*MemoryNote
 	for rows.Next() {

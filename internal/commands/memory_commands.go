@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -22,16 +23,16 @@ func RegisterMemoryCommands(r *Registry) error {
 
 func memoryEditHandler(ctx *ExecContext, args []string) error {
 	if ctx.ProfileSlug == "" || ctx.ProfileID == "" {
-		return fmt.Errorf("no active profile")
+		return errors.New("no active profile")
 	}
 	if len(args) < 2 {
-		return fmt.Errorf("usage: memory edit <note-id> <content>")
+		return errors.New("usage: memory edit <note-id> <content>")
 	}
 
 	noteID := args[0]
 	content := strings.Join(args[1:], " ")
 	if strings.TrimSpace(content) == "" {
-		return fmt.Errorf("content must not be empty")
+		return errors.New("content must not be empty")
 	}
 
 	path, err := config.ProfileDBPath(ctx.ProfileSlug)
@@ -42,7 +43,9 @@ func memoryEditHandler(ctx *ExecContext, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	repo := store.NewMemoryNoteRepo(db)
 	note, err := repo.GetByID(context.Background(), noteID)
@@ -50,7 +53,7 @@ func memoryEditHandler(ctx *ExecContext, args []string) error {
 		return err
 	}
 	if note.ProfileID != ctx.ProfileID {
-		return fmt.Errorf("note does not belong to active profile")
+		return errors.New("note does not belong to active profile")
 	}
 
 	note.Content = content
@@ -61,6 +64,8 @@ func memoryEditHandler(ctx *ExecContext, args []string) error {
 	if ctx.OnPromptChanged != nil {
 		_ = ctx.OnPromptChanged(ctx.ProfileSlug)
 	}
-	fmt.Fprintf(ctx.Output, "Updated note %s\n", noteID)
+	if _, err := fmt.Fprintf(ctx.Output, "Updated note %s\n", noteID); err != nil {
+		return err
+	}
 	return nil
 }

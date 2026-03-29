@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -20,13 +19,11 @@ var (
 	userTimeStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
 	// Assistant bubble
-	asstBubbleBg   = lipgloss.Color("235") // dark grey
-	asstBubbleFg   = lipgloss.Color("252")
 	asstLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("78")).Bold(true)
 	asstTimeStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
 	// Command output
-	cmdLineStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("243")).Italic(true)
+	cmdLineStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("243")).Italic(true)
 	cmdPrefixStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 )
 
@@ -41,12 +38,8 @@ var cachedRenderer mdRenderer
 func renderMarkdown(content string, maxWidth int) string {
 	// Clamp to a readable width.
 	w := maxWidth - 6 // subtract bubble padding
-	if w < 40 {
-		w = 40
-	}
-	if w > 120 {
-		w = 120
-	}
+	w = max(w, 40)
+	w = min(w, 120)
 
 	if cachedRenderer.r == nil || cachedRenderer.width != w {
 		// Use an explicit dark style instead of WithAutoStyle().
@@ -78,12 +71,8 @@ func renderUserBubble(content, authorName string, ts time.Time, termWidth int) s
 
 	// Bubble occupies at most 70% of terminal width, minimum 40 cols.
 	bubbleW := int(float64(termWidth) * 0.70)
-	if bubbleW < 40 {
-		bubbleW = 40
-	}
-	if bubbleW > termWidth-2 {
-		bubbleW = termWidth - 2
-	}
+	bubbleW = max(bubbleW, 40)
+	bubbleW = min(bubbleW, termWidth-2)
 	innerW := bubbleW - 4 // subtract horizontal padding (2 each side)
 
 	wrapped := wordWrap(content, innerW)
@@ -99,9 +88,7 @@ func renderUserBubble(content, authorName string, ts time.Time, termWidth int) s
 
 	// Right-align: pad = space to push bubble to the right edge.
 	leftPad := termWidth - bubbleW
-	if leftPad < 0 {
-		leftPad = 0
-	}
+	leftPad = max(leftPad, 0)
 	pad := strings.Repeat(" ", leftPad)
 
 	paddedBubble := padLines(bubble, pad)
@@ -141,7 +128,7 @@ func renderAssistantBubble(content, modelName string, ts time.Time, termWidth in
 // renderCommandLine renders inline command output (dimmed, no bubble).
 func renderCommandLine(content string) string {
 	var sb strings.Builder
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.SplitSeq(content, "\n") {
 		sb.WriteString(cmdPrefixStyle.Render("  ❯ ") + cmdLineStyle.Render(line) + "\n")
 	}
 	return strings.TrimRight(sb.String(), "\n")
@@ -163,14 +150,15 @@ func wordWrap(text string, maxWidth int) string {
 
 	for _, word := range words {
 		wLen := utf8.RuneCountInString(word)
-		if lineLen == 0 {
+		switch {
+		case lineLen == 0:
 			current.WriteString(word)
 			lineLen = wLen
-		} else if lineLen+1+wLen <= maxWidth {
+		case lineLen+1+wLen <= maxWidth:
 			current.WriteByte(' ')
 			current.WriteString(word)
 			lineLen += 1 + wLen
-		} else {
+		default:
 			lines = append(lines, current.String())
 			current.Reset()
 			current.WriteString(word)
@@ -185,14 +173,6 @@ func wordWrap(text string, maxWidth int) string {
 
 // formatTimestamp returns a display timestamp for a message.
 // Shows time today, or "Mon 15:04" for older messages.
-func formatTimestamp(t time.Time) string {
-	now := time.Now()
-	if t.Year() == now.Year() && t.YearDay() == now.YearDay() {
-		return t.Format("15:04")
-	}
-	return fmt.Sprintf("%s %s", t.Weekday().String()[:3], t.Format("15:04"))
-}
-
 func padLines(content, pad string) string {
 	if pad == "" {
 		return content

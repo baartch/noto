@@ -36,7 +36,7 @@ bench:
 
 ## lint: run golangci-lint
 lint:
-	golangci-lint run ./...
+	~/go/bin/golangci-lint run ./...
 
 ## fmt: format all Go source
 fmt:

@@ -8,11 +8,12 @@ import (
 // TokenKind describes what a lexed token represents.
 type TokenKind int
 
+// Token kinds produced by lexing slash command input.
 const (
-	TokenSlash   TokenKind = iota // the leading '/'
-	TokenWord                     // a command segment or argument word
-	TokenString                   // a quoted string argument
-	TokenEOF                      // end of input
+	TokenSlash  TokenKind = iota // the leading '/'
+	TokenWord                    // a command segment or argument word
+	TokenString                  // a quoted string argument
+	TokenEOF                     // end of input
 )
 
 // Token is a single lexed element from slash input.

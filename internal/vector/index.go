@@ -22,6 +22,7 @@ var ErrIndexCorrupted = errors.New("vector: index file is corrupted")
 // SourceType indicates the type of SQLite source entity that produced a vector entry.
 type SourceType string
 
+// Known vector source types.
 const (
 	SourceMemoryNote     SourceType = "memory_note"
 	SourceSessionSummary SourceType = "session_summary"
@@ -419,16 +420,28 @@ func cosineSimilarity(a, b []float32) float32 {
 // It is used during initial wiring before a real index implementation is available.
 type NoopIndex struct{}
 
-func (NoopIndex) Upsert(_ Entry) error                             { return nil }
-func (NoopIndex) Delete(_ SourceType, _ string) error              { return nil }
+// Upsert is a no-op implementation.
+func (NoopIndex) Upsert(_ Entry) error { return nil }
+
+// Delete is a no-op implementation.
+func (NoopIndex) Delete(_ SourceType, _ string) error { return nil }
+
+// Search is a no-op implementation.
 func (NoopIndex) Search(_ []float32, _ int) ([]SearchResult, error) { return nil, nil }
-func (NoopIndex) Rebuild(_ []Entry) error                           { return nil }
-func (NoopIndex) Flush() error                                      { return nil }
-func (NoopIndex) Close() error                                      { return nil }
+
+// Rebuild is a no-op implementation.
+func (NoopIndex) Rebuild(_ []Entry) error { return nil }
+
+// Flush is a no-op implementation.
+func (NoopIndex) Flush() error { return nil }
+
+// Close is a no-op implementation.
+func (NoopIndex) Close() error { return nil }
 
 // ManifestStatus describes the health of a profile's vector index manifest.
 type ManifestStatus string
 
+// Known manifest status values.
 const (
 	ManifestReady      ManifestStatus = "ready"
 	ManifestStale      ManifestStatus = "stale"
@@ -451,10 +464,10 @@ type Manifest struct {
 // ValidateManifest checks that a manifest's required fields are present.
 func ValidateManifest(m *Manifest) error {
 	if m.ProfileID == "" {
-		return fmt.Errorf("vector: manifest missing profile_id")
+		return errors.New("vector: manifest missing profile_id")
 	}
 	if m.IndexPath == "" {
-		return fmt.Errorf("vector: manifest missing index_path")
+		return errors.New("vector: manifest missing index_path")
 	}
 	return nil
 }

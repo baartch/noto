@@ -37,7 +37,11 @@ func runChat(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("chat: open global db: %w", err)
 	}
-	defer globalDB.Close()
+	defer func() {
+		if err := globalDB.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "chat: close global db: %v\n", err)
+		}
+	}()
 
 	// Resolve or auto-create active profile.
 	profRepo := store.NewProfileRepo(globalDB)
@@ -88,7 +92,11 @@ func runChat(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("chat: open profile db: %w", err)
 	}
-	defer profileDB.Close()
+	defer func() {
+		if err := profileDB.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "chat: close profile db: %v\n", err)
+		}
+	}()
 
 	execCtx := &commands.ExecContext{
 		ProfileID:   activeProfile.ID,
@@ -97,7 +105,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 		Confirm: func(prompt string) bool {
 			fmt.Fprintf(os.Stderr, "%s [yes/no]: ", prompt)
 			var ans string
-			fmt.Scanln(&ans)
+			if _, err := fmt.Scanln(&ans); err != nil {
+				fmt.Fprintf(os.Stderr, "chat: read confirmation: %v\n", err)
+			}
 			return strings.ToLower(strings.TrimSpace(ans)) == "yes"
 		},
 		SuspendForEditor: func(fn func() error) error { return fn() },
@@ -133,11 +143,11 @@ func runChat(_ *cobra.Command, _ []string) error {
 
 		systemPrompt := loadSystemPrompt(activeProfile.Slug)
 
-		convRepo    := store.NewConversationRepo(profileDB)
-		msgRepo     := store.NewMessageRepo(profileDB)
-		noteRepo    := store.NewMemoryNoteRepo(profileDB)
+		convRepo := store.NewConversationRepo(profileDB)
+		msgRepo := store.NewMessageRepo(profileDB)
+		noteRepo := store.NewMemoryNoteRepo(profileDB)
 		summaryRepo := store.NewSessionSummaryRepo(profileDB)
-		logger      := observe.NewNoopLogger()
+		logger := observe.NewNoopLogger()
 
 		sess, err = chatpkg.NewSession(
 			ctx,
@@ -230,7 +240,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 				sess.Close(context.Background())
 			}
 			if profileDB != nil {
-				profileDB.Close()
+				if err := profileDB.Close(); err != nil {
+					fmt.Fprintf(os.Stderr, "chat: close profile db: %v\n", err)
+				}
 			}
 
 			profileDB, err = openProfileDB(p.Slug)

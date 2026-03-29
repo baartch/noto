@@ -30,7 +30,7 @@ func BenchmarkStartup_ProfileList(b *testing.B) {
 
 	svc := profile.NewService(store.NewProfileRepo(db))
 	ctx := context.Background()
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		svc.Create(ctx, "Profile "+string(rune('A'+i)))
 	}
 

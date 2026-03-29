@@ -22,13 +22,13 @@ type extractionResponse struct {
 	HasNewInfo bool            `json:"has_new_info"`
 	Confidence float64         `json:"confidence"`
 	Notes      []extractedItem `json:"notes"`
-	Action     string          `json:"action"`     // add | update
-	TargetID   string          `json:"target_id"`  // note id when action=update
+	Action     string          `json:"action"`    // add | update
+	TargetID   string          `json:"target_id"` // note id when action=update
 }
 
 // extractedItem is the JSON shape the LLM returns per note.
 type extractedItem struct {
-	Category   string `json:"category"`   // fact | progress | blocker | action_item | other
+	Category   string `json:"category"` // fact | progress | blocker | action_item | other
 	Content    string `json:"content"`
 	Importance int    `json:"importance"` // 1-10
 }
@@ -72,11 +72,12 @@ Existing notes:
 Candidate note:
 %s`
 
-// Extractor extracts memory notes using the LLM and persists them to SQLite.
+// CacheInvalidator invalidates cached memory retrieval context.
 type CacheInvalidator interface {
 	InvalidateAll(ctx context.Context, profileID string) error
 }
 
+// Extractor extracts memory notes using the LLM and persists them to SQLite.
 type Extractor struct {
 	noteRepo    *store.MemoryNoteRepo
 	adapter     provider.Adapter // nil disables extraction
@@ -161,7 +162,7 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID, 
 func (e *Extractor) llmExtract(ctx context.Context, userMsg, assistantMsg string, existing []*store.MemoryNote) extractionResponse {
 	prompt := fmt.Sprintf(extractionPrompt, formatExistingNotes(existing), userMsg, assistantMsg)
 	resp, err := e.adapter.Complete(ctx, provider.CompletionRequest{
-		Messages: []provider.Message{{Role: "user", Content: prompt}},
+		Messages:    []provider.Message{{Role: "user", Content: prompt}},
 		Temperature: 0.2,
 	})
 	if err != nil {
@@ -202,7 +203,7 @@ func (e *Extractor) filterNewNotes(ctx context.Context, items []extractedItem, e
 		existing = existing[len(existing)-50:]
 	}
 
-	var existingLines []string
+	existingLines := make([]string, 0, len(existing))
 	for _, n := range existing {
 		existingLines = append(existingLines, fmt.Sprintf("- (%s) %s", n.Category, n.Content))
 	}
@@ -218,7 +219,7 @@ func (e *Extractor) filterNewNotes(ctx context.Context, items []extractedItem, e
 		}
 		prompt := fmt.Sprintf(dedupePrompt, existingBlock, item.Content)
 		resp, err := e.adapter.Complete(ctx, provider.CompletionRequest{
-			Messages: []provider.Message{{Role: "user", Content: prompt}},
+			Messages:    []provider.Message{{Role: "user", Content: prompt}},
 			Temperature: 0.0,
 		})
 		if err != nil {

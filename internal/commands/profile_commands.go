@@ -72,14 +72,16 @@ func RegisterProfileCommands(r *Registry, svc ProfileService) error {
 func profileCreateHandler(svc ProfileService) HandlerFunc {
 	return func(ctx *ExecContext, args []string) error {
 		if len(args) == 0 {
-			return fmt.Errorf("usage: profile create <name>")
+			return errors.New("usage: profile create <name>")
 		}
 		name := strings.Join(args, " ")
 		p, err := svc.Create(context.Background(), name)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(ctx.Output, "Created profile %q (slug: %s)\n", p.Name, p.Slug)
+		if _, err := fmt.Fprintf(ctx.Output, "Created profile %q (slug: %s)\n", p.Name, p.Slug); err != nil {
+			return err
+		}
 		return nil
 	}
 }
@@ -103,13 +105,17 @@ func profileListHandler(svc ProfileService) HandlerFunc {
 			return err
 		}
 		w := tabwriter.NewWriter(ctx.Output, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "NAME\tSLUG\tACTIVE")
+		if _, err := fmt.Fprintln(w, "NAME\tSLUG\tACTIVE"); err != nil {
+			return err
+		}
 		for _, p := range profiles {
 			active := ""
 			if p.IsDefault {
 				active = "●"
 			}
-			fmt.Fprintf(w, "%s\t%s\t%s\n", p.Name, p.Slug, active)
+			if _, err := fmt.Fprintf(w, "%s\t%s\t%s\n", p.Name, p.Slug, active); err != nil {
+				return err
+			}
 		}
 		return w.Flush()
 	}
@@ -124,7 +130,9 @@ func profileSelectHandler(svc ProfileService) HandlerFunc {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(ctx.Output, "Active profile: %q\n", p.Name)
+			if _, err := fmt.Fprintf(ctx.Output, "Active profile: %q\n", p.Name); err != nil {
+				return err
+			}
 			return nil
 		}
 		// No args — signal the TUI to open the interactive picker.
@@ -135,13 +143,15 @@ func profileSelectHandler(svc ProfileService) HandlerFunc {
 func profileRenameHandler(svc ProfileService) HandlerFunc {
 	return func(ctx *ExecContext, args []string) error {
 		if len(args) < 2 {
-			return fmt.Errorf("usage: profile rename <old> <new>")
+			return errors.New("usage: profile rename <old> <new>")
 		}
 		p, err := svc.Rename(context.Background(), args[0], args[1])
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(ctx.Output, "Renamed to %q\n", p.Name)
+		if _, err := fmt.Fprintf(ctx.Output, "Renamed to %q\n", p.Name); err != nil {
+			return err
+		}
 		return nil
 	}
 }
@@ -149,7 +159,7 @@ func profileRenameHandler(svc ProfileService) HandlerFunc {
 func profileDeleteHandler(svc ProfileService) HandlerFunc {
 	return func(ctx *ExecContext, args []string) error {
 		if len(args) == 0 {
-			return fmt.Errorf("usage: profile delete <name>")
+			return errors.New("usage: profile delete <name>")
 		}
 		name := args[0]
 		err := svc.Delete(context.Background(), name, func(prompt string) bool {
@@ -161,7 +171,9 @@ func profileDeleteHandler(svc ProfileService) HandlerFunc {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(ctx.Output, "Deleted profile %q\n", name)
+		if _, err := fmt.Fprintf(ctx.Output, "Deleted profile %q\n", name); err != nil {
+			return err
+		}
 		return nil
 	}
 }

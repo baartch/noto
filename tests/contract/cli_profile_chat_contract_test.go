@@ -23,8 +23,8 @@ func openTestDB(t *testing.T) (*store.DB, func()) {
 
 // TestProfileCreate_Contract verifies that Create returns a profile with correct fields.
 func TestProfileCreate_Contract(t *testing.T) {
-	db, close := openTestDB(t)
-	defer close()
+	db, closeDB := openTestDB(t)
+	defer closeDB()
 
 	svc := profile.NewService(store.NewProfileRepo(db))
 	ctx := context.Background()
@@ -46,8 +46,8 @@ func TestProfileCreate_Contract(t *testing.T) {
 
 // TestProfileList_Contract verifies that List returns all created profiles.
 func TestProfileList_Contract(t *testing.T) {
-	db, close := openTestDB(t)
-	defer close()
+	db, closeDB := openTestDB(t)
+	defer closeDB()
 
 	svc := profile.NewService(store.NewProfileRepo(db))
 	ctx := context.Background()
@@ -69,8 +69,8 @@ func TestProfileList_Contract(t *testing.T) {
 
 // TestProfileSelect_Contract verifies that Select marks the profile as default.
 func TestProfileSelect_Contract(t *testing.T) {
-	db, close := openTestDB(t)
-	defer close()
+	db, closeDB := openTestDB(t)
+	defer closeDB()
 
 	svc := profile.NewService(store.NewProfileRepo(db))
 	ctx := context.Background()
@@ -93,8 +93,8 @@ func TestProfileSelect_Contract(t *testing.T) {
 
 // TestProfileRename_Contract verifies that Rename updates name and slug.
 func TestProfileRename_Contract(t *testing.T) {
-	db, close := openTestDB(t)
-	defer close()
+	db, closeDB := openTestDB(t)
+	defer closeDB()
 
 	svc := profile.NewService(store.NewProfileRepo(db))
 	ctx := context.Background()
@@ -117,8 +117,8 @@ func TestProfileRename_Contract(t *testing.T) {
 
 // TestProfileDelete_Contract verifies deletion with confirmation.
 func TestProfileDelete_Contract(t *testing.T) {
-	db, close := openTestDB(t)
-	defer close()
+	db, closeDB := openTestDB(t)
+	defer closeDB()
 
 	svc := profile.NewService(store.NewProfileRepo(db))
 	ctx := context.Background()
@@ -145,8 +145,8 @@ func TestProfileDelete_Contract(t *testing.T) {
 
 // TestProfileDelete_OnlyProfile_Contract verifies that deleting the last profile fails.
 func TestProfileDelete_OnlyProfile_Contract(t *testing.T) {
-	db, close := openTestDB(t)
-	defer close()
+	db, closeDB := openTestDB(t)
+	defer closeDB()
 
 	svc := profile.NewService(store.NewProfileRepo(db))
 	ctx := context.Background()

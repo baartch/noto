@@ -10,8 +10,8 @@ import (
 )
 
 func TestMemoryContinuity_ExtractTurn_NoLLM_SavesNothing(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 
 	noteRepo := store.NewMemoryNoteRepo(db)
@@ -29,8 +29,8 @@ func TestMemoryContinuity_ExtractTurn_NoLLM_SavesNothing(t *testing.T) {
 }
 
 func TestMemoryContinuity_ManualNote_AppearsInRetrieval(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 
 	noteRepo := store.NewMemoryNoteRepo(db)
@@ -65,8 +65,8 @@ func TestMemoryContinuity_ManualNote_AppearsInRetrieval(t *testing.T) {
 }
 
 func TestMemoryContinuity_PersistAcrossSessions(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 
 	noteRepo := store.NewMemoryNoteRepo(db)

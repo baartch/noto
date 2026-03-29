@@ -14,6 +14,7 @@ var ErrConversationNotFound = errors.New("store: conversation not found")
 // ConversationStatus represents the lifecycle state of a conversation.
 type ConversationStatus string
 
+// Known conversation status values.
 const (
 	ConversationActive   ConversationStatus = "active"
 	ConversationArchived ConversationStatus = "archived"
@@ -69,7 +70,9 @@ func (r *ConversationRepo) ListByProfile(ctx context.Context, profileID string) 
 	if err != nil {
 		return nil, fmt.Errorf("store: list conversations: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var convs []*Conversation
 	for rows.Next() {

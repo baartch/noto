@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -54,20 +55,22 @@ func RegisterPromptCommands(r *Registry) error {
 
 func promptShowHandler(ctx *ExecContext, _ []string) error {
 	if ctx.ProfileSlug == "" {
-		return fmt.Errorf("no active profile")
+		return errors.New("no active profile")
 	}
 	ps := profile.NewPromptStore(ctx.ProfileSlug)
 	content, err := ps.GetSystemPrompt()
 	if err != nil {
 		return fmt.Errorf("prompt show: %w", err)
 	}
-	fmt.Fprintln(ctx.Output, content)
+	if _, err := fmt.Fprintln(ctx.Output, content); err != nil {
+		return err
+	}
 	return nil
 }
 
 func promptEditHandler(ctx *ExecContext, _ []string) error {
 	if ctx.ProfileSlug == "" {
-		return fmt.Errorf("no active profile")
+		return errors.New("no active profile")
 	}
 
 	ps := profile.NewPromptStore(ctx.ProfileSlug)
@@ -98,6 +101,7 @@ func promptEditHandler(ctx *ExecContext, _ []string) error {
 }
 
 func openInEditor(path string) error {
+	ctx := context.Background()
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
 		editor = os.Getenv("VISUAL")
@@ -105,7 +109,7 @@ func openInEditor(path string) error {
 	if editor == "" {
 		editor = "vi"
 	}
-	cmd := exec.Command(editor, path)
+	cmd := exec.CommandContext(ctx, editor, path)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

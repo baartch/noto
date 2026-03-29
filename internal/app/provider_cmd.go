@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -40,7 +41,7 @@ func providerSetCmd() *cobra.Command {
   noto provider set --key sk-... --model gpt-4o --extractor-model gpt-4o-mini`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if apiKey == "" {
-				return fmt.Errorf("--key is required")
+				return errors.New("--key is required")
 			}
 
 			ctx := context.Background()
@@ -48,8 +49,12 @@ func providerSetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer globalDB.Close()
-			defer profileDB.Close()
+			defer func() {
+				_ = globalDB.Close()
+			}()
+			defer func() {
+				_ = profileDB.Close()
+			}()
 
 			passphrase, err := security.MachinePassphrase()
 			if err != nil {
@@ -118,8 +123,12 @@ func providerShowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer globalDB.Close()
-			defer profileDB.Close()
+			defer func() {
+				_ = globalDB.Close()
+			}()
+			defer func() {
+				_ = profileDB.Close()
+			}()
 
 			repo := store.NewProviderConfigRepo(profileDB)
 			cfg, err := repo.GetActive(ctx, activeProfile.ID)
@@ -162,8 +171,12 @@ func providerClearCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer globalDB.Close()
-			defer profileDB.Close()
+			defer func() {
+				_ = globalDB.Close()
+			}()
+			defer func() {
+				_ = profileDB.Close()
+			}()
 
 			if err := deactivateProviderConfigs(ctx, profileDB, activeProfile.ID); err != nil {
 				return err
@@ -187,8 +200,12 @@ func providerExtractorModelCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer globalDB.Close()
-			defer profileDB.Close()
+			defer func() {
+				_ = globalDB.Close()
+			}()
+			defer func() {
+				_ = profileDB.Close()
+			}()
 
 			repo := store.NewProviderConfigRepo(profileDB)
 			if err := repo.SetExtractorModel(ctx, activeProfile.ID, model); err != nil {
@@ -212,13 +229,13 @@ func openBothDBs(ctx context.Context) (*store.DB, *store.DB, *store.Profile, err
 
 	activeProfile, err := resolveActiveProfile(ctx, globalDB)
 	if err != nil {
-		globalDB.Close()
+		_ = globalDB.Close()
 		return nil, nil, nil, err
 	}
 
 	profileDB, err := openProfileDB(activeProfile.Slug)
 	if err != nil {
-		globalDB.Close()
+		_ = globalDB.Close()
 		return nil, nil, nil, fmt.Errorf("provider: open profile db: %w", err)
 	}
 
@@ -229,7 +246,7 @@ func resolveActiveProfile(ctx context.Context, db *store.DB) (*store.Profile, er
 	svc := profileServiceAdapter{repo: store.NewProfileRepo(db)}
 	p, err := svc.GetActive(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("no active profile — run: noto profile select <name>")
+		return nil, errors.New("no active profile — run: noto profile select <name>")
 	}
 	return p, nil
 }

@@ -9,9 +9,10 @@ import (
 	"time"
 )
 
-// EventType categorises an observability event.
+// EventType categorizes an observability event.
 type EventType string
 
+// Known observability event types.
 const (
 	EventStartup      EventType = "startup"
 	EventRetrieval    EventType = "retrieval"
@@ -26,6 +27,7 @@ const (
 // Status represents the outcome of an event.
 type Status string
 
+// Known observability status values.
 const (
 	StatusSuccess Status = "success"
 	StatusFailure Status = "failure"
@@ -83,6 +85,7 @@ func NewStderrLogger() Logger {
 	return NewJSONLogger(os.Stderr)
 }
 
+// Emit records a structured event.
 func (l *JSONLogger) Emit(e Event) {
 	if e.CreatedAt.IsZero() {
 		e.CreatedAt = time.Now().UTC()
@@ -93,12 +96,14 @@ func (l *JSONLogger) Emit(e Event) {
 	_, _ = fmt.Fprintf(l.w, "%s\n", data)
 }
 
+// Infof logs an informational message.
 func (l *JSONLogger) Infof(format string, args ...any) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	_, _ = fmt.Fprintf(l.w, "[INFO] "+format+"\n", args...)
 }
 
+// Errorf logs an error message.
 func (l *JSONLogger) Errorf(format string, args ...any) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -110,7 +115,10 @@ func (l *JSONLogger) Errorf(format string, args ...any) {
 // NoopMetrics discards all metric observations.
 type NoopMetrics struct{}
 
-func (NoopMetrics) Inc(_ string)                {}
+// Inc discards the increment for noop metrics.
+func (NoopMetrics) Inc(_ string) {}
+
+// RecordLatency discards the latency value for noop metrics.
 func (NoopMetrics) RecordLatency(_ string, _ int64) {}
 
 // ---- convenience helpers ----------------------------------------------------

@@ -43,7 +43,7 @@ func open(path string, migrFS embed.FS, migrDir string) (*DB, error) {
 	}
 	db.SetMaxOpenConns(1)
 
-	if err := applyPragmas(db); err != nil {
+	if err := applyPragmas(context.Background(), db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func open(path string, migrFS embed.FS, migrDir string) (*DB, error) {
 }
 
 // applyPragmas sets recommended SQLite pragmas.
-func applyPragmas(db *sql.DB) error {
+func applyPragmas(ctx context.Context, db *sql.DB) error {
 	pragmas := []string{
 		`PRAGMA journal_mode = WAL`,
 		`PRAGMA synchronous = NORMAL`,
@@ -67,7 +67,7 @@ func applyPragmas(db *sql.DB) error {
 		`PRAGMA temp_store = MEMORY`,
 	}
 	for _, p := range pragmas {
-		if _, err := db.Exec(p); err != nil {
+		if _, err := db.ExecContext(ctx, p); err != nil {
 			return fmt.Errorf("store: pragma %q: %w", p, err)
 		}
 	}
@@ -76,7 +76,8 @@ func applyPragmas(db *sql.DB) error {
 
 // migrate applies all embedded SQL migration files from migrDir in lexicographic order.
 func (db *DB) migrate(migrFS embed.FS, migrDir string) error {
-	if _, err := db.Exec(`
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version    TEXT PRIMARY KEY,
 			applied_at DATETIME NOT NULL DEFAULT (datetime('now'))
@@ -102,7 +103,7 @@ func (db *DB) migrate(migrFS embed.FS, migrDir string) error {
 		version := strings.TrimSuffix(name, ".sql")
 
 		var count int
-		if err := db.QueryRow(
+		if err := db.QueryRowContext(ctx,
 			`SELECT COUNT(*) FROM schema_migrations WHERE version = ?`, version,
 		).Scan(&count); err != nil {
 			return fmt.Errorf("store: check migration %s: %w", version, err)
@@ -116,15 +117,15 @@ func (db *DB) migrate(migrFS embed.FS, migrDir string) error {
 			return fmt.Errorf("store: read migration %s: %w", name, err)
 		}
 
-		tx, err := db.Begin()
+		tx, err := db.BeginTx(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("store: begin migration %s: %w", name, err)
 		}
-		if _, err := tx.Exec(string(data)); err != nil {
+		if _, err := tx.ExecContext(ctx, string(data)); err != nil {
 			_ = tx.Rollback()
 			return fmt.Errorf("store: exec migration %s: %w", name, err)
 		}
-		if _, err := tx.Exec(
+		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO schema_migrations (version) VALUES (?)`, version,
 		); err != nil {
 			_ = tx.Rollback()

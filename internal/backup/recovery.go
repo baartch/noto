@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"io"
@@ -32,7 +33,9 @@ func Recover(slug string, w io.Writer) RecoveryResult {
 	// Quick existence check.
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		// DB missing — restore from backup.
-		fmt.Fprintln(w, "noto: database missing, attempting backup restore...")
+		if _, err := fmt.Fprintln(w, "noto: database missing, attempting backup restore..."); err != nil {
+			return RecoveryResult{Action: "failed", Details: err.Error()}
+		}
 		if err := Restore(slug); err != nil {
 			return RecoveryResult{Action: "failed", Details: fmt.Sprintf("backup restore failed: %v", err)}
 		}
@@ -47,14 +50,20 @@ func Recover(slug string, w io.Writer) RecoveryResult {
 		return RecoveryResult{Action: "none", Details: "database appears healthy"}
 	}
 
-	fmt.Fprintf(w, "noto: database integrity failed (%s). attempting auto-repair...\n", details)
+	if _, err := fmt.Fprintf(w, "noto: database integrity failed (%s). attempting auto-repair...\n", details); err != nil {
+		return RecoveryResult{Action: "failed", Details: err.Error()}
+	}
 	if repaired, repairErr := attemptRepair(dbPath); repairErr == nil && repaired {
 		return RecoveryResult{Action: "auto_repaired", Details: "auto-repair succeeded"}
 	} else if repairErr != nil {
-		fmt.Fprintf(w, "noto: auto-repair failed: %v\n", repairErr)
+		if _, err := fmt.Fprintf(w, "noto: auto-repair failed: %v\n", repairErr); err != nil {
+			return RecoveryResult{Action: "failed", Details: err.Error()}
+		}
 	}
 
-	fmt.Fprintln(w, "noto: attempting backup restore...")
+	if _, err := fmt.Fprintln(w, "noto: attempting backup restore..."); err != nil {
+		return RecoveryResult{Action: "failed", Details: err.Error()}
+	}
 	if err := Restore(slug); err != nil {
 		return RecoveryResult{Action: "failed", Details: fmt.Sprintf("backup restore failed: %v", err)}
 	}
@@ -62,17 +71,22 @@ func Recover(slug string, w io.Writer) RecoveryResult {
 }
 
 func integrityCheck(path string) (bool, string, error) {
+	ctx := context.Background()
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return false, "", err
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
-	rows, err := db.Query(`PRAGMA integrity_check;`)
+	rows, err := db.QueryContext(ctx, `PRAGMA integrity_check;`)
 	if err != nil {
 		return false, "", err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var issues []string
 	for rows.Next() {
@@ -94,19 +108,22 @@ func integrityCheck(path string) (bool, string, error) {
 }
 
 func attemptRepair(path string) (bool, error) {
+	ctx := context.Background()
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return false, err
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
-	if _, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
+	if _, err := db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
 		return false, fmt.Errorf("checkpoint: %w", err)
 	}
-	if _, err := db.Exec(`REINDEX;`); err != nil {
+	if _, err := db.ExecContext(ctx, `REINDEX;`); err != nil {
 		return false, fmt.Errorf("reindex: %w", err)
 	}
-	if _, err := db.Exec(`VACUUM;`); err != nil {
+	if _, err := db.ExecContext(ctx, `VACUUM;`); err != nil {
 		return false, fmt.Errorf("vacuum: %w", err)
 	}
 

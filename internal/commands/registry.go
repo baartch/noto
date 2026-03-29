@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -9,6 +10,7 @@ import (
 // Scope defines whether a command operates on a specific profile or globally.
 type Scope string
 
+// Supported command scope values.
 const (
 	ScopeProfile Scope = "profile"
 	ScopeGlobal  Scope = "global"
@@ -80,7 +82,7 @@ func NewRegistry() *Registry {
 // Register adds a command to the registry. Returns an error on path or alias collision.
 func (r *Registry) Register(cmd *Command) error {
 	if cmd.Path == "" {
-		return fmt.Errorf("commands: command path must not be empty")
+		return errors.New("commands: command path must not be empty")
 	}
 	if _, exists := r.commands[cmd.Path]; exists {
 		return fmt.Errorf("commands: duplicate command path %q", cmd.Path)

@@ -11,8 +11,8 @@ import (
 // TestProfileIsolation_NotesBelongToCorrectProfile verifies that notes from one profile
 // are not visible from another profile's query.
 func TestProfileIsolation_NotesBelongToCorrectProfile(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 
 	svc := profile.NewService(store.NewProfileRepo(db))
@@ -57,8 +57,8 @@ func TestProfileIsolation_NotesBelongToCorrectProfile(t *testing.T) {
 
 // TestProfileIsolation_CacheIsolated verifies cache entries are scoped to a profile.
 func TestProfileIsolation_CacheIsolated(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 
 	svc := profile.NewService(store.NewProfileRepo(db))
@@ -90,8 +90,8 @@ func TestProfileIsolation_CacheIsolated(t *testing.T) {
 
 // TestProfileIsolation_DeleteCascades verifies that deleting a profile removes its notes.
 func TestProfileIsolation_DeleteCascades(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 
 	svc := profile.NewService(store.NewProfileRepo(db))

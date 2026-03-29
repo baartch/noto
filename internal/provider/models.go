@@ -43,7 +43,9 @@ func ListModels(ctx context.Context, cfg Config) ([]ModelInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("provider: fetch models: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

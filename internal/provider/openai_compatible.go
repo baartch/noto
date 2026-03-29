@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -118,10 +119,7 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 		Temperature: req.Temperature,
 	}
 	for _, m := range req.Messages {
-		payload.Messages = append(payload.Messages, openAIMessage{
-			Role:    m.Role,
-			Content: m.Content,
-		})
+		payload.Messages = append(payload.Messages, openAIMessage(m))
 	}
 
 	body, err := json.Marshal(payload)
@@ -142,7 +140,9 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrProviderUnavailable, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return nil, ErrInvalidCredentials
@@ -158,7 +158,7 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 	}
 
 	if len(apiResp.Choices) == 0 {
-		return nil, fmt.Errorf("provider: no choices in response")
+		return nil, errors.New("provider: no choices in response")
 	}
 
 	modelName := apiResp.Model

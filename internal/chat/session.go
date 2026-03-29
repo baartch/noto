@@ -41,22 +41,22 @@ type Session struct {
 	systemPrompt   string
 	cacheHit       bool
 
-	convRepo    *store.ConversationRepo
-	msgRepo     *store.MessageRepo
-	noteRepo    *store.MemoryNoteRepo
-	cacheRepo   *store.ContextCacheRepo
-	summaryRepo *store.SessionSummaryRepo
+	convRepo         *store.ConversationRepo
+	msgRepo          *store.MessageRepo
+	noteRepo         *store.MemoryNoteRepo
+	cacheRepo        *store.ContextCacheRepo
+	summaryRepo      *store.SessionSummaryRepo
 	adapter          provider.Adapter
 	extractor        *memory.Extractor
 	extractorAdapter provider.Adapter
-	logger      observe.Logger
+	logger           observe.Logger
 	baseSystemPrompt string
 	sessionSummary   string
 	db               *store.DB
 	vectorIndexPath  string
 	vectorIndex      vector.Index
 
-	backupStop  chan struct{}
+	backupStop   chan struct{}
 	pendingNotes int
 	pendingMu    sync.Mutex
 	pendingDone  chan struct{}
@@ -408,12 +408,12 @@ func buildSessionSummary(messages []*store.Message) string {
 }
 
 func truncateSummary(text string) string {
-	max := 280
+	maxLen := 280
 	runes := []rune(strings.TrimSpace(text))
-	if len(runes) <= max {
+	if len(runes) <= maxLen {
 		return string(runes)
 	}
-	return string(runes[:max]) + "…"
+	return string(runes[:maxLen]) + "…"
 }
 
 func filterConversationMessages(messages []*store.Message, conversationID string) []*store.Message {

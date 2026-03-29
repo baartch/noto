@@ -1,6 +1,9 @@
 package provider
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 // Stats tracks cumulative token usage and cost for a session.
 type Stats struct {
@@ -22,7 +25,8 @@ func (s *Stats) Add(resp *CompletionResponse) {
 }
 
 // Format returns a compact status-line string like:
-//   ↑12.4k ↓3.2k  $0.042  68%/200k
+//
+//	↑12.4k ↓3.2k  $0.042  68%/200k
 func (s Stats) Format() string {
 	in := formatTokens(s.TokensIn)
 	out := formatTokens(s.TokensOut)
@@ -43,6 +47,6 @@ func formatTokens(n int) string {
 	case n >= 1_000:
 		return fmt.Sprintf("%.1fk", float64(n)/1_000)
 	default:
-		return fmt.Sprintf("%d", n)
+		return strconv.Itoa(n)
 	}
 }

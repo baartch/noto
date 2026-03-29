@@ -3,6 +3,7 @@ package vector
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 
 	"noto/internal/provider"
@@ -48,7 +49,7 @@ func (s *Syncer) SyncNotes(ctx context.Context, notes []MemoryNoteRecord) error 
 	for _, note := range notes {
 		chunkHash := ContentHash(note.Content)
 		entry := Entry{
-			ID:             fmt.Sprintf("ve-%s", note.ID),
+			ID:             "ve-" + note.ID,
 			ProfileID:      s.profileID,
 			SourceType:     SourceMemoryNote,
 			SourceID:       note.ID,
@@ -74,5 +75,5 @@ func (s *Syncer) SyncNotes(ctx context.Context, notes []MemoryNoteRecord) error 
 // ContentHash returns a hex SHA-256 hash of the given content string.
 func ContentHash(content string) string {
 	sum := sha256.Sum256([]byte(content))
-	return fmt.Sprintf("%x", sum)
+	return hex.EncodeToString(sum[:])
 }

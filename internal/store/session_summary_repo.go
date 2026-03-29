@@ -34,7 +34,7 @@ func NewSessionSummaryRepo(db *DB) *SessionSummaryRepo {
 
 // Create inserts a new session summary.
 func (r *SessionSummaryRepo) Create(ctx context.Context, s *SessionSummary) error {
-	var convID interface{}
+	var convID any
 	if s.ConversationID != "" {
 		convID = s.ConversationID
 	}
@@ -84,7 +84,9 @@ func (r *SessionSummaryRepo) ListByProfile(ctx context.Context, profileID string
 	if err != nil {
 		return nil, fmt.Errorf("store: list session summaries: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var summaries []*SessionSummary
 	for rows.Next() {

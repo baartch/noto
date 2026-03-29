@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 
 	"noto/internal/backup"
@@ -30,7 +31,7 @@ func RegisterBackupCommands(r *Registry) error {
 
 func backupRestoreHandler(ctx *ExecContext, args []string) error {
 	if ctx.ProfileSlug == "" {
-		return fmt.Errorf("no active profile")
+		return errors.New("no active profile")
 	}
 	if len(args) == 0 {
 		return &ErrOpenBackupPicker{}
@@ -39,6 +40,8 @@ func backupRestoreHandler(ctx *ExecContext, args []string) error {
 	if err := backup.RestoreAt(ctx.ProfileSlug, timestamp); err != nil {
 		return err
 	}
-	fmt.Fprintf(ctx.Output, "Restored backup %s. Restart chat to reload data.\n", timestamp)
+	if _, err := fmt.Fprintf(ctx.Output, "Restored backup %s. Restart chat to reload data.\n", timestamp); err != nil {
+		return err
+	}
 	return nil
 }
