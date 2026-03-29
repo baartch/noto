@@ -132,7 +132,9 @@ func (f *FileIndex) Load() error {
 		}
 		return fmt.Errorf("vector: open index: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	header, err := f.codec.ReadHeader(file)
 	if err != nil {
@@ -292,23 +294,23 @@ func (f *FileIndex) Flush() error {
 		EntryCount:     uint32(len(f.vectors)),
 	}
 	if err := f.codec.WriteHeader(file, header); err != nil {
-		file.Close()
+		_ = file.Close()
 		return fmt.Errorf("vector: write header: %w", err)
 	}
 	if err := f.codec.WriteVectors(file, flat, f.embeddingDim); err != nil {
-		file.Close()
+		_ = file.Close()
 		return fmt.Errorf("vector: write vectors: %w", err)
 	}
 	var graphBytes []byte
 	if f.graph != nil {
 		graphBytes, err = f.graph.Serialize()
 		if err != nil {
-			file.Close()
+			_ = file.Close()
 			return fmt.Errorf("vector: serialize graph: %w", err)
 		}
 	}
 	if err := f.codec.WriteGraph(file, graphBytes); err != nil {
-		file.Close()
+		_ = file.Close()
 		return fmt.Errorf("vector: write graph: %w", err)
 	}
 	if err := file.Close(); err != nil {

@@ -66,7 +66,9 @@ func (a *OpenAICompatible) Embed(ctx context.Context, req EmbeddingRequest) (*Em
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrProviderUnavailable, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return nil, ErrInvalidCredentials
