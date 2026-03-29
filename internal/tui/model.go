@@ -394,6 +394,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateSuggNav(msg, cmds)
 		}
 
+		//exhaustive:ignore
 		switch msg.Type {
 		case tea.KeyCtrlC:
 			m.input.SetValue("")
@@ -464,6 +465,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // updateSuggNav handles keyboard while suggestion navigation is active.
 func (m Model) updateSuggNav(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
+	//exhaustive:ignore
 	switch msg.Type {
 	case tea.KeyUp:
 		if m.suggCursor > 0 {
@@ -667,6 +669,7 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 
 // updatePicker handles keypresses while the picker overlay is open.
 func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
+	//exhaustive:ignore
 	switch msg.Type {
 	case tea.KeyEsc, tea.KeyCtrlC, tea.KeyCtrlD:
 		if msg.Type == tea.KeyCtrlD {
