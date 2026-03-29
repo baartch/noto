@@ -7,6 +7,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+
 	"noto/internal/profile"
 	"noto/internal/store"
 )
