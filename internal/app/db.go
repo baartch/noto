@@ -9,7 +9,7 @@ import (
 )
 
 // openGlobalDB opens (or creates) the global registry database at ~/.noto/global.db.
-// The global DB holds only the profiles table.
+// The global DB holds only shared registry data (no profile metadata).
 func openGlobalDB() (*store.DB, error) {
 	appDir, err := config.AppDir()
 	if err != nil {

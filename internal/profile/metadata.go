@@ -138,3 +138,14 @@ func removeMetadata(slug string) error {
 	}
 	return nil
 }
+
+func removeProfileDir(slug string) error {
+	path, err := config.ProfileDir(slug)
+	if err != nil {
+		return err
+	}
+	if err := os.RemoveAll(path); err != nil {
+		return fmt.Errorf("profile: remove profile dir: %w", err)
+	}
+	return nil
+}

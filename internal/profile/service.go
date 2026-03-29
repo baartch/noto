@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -21,13 +23,11 @@ var ErrConfirmationRequired = errors.New("profile: explicit confirmation require
 // slugRe is the regex for a valid profile slug.
 
 // Service manages the profile lifecycle.
-type Service struct {
-	repo *store.ProfileRepo
-}
+type Service struct {}
 
 // NewService creates a new profile Service.
-func NewService(repo *store.ProfileRepo) *Service {
-	return &Service{repo: repo}
+func NewService(_ *store.ProfileRepo) *Service {
+	return &Service{}
 }
 
 // Create creates a new profile with the given name.
@@ -89,17 +89,17 @@ func (s *Service) List(ctx context.Context) ([]*store.Profile, error) {
 
 // Select sets the given profile as default (active).
 func (s *Service) Select(ctx context.Context, name string) (*store.Profile, error) {
-	p, err := s.repo.GetByName(ctx, name)
+	_ = ctx
+	profiles, _, err := DiscoverProfiles()
 	if err != nil {
-		if errors.Is(err, store.ErrProfileNotFound) {
-			return nil, fmt.Errorf("profile: no profile named %q", name)
-		}
 		return nil, err
 	}
-	if err := s.repo.SetDefault(ctx, p.ID); err != nil {
-		return nil, err
+
+	p := findProfileByNameOrSlug(profiles, name)
+	if p == nil {
+		return nil, fmt.Errorf("profile: no profile named %q", name)
 	}
-	if err := s.repo.Touch(ctx, p.ID); err != nil {
+	if err := config.WriteActiveProfile(p.Slug, time.Now().UTC()); err != nil {
 		return nil, err
 	}
 	p.IsDefault = true
@@ -111,14 +111,16 @@ func (s *Service) Rename(ctx context.Context, oldName, newName string) (*store.P
 	if strings.TrimSpace(newName) == "" {
 		return nil, errors.New("profile: new name must not be empty")
 	}
-	p, err := s.repo.GetByName(ctx, oldName)
+	profiles, _, err := DiscoverProfiles()
 	if err != nil {
-		if errors.Is(err, store.ErrProfileNotFound) {
-			return nil, fmt.Errorf("profile: no profile named %q", oldName)
-		}
 		return nil, err
 	}
+	p := findProfileByNameOrSlug(profiles, oldName)
+	if p == nil {
+		return nil, fmt.Errorf("profile: no profile named %q", oldName)
+	}
 
+	oldSlug := p.Slug
 	newSlug := toSlug(newName)
 	newSystemPromptPath, _ := DefaultSystemPromptPath(newSlug)
 	newDBPath, _ := config.ProfileDBPath(newSlug)
@@ -128,6 +130,29 @@ func (s *Service) Rename(ctx context.Context, oldName, newName string) (*store.P
 	p.SystemPromptPath = newSystemPromptPath
 	p.DBPath = newDBPath
 	p.UpdatedAt = time.Now().UTC()
+
+	oldDir, err := config.ProfileDir(oldSlug)
+	if err != nil {
+		return nil, err
+	}
+	newDir, err := config.ProfileDir(newSlug)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Rename(oldDir, newDir); err != nil {
+		return nil, fmt.Errorf("profile: rename dir: %w", err)
+	}
+
+	p.SystemPromptPath = filepath.Join(newDir, DefaultSystemPromptRelPath())
+	p.DBPath = filepath.Join(newDir, config.MemoryDBName)
+
+	if active, err := config.ReadActiveProfile(); err == nil {
+		if active.Slug == oldSlug {
+			if err := config.WriteActiveProfile(newSlug, time.Now().UTC()); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	if err := WriteMetadata(&Metadata{
 		ID:               p.ID,
@@ -146,20 +171,18 @@ func (s *Service) Rename(ctx context.Context, oldName, newName string) (*store.P
 // Delete removes a profile after verifying there is more than one profile and the
 // confirm function returns true.
 func (s *Service) Delete(ctx context.Context, name string, confirm func(string) bool) error {
-	count, err := s.repo.Count(ctx)
+	_ = ctx
+	profiles, _, err := DiscoverProfiles()
 	if err != nil {
 		return err
 	}
-	if count <= 1 {
+	if len(profiles) <= 1 {
 		return ErrProfileInUse
 	}
 
-	p, err := s.repo.GetByName(ctx, name)
-	if err != nil {
-		if errors.Is(err, store.ErrProfileNotFound) {
-			return fmt.Errorf("profile: no profile named %q", name)
-		}
-		return err
+	p := findProfileByNameOrSlug(profiles, name)
+	if p == nil {
+		return fmt.Errorf("profile: no profile named %q", name)
 	}
 
 	msg := fmt.Sprintf("Are you sure you want to permanently delete profile %q and all its data?", name)
@@ -177,44 +200,83 @@ func (s *Service) Delete(ctx context.Context, name string, confirm func(string) 
 	if err := removeMetadata(p.Slug); err != nil {
 		return err
 	}
+	if err := removeProfileDir(p.Slug); err != nil {
+		return err
+	}
+	if active, err := config.ReadActiveProfile(); err == nil {
+		if active.Slug == p.Slug {
+			if err := config.ClearActiveProfile(); err != nil {
+				return err
+			}
+		}
+	}
 
 	return nil
 }
 
 // GetActive returns the currently active (default) profile.
 func (s *Service) GetActive(ctx context.Context) (*store.Profile, error) {
-	p, err := s.repo.GetDefault(ctx)
+	_ = ctx
+	active, err := config.ReadActiveProfile()
 	if err != nil {
-		if errors.Is(err, store.ErrProfileNotFound) {
+		if errors.Is(err, config.ErrActiveProfileNotFound) {
 			return nil, errors.New("profile: no active profile set")
 		}
 		return nil, err
 	}
+	profiles, _, err := DiscoverProfiles()
+	if err != nil {
+		return nil, err
+	}
+	p := findProfileByNameOrSlug(profiles, active.Slug)
+	if p == nil {
+		return nil, errors.New("profile: no active profile set")
+	}
+	p.IsDefault = true
 	return p, nil
 }
 
 // LastUsed returns the most recently updated profile.
 func (s *Service) LastUsed(ctx context.Context) (*store.Profile, error) {
-	p, err := s.repo.GetLastUsed(ctx)
+	_ = ctx
+	profiles, _, err := DiscoverProfiles()
 	if err != nil {
-		if errors.Is(err, store.ErrProfileNotFound) {
-			return nil, errors.New("profile: no profiles found")
-		}
 		return nil, err
 	}
-	return p, nil
+	if len(profiles) == 0 {
+		return nil, errors.New("profile: no profiles found")
+	}
+	// profiles are sorted by name; select most recently updated manually
+	latest := profiles[0]
+	for _, p := range profiles[1:] {
+		if p.UpdatedAt.After(latest.UpdatedAt) {
+			latest = p
+		}
+	}
+	return latest, nil
 }
 
 // ---- helpers ----------------------------------------------------------------
 
 func (s *Service) reassignDefault(ctx context.Context, excludeID string) error {
-	all, err := s.repo.List(ctx)
+	_ = ctx
+	profiles, _, err := DiscoverProfiles()
 	if err != nil {
 		return err
 	}
-	for _, p := range all {
+	for _, p := range profiles {
 		if p.ID != excludeID {
-			return s.repo.SetDefault(ctx, p.ID)
+			return config.WriteActiveProfile(p.Slug, time.Now().UTC())
+		}
+	}
+	return config.ClearActiveProfile()
+}
+
+func findProfileByNameOrSlug(profiles []*store.Profile, value string) *store.Profile {
+	match := strings.TrimSpace(strings.ToLower(value))
+	for _, p := range profiles {
+		if strings.ToLower(p.Name) == match || strings.ToLower(p.Slug) == match {
+			return p
 		}
 	}
 	return nil

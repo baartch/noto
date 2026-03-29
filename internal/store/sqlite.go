@@ -24,7 +24,7 @@ type DB struct {
 }
 
 // OpenGlobal opens (or creates) the global registry database at path.
-// The global DB holds only the profiles table.
+// The global DB holds only shared registry data (no profile metadata).
 func OpenGlobal(path string) (*DB, error) {
 	return open(path, globalMigrationsFS, "migrations/global")
 }

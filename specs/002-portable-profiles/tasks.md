@@ -67,13 +67,13 @@
 
 ### Tests for User Story 2 (REQUIRED) ⚠️
 
-- [ ] T015 [P] [US2] Integration test for global DB exclusion in tests/integration/profile_global_db_test.go
+- [X] T015 [P] [US2] Integration test for global DB exclusion in tests/integration/profile_global_db_test.go
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Remove global profile table usage in internal/store/profile_repo.go and internal/app/db.go
-- [ ] T017 [US2] Update global DB migrations to drop/ignore profile metadata in internal/store/migrations/global
-- [ ] T018 [US2] Update profile selection paths to avoid global DB in internal/profile/service.go
+- [X] T016 [US2] Remove global profile table usage in internal/store/profile_repo.go and internal/app/db.go
+- [X] T017 [US2] Update global DB migrations to drop/ignore profile metadata in internal/store/migrations/global
+- [X] T018 [US2] Update profile selection paths to avoid global DB in internal/profile/service.go
 
 **Checkpoint**: User Story 2 should be fully functional and testable independently
 
