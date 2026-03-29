@@ -32,7 +32,6 @@ type Embedder interface {
 
 // Syncer synchronises SQLite memory sources into the vector index.
 type Syncer struct {
-	notes          []MemoryNoteRecord
 	index          Index
 	profileID      string
 	embeddingModel string
