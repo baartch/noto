@@ -34,7 +34,7 @@ func NewSessionSummaryRepo(db *DB) *SessionSummaryRepo {
 
 // Create inserts a new session summary.
 func (r *SessionSummaryRepo) Create(ctx context.Context, s *SessionSummary) error {
-	var convID interface{}
+	var convID any
 	if s.ConversationID != "" {
 		convID = s.ConversationID
 	}

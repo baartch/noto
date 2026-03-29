@@ -873,13 +873,9 @@ func (m *Model) renderFooter() string {
 	_ = yellow // suppress unused if no cost yet
 
 	margin := lipgloss.Width(m.input.Prompt) + 1
-	if margin < 0 {
-		margin = 0
-	}
+	margin = max(margin, 0)
 	innerWidth := m.width - margin*2
-	if innerWidth < 0 {
-		innerWidth = 0
-	}
+	innerWidth = max(innerWidth, 0)
 	pad := strings.Repeat(" ", margin)
 	return pad + footerLine(innerWidth, left, right) + pad
 }

@@ -112,9 +112,7 @@ func (p *pickerState) render(maxHeight int) string {
 	if end > len(list) {
 		end = len(list)
 		start = end - maxRows
-		if start < 0 {
-			start = 0
-		}
+		start = max(start, 0)
 	}
 
 	if len(list) == 0 {

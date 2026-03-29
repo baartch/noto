@@ -138,7 +138,7 @@ func renderAssistantBubble(content, modelName string, ts time.Time, termWidth in
 // renderCommandLine renders inline command output (dimmed, no bubble).
 func renderCommandLine(content string) string {
 	var sb strings.Builder
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.SplitSeq(content, "\n") {
 		sb.WriteString(cmdPrefixStyle.Render("  ❯ ") + cmdLineStyle.Render(line) + "\n")
 	}
 	return strings.TrimRight(sb.String(), "\n")

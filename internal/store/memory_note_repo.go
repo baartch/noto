@@ -48,7 +48,7 @@ func NewMemoryNoteRepo(db *DB) *MemoryNoteRepo {
 
 // Create inserts a new memory note.
 func (r *MemoryNoteRepo) Create(ctx context.Context, n *MemoryNote) error {
-	var convID interface{}
+	var convID any
 	if n.ConversationID != "" {
 		convID = n.ConversationID
 	}
