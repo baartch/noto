@@ -1,2 +1,0 @@
--- global/0001_profiles.sql
--- Global DB: intentionally empty (no profile metadata stored here).

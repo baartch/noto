@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"noto/internal/profile"
-	"noto/internal/store"
 )
 
 func profileCmd() *cobra.Command {
@@ -32,16 +31,7 @@ func profileCreateCmd() *cobra.Command {
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
-			db, err := openGlobalDB()
-			if err != nil {
-				return err
-			}
-			defer func() {
-				if err := db.Close(); err != nil {
-					fmt.Fprintf(os.Stderr, "profile: close db: %v\n", err)
-				}
-			}()
-			svc := profile.NewService(store.NewProfileRepo(db))
+			svc := profile.NewService(nil)
 			p, err := svc.Create(context.Background(), name)
 			if err != nil {
 				return err
@@ -59,16 +49,7 @@ func profileListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List all profiles",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, err := openGlobalDB()
-			if err != nil {
-				return err
-			}
-			defer func() {
-				if err := db.Close(); err != nil {
-					fmt.Fprintf(os.Stderr, "profile: close db: %v\n", err)
-				}
-			}()
-			svc := profile.NewService(store.NewProfileRepo(db))
+			svc := profile.NewService(nil)
 			profiles, err := svc.List(context.Background())
 			if err != nil {
 				return err
@@ -101,16 +82,7 @@ func profileSelectCmd() *cobra.Command {
 		Short: "Set the active profile",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, err := openGlobalDB()
-			if err != nil {
-				return err
-			}
-			defer func() {
-				if err := db.Close(); err != nil {
-					fmt.Fprintf(os.Stderr, "profile: close db: %v\n", err)
-				}
-			}()
-			svc := profile.NewService(store.NewProfileRepo(db))
+			svc := profile.NewService(nil)
 			p, err := svc.Select(context.Background(), args[0])
 			if err != nil {
 				return err
@@ -129,16 +101,7 @@ func profileRenameCmd() *cobra.Command {
 		Short: "Rename a profile",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, err := openGlobalDB()
-			if err != nil {
-				return err
-			}
-			defer func() {
-				if err := db.Close(); err != nil {
-					fmt.Fprintf(os.Stderr, "profile: close db: %v\n", err)
-				}
-			}()
-			svc := profile.NewService(store.NewProfileRepo(db))
+			svc := profile.NewService(nil)
 			p, err := svc.Rename(context.Background(), args[0], args[1])
 			if err != nil {
 				return err
@@ -157,17 +120,7 @@ func profileDeleteCmd() *cobra.Command {
 		Short: "Delete a profile (irreversible)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, err := openGlobalDB()
-			if err != nil {
-				return err
-			}
-			defer func() {
-				if err := db.Close(); err != nil {
-					fmt.Fprintf(os.Stderr, "profile: close db: %v\n", err)
-				}
-			}()
-			repo := store.NewProfileRepo(db)
-			svc := profile.NewService(repo)
+			svc := profile.NewService(nil)
 			flow := profile.NewDeleteFlow(svc)
 			return flow.Run(context.Background(), args[0], os.Stdout, os.Stdin)
 		},

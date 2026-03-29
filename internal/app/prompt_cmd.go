@@ -45,17 +45,7 @@ func promptEditCmd() *cobra.Command {
 }
 
 func runPromptCommand(ctx context.Context, commandPath string, args []string) error {
-	globalDB, err := openGlobalDB()
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := globalDB.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "prompt: close global db: %v\n", err)
-		}
-	}()
-
-	profSvc := profile.NewService(store.NewProfileRepo(globalDB))
+	profSvc := profile.NewService(nil)
 	activeProfile, err := profSvc.GetActive(ctx)
 	if err != nil {
 		return err

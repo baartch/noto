@@ -32,20 +32,8 @@ func chatCmd() *cobra.Command {
 func runChat(_ *cobra.Command, _ []string) error {
 	ctx := context.Background()
 
-	// Global DB: profile registry only.
-	globalDB, err := openGlobalDB()
-	if err != nil {
-		return fmt.Errorf("chat: open global db: %w", err)
-	}
-	defer func() {
-		if err := globalDB.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "chat: close global db: %v\n", err)
-		}
-	}()
-
 	// Resolve or auto-create active profile.
-	profRepo := store.NewProfileRepo(globalDB)
-	profSvc := profile.NewService(profRepo)
+	profSvc := profile.NewService(nil)
 
 	flow := NewStartupFlow(profSvc)
 	activeProfileResult, err := flow.Resolve(
@@ -115,7 +103,6 @@ func runChat(_ *cobra.Command, _ []string) error {
 		},
 		SuspendForEditor: func(fn func() error) error { return fn() },
 		OnPromptChanged: func(slug string) error {
-			// Prompt edits invalidate the context cache and mark the vector index stale.
 			cacheRepo := store.NewContextCacheRepo(profileDB)
 			_ = cacheRepo.InvalidateAll(ctx, activeProfile.ID)
 			_ = store.NewVectorManifestRepo(profileDB).SetManifestStatusStr(ctx, activeProfile.ID, "stale")
@@ -402,15 +389,18 @@ func loadProviderConfig(ctx context.Context, db *store.DB, profileID string) (*s
 		if errors.Is(err, store.ErrProviderConfigNotFound) {
 			return nil, ""
 		}
+		fmt.Fprintf(os.Stderr, "chat: load provider config: %v\n", err)
 		return nil, ""
 	}
 
 	passphrase, err := security.MachinePassphrase()
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "chat: passphrase: %v\n", err)
 		return nil, ""
 	}
 	decrypted, err := security.Decrypt(cfg.CredentialRef, passphrase)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "chat: decrypt key: %v\n", err)
 		return nil, ""
 	}
 	return cfg, decrypted

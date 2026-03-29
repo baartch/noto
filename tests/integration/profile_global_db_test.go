@@ -2,45 +2,30 @@ package integration
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"noto/internal/profile"
-	"noto/internal/store"
 )
 
-func TestGlobalDB_NoProfileTable(t *testing.T) {
+func TestGlobalDB_NotCreatedByProfileOps(t *testing.T) {
 	ctx := context.Background()
 	appDir := t.TempDir()
 	t.Setenv("NOTO_APP_DIR", appDir)
 
-	globalPath := filepath.Join(appDir, "global.db")
-	db, err := store.OpenGlobal(globalPath)
-	if err != nil {
-		t.Fatalf("open global db: %v", err)
+	profilesDir := filepath.Join(appDir, "profiles")
+	if err := os.MkdirAll(profilesDir, 0o700); err != nil {
+		t.Fatalf("mkdir profiles dir: %v", err)
 	}
-	svc := profile.NewService(store.NewProfileRepo(db))
+
+	svc := profile.NewService(nil)
 	if _, err := svc.Create(ctx, "Global Exclusion"); err != nil {
-		_ = db.Close()
 		t.Fatalf("create profile: %v", err)
 	}
-	if err := db.Close(); err != nil {
-		t.Fatalf("close db: %v", err)
-	}
 
-	db2, err := store.OpenGlobal(globalPath)
-	if err != nil {
-		t.Fatalf("open global db again: %v", err)
-	}
-	defer func() { _ = db2.Close() }()
-
-	var count int
-	if err := db2.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'profiles'`,
-	).Scan(&count); err != nil {
-		t.Fatalf("query sqlite_master: %v", err)
-	}
-	if count != 0 {
-		t.Fatalf("expected no profiles table, found %d", count)
+	globalPath := filepath.Join(appDir, "global.db")
+	if _, err := os.Stat(globalPath); !os.IsNotExist(err) {
+		t.Fatalf("expected global.db to be absent, got err=%v", err)
 	}
 }

@@ -45,13 +45,10 @@ func providerSetCmd() *cobra.Command {
 			}
 
 			ctx := context.Background()
-			globalDB, profileDB, activeProfile, err := openBothDBs(ctx)
+			profileDB, activeProfile, err := openActiveProfileDB(ctx)
 			if err != nil {
 				return err
 			}
-			defer func() {
-				_ = globalDB.Close()
-			}()
 			defer func() {
 				_ = profileDB.Close()
 			}()
@@ -119,13 +116,10 @@ func providerShowCmd() *cobra.Command {
 		Short: "Show the current provider configuration for the active profile",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			globalDB, profileDB, activeProfile, err := openBothDBs(ctx)
+			profileDB, activeProfile, err := openActiveProfileDB(ctx)
 			if err != nil {
 				return err
 			}
-			defer func() {
-				_ = globalDB.Close()
-			}()
 			defer func() {
 				_ = profileDB.Close()
 			}()
@@ -167,13 +161,10 @@ func providerClearCmd() *cobra.Command {
 		Short: "Remove the provider configuration for the active profile",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			globalDB, profileDB, activeProfile, err := openBothDBs(ctx)
+			profileDB, activeProfile, err := openActiveProfileDB(ctx)
 			if err != nil {
 				return err
 			}
-			defer func() {
-				_ = globalDB.Close()
-			}()
 			defer func() {
 				_ = profileDB.Close()
 			}()
@@ -189,31 +180,22 @@ func providerClearCmd() *cobra.Command {
 
 // ---- helpers ----------------------------------------------------------------
 
-// openBothDBs opens the global DB, resolves the active profile, then opens
-// the profile DB. Returns all three for use in command handlers.
-func openBothDBs(ctx context.Context) (*store.DB, *store.DB, *store.Profile, error) {
-	globalDB, err := openGlobalDB()
+// openActiveProfileDB resolves the active profile, then opens the profile DB.
+func openActiveProfileDB(ctx context.Context) (*store.DB, *store.Profile, error) {
+	activeProfile, err := resolveActiveProfile(ctx)
 	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	activeProfile, err := resolveActiveProfile(ctx, globalDB)
-	if err != nil {
-		_ = globalDB.Close()
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	profileDB, err := openProfileDB(activeProfile.Slug)
 	if err != nil {
-		_ = globalDB.Close()
-		return nil, nil, nil, fmt.Errorf("provider: open profile db: %w", err)
+		return nil, nil, fmt.Errorf("provider: open profile db: %w", err)
 	}
 
-	return globalDB, profileDB, activeProfile, nil
+	return profileDB, activeProfile, nil
 }
 
-func resolveActiveProfile(ctx context.Context, db *store.DB) (*store.Profile, error) {
-	_ = db
+func resolveActiveProfile(ctx context.Context) (*store.Profile, error) {
 	svc := profile.NewService(nil)
 	p, err := svc.GetActive(ctx)
 	if err != nil {

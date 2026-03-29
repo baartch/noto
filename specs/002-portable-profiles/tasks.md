@@ -72,7 +72,7 @@
 ### Implementation for User Story 2
 
 - [X] T016 [US2] Remove global profile table usage in internal/store/profile_repo.go and internal/app/db.go
-- [X] T017 [US2] Update global DB migrations to drop/ignore profile metadata in internal/store/migrations/global
+- [X] T017 [US2] Remove global DB migrations (legacy removed)
 - [X] T018 [US2] Update profile selection paths to avoid global DB in internal/profile/service.go
 
 **Checkpoint**: User Story 2 should be fully functional and testable independently
