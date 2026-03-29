@@ -1,6 +1,8 @@
+version: "2"
+
 run:
   timeout: 5m
-  go: "1.23"
+  go: "1.26"
 
 linters:
   enable:
@@ -18,25 +20,30 @@ linters:
     - noctx
     - bodyclose
     - exportloopref
-
-linters-settings:
-  gofmt:
-    simplify: true
-  goimports:
-    local-prefixes: noto
-  revive:
+  exclusions:
     rules:
-      - name: exported
-        severity: warning
-      - name: var-naming
-        severity: warning
-  misspell:
-    locale: US
-
-issues:
-  exclude-rules:
     - path: _test\.go
       linters:
         - errcheck
+  settings:
+    revive:
+      rules:
+        - name: exported
+          severity: warning
+        - name: var-naming
+          severity: warning
+    misspell:
+      locale: US
+
+formatters:
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - noto
+    
+
+issues:
   max-issues-per-linter: 0
   max-same-issues: 0
