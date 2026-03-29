@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"noto/internal/profile"
 	"noto/internal/security"
 	"noto/internal/store"
 )
@@ -20,7 +21,6 @@ func providerCmd() *cobra.Command {
 	cmd.AddCommand(providerSetCmd())
 	cmd.AddCommand(providerShowCmd())
 	cmd.AddCommand(providerClearCmd())
-	cmd.AddCommand(providerExtractorModelCmd())
 	return cmd
 }
 
@@ -45,13 +45,10 @@ func providerSetCmd() *cobra.Command {
 			}
 
 			ctx := context.Background()
-			globalDB, profileDB, activeProfile, err := openBothDBs(ctx)
+			profileDB, activeProfile, err := openActiveProfileDB(ctx)
 			if err != nil {
 				return err
 			}
-			defer func() {
-				_ = globalDB.Close()
-			}()
 			defer func() {
 				_ = profileDB.Close()
 			}()
@@ -119,13 +116,10 @@ func providerShowCmd() *cobra.Command {
 		Short: "Show the current provider configuration for the active profile",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			globalDB, profileDB, activeProfile, err := openBothDBs(ctx)
+			profileDB, activeProfile, err := openActiveProfileDB(ctx)
 			if err != nil {
 				return err
 			}
-			defer func() {
-				_ = globalDB.Close()
-			}()
 			defer func() {
 				_ = profileDB.Close()
 			}()
@@ -167,13 +161,10 @@ func providerClearCmd() *cobra.Command {
 		Short: "Remove the provider configuration for the active profile",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			globalDB, profileDB, activeProfile, err := openBothDBs(ctx)
+			profileDB, activeProfile, err := openActiveProfileDB(ctx)
 			if err != nil {
 				return err
 			}
-			defer func() {
-				_ = globalDB.Close()
-			}()
 			defer func() {
 				_ = profileDB.Close()
 			}()
@@ -187,63 +178,25 @@ func providerClearCmd() *cobra.Command {
 	}
 }
 
-func providerExtractorModelCmd() *cobra.Command {
-	var model string
-	return &cobra.Command{
-		Use:   "extractor-model",
-		Short: "Set the extractor model for the active profile",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			model = args[0]
-			ctx := context.Background()
-			globalDB, profileDB, activeProfile, err := openBothDBs(ctx)
-			if err != nil {
-				return err
-			}
-			defer func() {
-				_ = globalDB.Close()
-			}()
-			defer func() {
-				_ = profileDB.Close()
-			}()
-
-			repo := store.NewProviderConfigRepo(profileDB)
-			if err := repo.SetExtractorModel(ctx, activeProfile.ID, model); err != nil {
-				return err
-			}
-			fmt.Printf("Extractor model set for profile %q: %s\n", activeProfile.Name, model)
-			return nil
-		},
-	}
-}
-
 // ---- helpers ----------------------------------------------------------------
 
-// openBothDBs opens the global DB, resolves the active profile, then opens
-// the profile DB. Returns all three for use in command handlers.
-func openBothDBs(ctx context.Context) (*store.DB, *store.DB, *store.Profile, error) {
-	globalDB, err := openGlobalDB()
+// openActiveProfileDB resolves the active profile, then opens the profile DB.
+func openActiveProfileDB(ctx context.Context) (*store.DB, *store.Profile, error) {
+	activeProfile, err := resolveActiveProfile(ctx)
 	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	activeProfile, err := resolveActiveProfile(ctx, globalDB)
-	if err != nil {
-		_ = globalDB.Close()
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	profileDB, err := openProfileDB(activeProfile.Slug)
 	if err != nil {
-		_ = globalDB.Close()
-		return nil, nil, nil, fmt.Errorf("provider: open profile db: %w", err)
+		return nil, nil, fmt.Errorf("provider: open profile db: %w", err)
 	}
 
-	return globalDB, profileDB, activeProfile, nil
+	return profileDB, activeProfile, nil
 }
 
-func resolveActiveProfile(ctx context.Context, db *store.DB) (*store.Profile, error) {
-	svc := profileServiceAdapter{repo: store.NewProfileRepo(db)}
+func resolveActiveProfile(ctx context.Context) (*store.Profile, error) {
+	svc := profile.NewService(nil)
 	p, err := svc.GetActive(ctx)
 	if err != nil {
 		return nil, errors.New("no active profile — run: noto profile select <name>")
@@ -262,12 +215,4 @@ func maskKey(key string) string {
 		return "****"
 	}
 	return key[:4]
-}
-
-type profileServiceAdapter struct {
-	repo *store.ProfileRepo
-}
-
-func (a profileServiceAdapter) GetActive(ctx context.Context) (*store.Profile, error) {
-	return a.repo.GetDefault(ctx)
 }

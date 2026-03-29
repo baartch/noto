@@ -10,7 +10,6 @@ under `~/.noto/profiles/<slug>/`.
 ```
 ~/.noto/
 ├── active_profile          # text file containing the active profile slug
-├── global.db               # global SQLite DB (profile metadata)
 └── profiles/
     └── <slug>/
         ├── memory.db       # per-profile SQLite source-of-truth
@@ -116,6 +115,7 @@ noto chat                       # start interactive chat session
 /profile delete <name>
 /prompt show
 /prompt edit
+/model extractor <model>
 ```
 
 Type `/` to see all available commands. Type `/pro` to see profile-related commands.

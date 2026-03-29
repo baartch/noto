@@ -134,3 +134,10 @@ func (r *ProviderConfigRepo) scanOne(row *sql.Row) (*ProviderConfig, error) {
 	c.IsActive = isActive == 1
 	return c, nil
 }
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}

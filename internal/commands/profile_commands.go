@@ -110,10 +110,14 @@ func profileListHandler(svc ProfileService) HandlerFunc {
 		}
 		for _, p := range profiles {
 			active := ""
+			label := p.Name
 			if p.IsDefault {
 				active = "●"
 			}
-			if _, err := fmt.Fprintf(w, "%s\t%s\t%s\n", p.Name, p.Slug, active); err != nil {
+			if p.Name != p.Slug {
+				label = fmt.Sprintf("%s (%s)", p.Name, p.Slug)
+			}
+			if _, err := fmt.Fprintf(w, "%s\t%s\t%s\n", label, p.Slug, active); err != nil {
 				return err
 			}
 		}

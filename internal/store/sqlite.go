@@ -12,9 +12,6 @@ import (
 	_ "modernc.org/sqlite" // SQLite driver
 )
 
-//go:embed migrations/global/*.sql
-var globalMigrationsFS embed.FS
-
 //go:embed migrations/profile/*.sql
 var profileMigrationsFS embed.FS
 
@@ -23,19 +20,13 @@ type DB struct {
 	*sql.DB
 }
 
-// OpenGlobal opens (or creates) the global registry database at path.
-// The global DB holds only the profiles table.
-func OpenGlobal(path string) (*DB, error) {
-	return open(path, globalMigrationsFS, "migrations/global")
-}
-
 // OpenProfile opens (or creates) the per-profile database at path.
 // The profile DB holds conversations, messages, memory notes, provider config, etc.
 func OpenProfile(path string) (*DB, error) {
 	return open(path, profileMigrationsFS, "migrations/profile")
 }
 
-// open is the shared implementation used by OpenGlobal and OpenProfile.
+// open is the shared implementation used by OpenProfile.
 func open(path string, migrFS embed.FS, migrDir string) (*DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
