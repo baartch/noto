@@ -6,18 +6,19 @@ run:
 
 linters:
   enable:
+    - bodyclose
+    - copyloopvar
     - errcheck
-    - gosimple
+    - gocritic
     - govet
     - ineffassign
     - staticcheck
     - unused
     - misspell
+    - modernize
     - revive
     - exhaustive
     - noctx
-    - bodyclose
-    - exportloopref
   exclusions:
     rules:
     - path: _test\.go
