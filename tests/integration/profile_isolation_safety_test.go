@@ -123,8 +123,8 @@ func TestProfileIsolation_DeleteCascades(t *testing.T) {
 
 // TestProfileIsolation_VectorManifestEntries verifies manifest entries stay profile-scoped.
 func TestProfileIsolation_VectorManifestEntries(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 
 	svc := profile.NewService(store.NewProfileRepo(db))
