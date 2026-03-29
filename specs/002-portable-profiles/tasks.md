@@ -104,9 +104,9 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T024 [P] Update quickstart docs in specs/002-portable-profiles/quickstart.md
-- [ ] T025 Validate UX messaging consistency in internal/commands/profile_commands.go and internal/app/profile_cmd.go
-- [ ] T026 Performance check for directory scan in tests/integration/profile_discovery_bench_test.go
+- [X] T024 [P] Update quickstart docs in specs/002-portable-profiles/quickstart.md
+- [X] T025 Validate UX messaging consistency in internal/commands/profile_commands.go and internal/app/profile_cmd.go
+- [X] T026 Performance check for directory scan in tests/integration/profile_discovery_bench_test.go
 - [ ] T027 Run quickstart.md validation steps manually and note results in specs/002-portable-profiles/quickstart.md
 
 ---

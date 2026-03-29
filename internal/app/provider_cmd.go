@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"noto/internal/profile"
 	"noto/internal/security"
 	"noto/internal/store"
 )
@@ -243,7 +244,8 @@ func openBothDBs(ctx context.Context) (*store.DB, *store.DB, *store.Profile, err
 }
 
 func resolveActiveProfile(ctx context.Context, db *store.DB) (*store.Profile, error) {
-	svc := profileServiceAdapter{repo: store.NewProfileRepo(db)}
+	_ = db
+	svc := profile.NewService(nil)
 	p, err := svc.GetActive(ctx)
 	if err != nil {
 		return nil, errors.New("no active profile — run: noto profile select <name>")
@@ -264,10 +266,3 @@ func maskKey(key string) string {
 	return key[:4]
 }
 
-type profileServiceAdapter struct {
-	repo *store.ProfileRepo
-}
-
-func (a profileServiceAdapter) GetActive(ctx context.Context) (*store.Profile, error) {
-	return a.repo.GetDefault(ctx)
-}
