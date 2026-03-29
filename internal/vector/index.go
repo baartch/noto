@@ -383,7 +383,7 @@ func reshapeVectors(flat []float32, count int, dim int) [][]float32 {
 		return nil
 	}
 	vectors := make([][]float32, 0, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		start := i * dim
 		end := start + dim
 		if end > len(flat) {

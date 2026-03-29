@@ -3,7 +3,7 @@ package integration
 import (
 	"context"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -97,9 +97,9 @@ func BenchmarkVectorLookup_P95(b *testing.B) {
 	dim := 8
 
 	entries := make([]vector.Entry, 0, entryCount)
-	for i := 0; i < entryCount; i++ {
+	for i := range entryCount {
 		vec := make([]float32, dim)
-		for j := 0; j < dim; j++ {
+		for j := range dim {
 			vec[j] = float32(i+j) / 1000
 		}
 		entries = append(entries, vector.Entry{
@@ -119,7 +119,7 @@ func BenchmarkVectorLookup_P95(b *testing.B) {
 	}
 
 	query := make([]float32, dim)
-	for j := 0; j < dim; j++ {
+	for j := range dim {
 		query[j] = 0.1
 	}
 
@@ -145,12 +145,10 @@ func percentile(samples []time.Duration, p float64) time.Duration {
 		return 0
 	}
 	idx := int(float64(len(samples)-1) * p)
-	if idx < 0 {
-		idx = 0
-	}
+	idx = max(idx, 0)
 	if idx >= len(samples) {
 		idx = len(samples) - 1
 	}
-	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+	slices.Sort(samples)
 	return samples[idx]
 }
