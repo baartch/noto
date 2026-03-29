@@ -87,14 +87,14 @@
 
 ### Tests for User Story 3 (REQUIRED) ⚠️
 
-- [ ] T019 [P] [US3] Integration test for profile listing via directory scan in tests/integration/profile_discovery_test.go
-- [ ] T020 [P] [US3] Integration test for duplicate names disambiguation in tests/integration/profile_duplicate_names_test.go
+- [X] T019 [P] [US3] Integration test for profile listing via directory scan in tests/integration/profile_discovery_test.go
+- [X] T020 [P] [US3] Integration test for duplicate names disambiguation in tests/integration/profile_duplicate_names_test.go
 
 ### Implementation for User Story 3
 
-- [ ] T021 [US3] Implement directory scan listing in internal/profile/discovery.go
-- [ ] T022 [US3] Use slug disambiguation in listing/selection in internal/commands/profile_commands.go
-- [ ] T023 [US3] Persist active profile selection to local config in internal/profile/service.go and internal/config/active_profile.go
+- [X] T021 [US3] Implement directory scan listing in internal/profile/discovery.go
+- [X] T022 [US3] Use slug disambiguation in listing/selection in internal/commands/profile_commands.go
+- [X] T023 [US3] Persist active profile selection to local config in internal/profile/service.go and internal/config/active_profile.go
 
 **Checkpoint**: User Story 3 should be fully functional and testable independently
 

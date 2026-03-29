@@ -36,6 +36,11 @@ func (s *Service) Create(ctx context.Context, name string) (*store.Profile, erro
 		return nil, errors.New("profile: name must not be empty")
 	}
 	slug := toSlug(name)
+	if existing, _, err := DiscoverProfiles(); err == nil {
+		if hasProfileSlug(existing, slug) {
+			slug = fmt.Sprintf("%s-%s", slug, newID()[:6])
+		}
+	}
 	id := newID()
 
 	systemPromptPath, err := DefaultSystemPromptPath(slug)
@@ -280,6 +285,15 @@ func findProfileByNameOrSlug(profiles []*store.Profile, value string) *store.Pro
 		}
 	}
 	return nil
+}
+
+func hasProfileSlug(profiles []*store.Profile, slug string) bool {
+	for _, p := range profiles {
+		if p.Slug == slug {
+			return true
+		}
+	}
+	return false
 }
 
 // toSlug converts a display name to a URL-safe slug.
