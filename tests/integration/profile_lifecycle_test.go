@@ -10,8 +10,8 @@ import (
 )
 
 func TestProfileLifecycle_Create(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 	svc := profile.NewService(store.NewProfileRepo(db))
 
@@ -25,8 +25,8 @@ func TestProfileLifecycle_Create(t *testing.T) {
 }
 
 func TestProfileLifecycle_List(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 	svc := profile.NewService(store.NewProfileRepo(db))
 
@@ -43,8 +43,8 @@ func TestProfileLifecycle_List(t *testing.T) {
 }
 
 func TestProfileLifecycle_Select(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 	svc := profile.NewService(store.NewProfileRepo(db))
 
@@ -79,8 +79,8 @@ func TestProfileLifecycle_Select(t *testing.T) {
 }
 
 func TestProfileLifecycle_Rename(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 	svc := profile.NewService(store.NewProfileRepo(db))
 
@@ -98,8 +98,8 @@ func TestProfileLifecycle_Rename(t *testing.T) {
 }
 
 func TestProfileLifecycle_Delete(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 	svc := profile.NewService(store.NewProfileRepo(db))
 
@@ -120,8 +120,8 @@ func TestProfileLifecycle_Delete(t *testing.T) {
 }
 
 func TestProfileLifecycle_Delete_LastProfile_Fails(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 	svc := profile.NewService(store.NewProfileRepo(db))
 
@@ -134,8 +134,8 @@ func TestProfileLifecycle_Delete_LastProfile_Fails(t *testing.T) {
 }
 
 func TestProfileLifecycle_Delete_ConfirmationDenied_Fails(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 	svc := profile.NewService(store.NewProfileRepo(db))
 

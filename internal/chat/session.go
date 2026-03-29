@@ -296,12 +296,12 @@ func buildSessionSummary(messages []*store.Message) string {
 }
 
 func truncateSummary(text string) string {
-	max := 280
+	maxLen := 280
 	runes := []rune(strings.TrimSpace(text))
-	if len(runes) <= max {
+	if len(runes) <= maxLen {
 		return string(runes)
 	}
-	return string(runes[:max]) + "…"
+	return string(runes[:maxLen]) + "…"
 }
 
 func filterConversationMessages(messages []*store.Message, conversationID string) []*store.Message {

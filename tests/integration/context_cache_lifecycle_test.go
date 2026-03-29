@@ -11,8 +11,8 @@ import (
 )
 
 func TestContextCache_HitAfterPut(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 
 	p, _ := profile.NewService(store.NewProfileRepo(db)).Create(ctx, "Cache Hit Test")
@@ -36,8 +36,8 @@ func TestContextCache_HitAfterPut(t *testing.T) {
 }
 
 func TestContextCache_MissOnUnknownKey(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 
 	p, _ := profile.NewService(store.NewProfileRepo(db)).Create(ctx, "Cache Miss Test")
@@ -54,8 +54,8 @@ func TestContextCache_MissOnUnknownKey(t *testing.T) {
 }
 
 func TestContextCache_InvalidateRemovesEntry(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 
 	p, _ := profile.NewService(store.NewProfileRepo(db)).Create(ctx, "Cache Invalidate Test")
@@ -76,8 +76,8 @@ func TestContextCache_InvalidateRemovesEntry(t *testing.T) {
 }
 
 func TestContextCache_ExpiredEntry_ReturnsMiss(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 
 	p, _ := profile.NewService(store.NewProfileRepo(db)).Create(ctx, "Cache Expiry Test")
@@ -108,8 +108,8 @@ func TestContextCache_ExpiredEntry_ReturnsMiss(t *testing.T) {
 }
 
 func TestContextCache_InvalidateAll_ClearsProfile(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 	ctx := context.Background()
 
 	p, _ := profile.NewService(store.NewProfileRepo(db)).Create(ctx, "Cache ClearAll Test")

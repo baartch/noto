@@ -25,8 +25,8 @@ func tempDB(t *testing.T) (*store.DB, func()) {
 }
 
 func TestStartupFlow_ZeroProfiles_PromptsCreate(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 
 	repo := store.NewProfileRepo(db)
 	svc := profile.NewService(repo)
@@ -51,8 +51,8 @@ func TestStartupFlow_ZeroProfiles_PromptsCreate(t *testing.T) {
 }
 
 func TestStartupFlow_OneProfile_AutoSelect(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 
 	repo := store.NewProfileRepo(db)
 	svc := profile.NewService(repo)
@@ -81,8 +81,8 @@ func TestStartupFlow_OneProfile_AutoSelect(t *testing.T) {
 }
 
 func TestStartupFlow_MultipleProfiles_UsesDefault(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 
 	repo := store.NewProfileRepo(db)
 	svc := profile.NewService(repo)
@@ -112,8 +112,8 @@ func TestStartupFlow_MultipleProfiles_UsesDefault(t *testing.T) {
 }
 
 func TestStartupFlow_MultipleProfiles_NoDefault_UsesLastUpdated(t *testing.T) {
-	db, close := tempDB(t)
-	defer close()
+	db, closeDB := tempDB(t)
+	defer closeDB()
 
 	repo := store.NewProfileRepo(db)
 	svc := profile.NewService(repo)
