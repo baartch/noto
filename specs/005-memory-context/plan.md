@@ -1,111 +1,102 @@
-# Implementation Plan: [FEATURE]
+# Implementation Plan: Memory Context Indexing
 
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
-
-**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
+**Branch**: `005-memory-context` | **Date**: 2026-04-10 | **Spec**: [spec.md](./spec.md)
+**Input**: Feature specification from `/specs/005-memory-context/spec.md`
 
 ## Summary
 
-[Extract from feature spec: primary requirement + technical approach from research]
+Implement relevance-based memory retrieval with a persistent vector index, configurable 1,500-token default budget, importance-then-recency fallback, extractor-model fallback to main model with footer warning, and automatic index maintenance. Ensure context caching persists across restarts and maintenance does not block chat.
 
 ## Technical Context
 
-<!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
--->
-
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: Go 1.26+
+**Primary Dependencies**: charm.land/bubbletea/v2, charm.land/bubbles/v2, charm.land/lipgloss/v2, Cobra, modernc.org/sqlite
+**Storage**: Per-profile SQLite DB + profile-local vector index file
+**Testing**: `go test ./...`, integration tests in `tests/integration`
+**Target Platform**: Terminal (Linux/macOS/Windows)
+**Project Type**: CLI/TUI application
+**Performance Goals**: Context assembly under 200ms with 10k notes
+**Constraints**: Token budget default 1,500 (adjustable), deterministic fallback ordering
+**Scale/Scope**: Single-profile memory retrieval with incremental indexing and periodic compaction
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Code Quality Gate**: Define linting, formatting, static analysis, and review criteria;
-  no plan proceeds without explicit quality enforcement steps.
-- **Testing Standards Gate**: Define required unit/integration/contract coverage for impacted
-  behavior and failure paths; tests must be planned before implementation tasks.
-- **UX Consistency Gate**: Identify impacted user flows and reference existing design/system
-  patterns; document any intentional deviations with rationale.
-- **Performance Gate**: Define measurable budgets (latency, throughput, memory, render time,
-  or build/runtime costs as applicable) and validation approach.
+- **Code Quality Gate**: Run `golangci-lint run` and `go test ./...` before merge.
+- **Testing Standards Gate**: Add/adjust tests for relevance selection, fallback ordering, and persistence across restarts.
+- **UX Consistency Gate**: Ensure settings dialog (Ctrl+J) and footer warning align with existing TUI patterns and terminology.
+- **Performance Gate**: Validate context assembly latency under 200ms with 10k notes.
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/[###-feature]/
-├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output (/speckit.plan command)
-├── data-model.md        # Phase 1 output (/speckit.plan command)
-├── quickstart.md        # Phase 1 output (/speckit.plan command)
-├── contracts/           # Phase 1 output (/speckit.plan command)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
+specs/005-memory-context/
+├── plan.md
+├── research.md
+├── data-model.md
+├── quickstart.md
+├── contracts/
+└── tasks.md
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
+internal/
+├── memory/
+│   ├── extractor.go
+│   ├── retrieval.go
+│   └── ...
+├── vector/
+│   ├── index.go
+│   ├── sync.go
+│   ├── rebuild.go
+│   └── hnsw/
+├── store/
+│   ├── memory_note_repo.go
+│   ├── vector_manifest_repo.go
+│   └── ...
+├── tui/
+│   └── ...
+└── commands/
+
+specs/005-memory-context/
 
 tests/
-├── contract/
 ├── integration/
-└── unit/
-
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+└── contract/
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**Structure Decision**: Single Go CLI/TUI project with memory and vector logic under `internal/memory` and `internal/vector`.
+
+## Plan
+
+### Phase 0: Research
+- Confirm incremental vector indexing strategy and compaction triggers.
+- Validate token-budgeted selection approach for short notes.
+
+### Phase 1: Design
+- Define context selection flow (vector ranking → token budget → fallback ordering).
+- Define index maintenance cadence and compaction trigger rules.
+- Specify settings storage for token budget and Ctrl+J dialog behavior.
+- Define extractor fallback behavior and footer warning text.
+
+### Phase 2: Implementation
+- Persist token budget setting and wire Ctrl+J settings dialog.
+- Add relevance selection using vector index and token budget.
+- Implement importance-then-recency fallback when index missing/stale.
+- Implement extractor-model fallback to main model with footer warning.
+- Implement incremental index updates on note changes and periodic compaction/rebuild.
+- Ensure cached context persists across restarts.
+
+### Phase 3: Validation
+- Run `go test ./...` and lint checks.
+- Validate latency budget with large note sets.
+- Run quickstart scenarios for relevance, persistence, and fallback.
 
 ## Complexity Tracking
 
-> **Fill ONLY if Constitution Check has violations that must be justified**
-
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+> **No constitution violations identified.**
