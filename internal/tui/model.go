@@ -801,13 +801,11 @@ func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea
 		m.picker = nil
 		m.input.SetValue("")
 		m.clearSuggestions()
-		cmds = append(cmds, m.input.Focus())
-		return m, nil
+		return m, m.input.Focus()
 	case key.Matches(msg, m.keys.openModel):
 		m.picker = nil
 		m.input.SetValue("")
 		m.clearSuggestions()
-		cmds = append(cmds, m.input.Focus())
 		return m.openPicker(pickerKindModel, cmds)
 	case key.Matches(msg, m.keys.toggleHelp):
 		m.help.ShowAll = !m.help.ShowAll

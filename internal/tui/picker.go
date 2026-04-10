@@ -57,7 +57,7 @@ func (d pickerDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 	}
 
 	line := "  " + indicator + " " + it.display()
-	fmt.Fprint(w, style.Render(fitLine(line, m.Width())))
+	_, _ = fmt.Fprint(w, style.Render(fitLine(line, m.Width())))
 }
 
 // pickerState is the generic overlay picker used for model and profile selection.

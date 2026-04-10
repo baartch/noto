@@ -1,8 +1,8 @@
 package tui
 
 import (
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textarea"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
 
@@ -41,7 +41,6 @@ var (
 	suggSelectStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("63")).Bold(true)
 	dividerStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
 	promptStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	cursorStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
 	cursorStyleDef  = textarea.CursorStyle{Color: lipgloss.Color("63"), Shape: tea.CursorBlock, Blink: true}
 
 	// Picker styles
@@ -49,6 +48,5 @@ var (
 	pickerCursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true)
 	pickerNormalStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
 	pickerActiveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // currently-active item
-	pickerFilterStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
 	pickerHeaderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Bold(true)
 )
