@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -183,6 +184,15 @@ func SelectNotesForContext(notes []*store.MemoryNote, rankedIDs []string, budget
 				ordered = append(ordered, note)
 			}
 		}
+	} else {
+		ordered = make([]*store.MemoryNote, len(notes))
+		copy(ordered, notes)
+		sort.SliceStable(ordered, func(i, j int) bool {
+			if ordered[i].Importance == ordered[j].Importance {
+				return ordered[i].CreatedAt.After(ordered[j].CreatedAt)
+			}
+			return ordered[i].Importance > ordered[j].Importance
+		})
 	}
 
 	selected := make([]*store.MemoryNote, 0, len(ordered))
