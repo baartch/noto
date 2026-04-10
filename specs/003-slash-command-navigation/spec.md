@@ -5,6 +5,12 @@
 **Status**: Draft  
 **Input**: User description: "The app needs to support slash commands (/<cmd>) . Typing / should show possible commands and as more as the user types, filter the list of possible commands. the user can use cursor up and down to scroll throught the complete list and select a command, Tab auto-fills the selected command, Enter runs the selected command."
 
+## Clarifications
+
+### Session 2026-04-10
+
+- Q: Should Up/Down navigate the entire command list? → A: Yes, Up/Down should traverse the full list with the list window scrolling as needed.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Discover Slash Commands (Priority: P1)
@@ -47,7 +53,7 @@ As a user, I want to navigate the filtered command list with the keyboard and ex
 
 **Acceptance Scenarios**:
 
-1. **Given** the command list is visible, **When** the user presses Up/Down, **Then** the selection moves through the list without leaving the input.
+1. **Given** the command list is visible, **When** the user presses Up/Down, **Then** the selection moves through the full list and the list window scrolls as needed.
 2. **Given** a command is selected, **When** the user presses Tab, **Then** the selected command auto-fills into the input.
 3. **Given** a command is selected, **When** the user presses Enter, **Then** the selected command executes and the input clears.
 
@@ -65,7 +71,7 @@ As a user, I want to navigate the filtered command list with the keyboard and ex
 
 - **FR-001**: The system MUST display available slash commands when the user types `/`.
 - **FR-002**: The system MUST filter the command list as the user types additional characters.
-- **FR-003**: The system MUST allow keyboard navigation (Up/Down) through the command list.
+- **FR-003**: The system MUST allow keyboard navigation (Up/Down) through the full command list, scrolling the visible window as needed.
 - **FR-004**: The system MUST autofill the selected command into the input when Tab is pressed.
 - **FR-005**: The system MUST execute the selected command when Enter is pressed.
 - **FR-006**: The system MUST hide the command list when the input no longer begins with `/`.
