@@ -107,6 +107,7 @@ func NewSession(
 			logger.Infof("vector index issue: %v", err)
 		}),
 		memory.WithTokenBudget(settings.MemoryTokenBudget),
+		memory.WithVectorRetrieval(vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)), profileID, adapter, ""),
 	)
 	rc, err := ret.Assemble(ctx, profileID, baseSystemPrompt)
 	if err != nil {

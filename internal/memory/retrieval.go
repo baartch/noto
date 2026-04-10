@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"noto/internal/provider"
 	"noto/internal/store"
 	"noto/internal/vector"
 )
@@ -39,6 +40,8 @@ type CacheRepository interface {
 	Invalidate(ctx context.Context, profileID, cacheKey string) error
 }
 
+const vectorTopK = 6
+
 // Retrieval assembles context for a chat turn from SQLite source-of-truth data.
 type Retrieval struct {
 	noteRepo        *store.MemoryNoteRepo
@@ -47,6 +50,10 @@ type Retrieval struct {
 	vectorIndexPath string
 	warnFn          func(error)
 	tokenBudget     int
+	vectorIndex     vector.Index
+	profileID       string
+	embedder        vector.Embedder
+	embeddingModel  string
 }
 
 // RetrievalOption configures Retrieval behavior.
@@ -70,6 +77,16 @@ func WithWarnFunc(fn func(error)) RetrievalOption {
 func WithTokenBudget(budget int) RetrievalOption {
 	return func(r *Retrieval) {
 		r.tokenBudget = budget
+	}
+}
+
+// WithVectorRetrieval wires vector ranking into Retrieval.
+func WithVectorRetrieval(index vector.Index, profileID string, embedder vector.Embedder, model string) RetrievalOption {
+	return func(r *Retrieval) {
+		r.vectorIndex = index
+		r.profileID = profileID
+		r.embedder = embedder
+		r.embeddingModel = model
 	}
 }
 
@@ -120,7 +137,11 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 		return nil, fmt.Errorf("memory: list notes: %w", err)
 	}
 
-	selectedNotes := SelectNotesForContext(notes, nil, r.tokenBudget)
+	rankedIDs, err := r.rankNotes(ctx, systemPrompt, summaryText)
+	if err != nil && r.warnFn != nil {
+		r.warnFn(err)
+	}
+	selectedNotes := SelectNotesForContext(notes, rankedIDs, r.tokenBudget)
 	memoryBlock := BuildMemoryBlock(selectedNotes)
 
 	assembled := AssemblePrompt(systemPrompt, summaryText, memoryBlock)
@@ -248,4 +269,75 @@ func (r *Retrieval) checkVectorIndex() error {
 		return vector.ErrIndexCorrupted
 	}
 	return nil
+}
+
+type noteLister struct {
+	repo *store.MemoryNoteRepo
+}
+
+func (n noteLister) ListByProfile(ctx context.Context, profileID string) ([]vector.MemoryNoteRecord, error) {
+	notes, err := n.repo.ListByProfile(ctx, profileID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]vector.MemoryNoteRecord, 0, len(notes))
+	for _, note := range notes {
+		out = append(out, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
+	}
+	return out, nil
+}
+
+func (r *Retrieval) rankNotes(ctx context.Context, systemPrompt, summaryText string) ([]string, error) {
+	if r.vectorIndex == nil || r.embedder == nil || r.profileID == "" {
+		return nil, nil
+	}
+	queryText := strings.TrimSpace(systemPrompt)
+	if summaryText != "" {
+		queryText = queryText + "\n" + summaryText
+	}
+	if queryText == "" {
+		return nil, nil
+	}
+	model := r.embeddingModel
+	resp, err := r.embedder.Embed(ctx, provider.EmbeddingRequest{Input: queryText, Model: model})
+	if err != nil {
+		return nil, err
+	}
+
+	manifestRepo := store.NewVectorManifestRepo(r.noteRepo.DB())
+	entries, err := manifestRepo.ListEntries(ctx, r.profileID)
+	if err != nil {
+		return nil, err
+	}
+	vectorEntries := make([]vector.Entry, 0, len(entries))
+	for _, e := range entries {
+		vectorEntries = append(vectorEntries, vector.Entry{
+			ID:             e.ID,
+			ProfileID:      e.ProfileID,
+			SourceType:     vector.SourceType(e.SourceType),
+			SourceID:       e.SourceID,
+			ChunkHash:      e.ChunkHash,
+			EmbeddingModel: e.EmbeddingModel,
+			EmbeddingDim:   e.EmbeddingDim,
+			VectorRef:      e.VectorRef,
+		})
+	}
+	if fileIndex, ok := r.vectorIndex.(*vector.FileIndex); ok {
+		fileIndex.WithProfile(r.profileID)
+		fileIndex.SeedEntries(vectorEntries)
+		if err := fileIndex.Load(); err != nil {
+			return nil, err
+		}
+	}
+
+	retrieval := vector.NewHybridRetrieval(r.vectorIndex, noteLister{repo: r.noteRepo}, r.profileID, vector.WithWarnFunc(r.warnFn))
+	results, err := retrieval.Retrieve(ctx, resp.Embedding, vectorTopK)
+	if err != nil {
+		return nil, err
+	}
+	ranked := make([]string, 0, len(results))
+	for _, res := range results {
+		ranked = append(ranked, res.Note.ID)
+	}
+	return ranked, nil
 }
