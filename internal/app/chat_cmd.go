@@ -114,6 +114,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 	providerCfg, decryptedKey := loadProviderConfig(ctx, profileDB, activeProfile.ID)
 	activeModel := ""
 	extractorModel := ""
+	extractorFallback := false
 	cacheStatus := "cache: n/a"
 	inputHistory := loadInputHistory(ctx, profileDB, activeProfile.ID)
 
@@ -124,7 +125,11 @@ func runChat(_ *cobra.Command, _ []string) error {
 
 	if providerCfg != nil && decryptedKey != "" {
 		activeModel = providerCfg.EffectiveModel()
-		extractorModel = providerCfg.EffectiveExtractorModel()
+		extractorModel = providerCfg.ExtractorModel
+		if extractorModel == "" {
+			extractorModel = activeModel
+			extractorFallback = true
+		}
 
 		adapterCfg := provider.Config{
 			ProviderType: "openai_compatible",
@@ -153,12 +158,17 @@ func runChat(_ *cobra.Command, _ []string) error {
 				Model:        activeModel,
 				APIKey:       adapterCfg.APIKey,
 			}),
-			provider.NewOpenAICompatible(provider.Config{
-				ProviderType: "openai_compatible",
-				Endpoint:     adapterCfg.Endpoint,
-				Model:        extractorModel,
-				APIKey:       adapterCfg.APIKey,
-			}),
+			func() provider.Adapter {
+				if extractorFallback {
+					return nil
+				}
+				return provider.NewOpenAICompatible(provider.Config{
+					ProviderType: "openai_compatible",
+					Endpoint:     adapterCfg.Endpoint,
+					Model:        extractorModel,
+					APIKey:       adapterCfg.APIKey,
+				})
+			}(),
 			logger,
 			func(saved, updated int) {
 				if prog != nil {
@@ -206,6 +216,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 				return err
 			}
 			extractorModel = modelID
+			extractorFallback = false
 			if sess != nil {
 				sess.SetExtractorModel(modelID)
 			}
@@ -248,7 +259,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 			listModelsFn = nil
 			modelSelectedFn = func(modelID string) error { return nil }
 			extractorModelSelectedFn = func(modelID string) error { return nil }
-			inputHistory = loadInputHistory(ctx, profileDB, p.ID)
+			extractorFallback = false
 			inputHistory = loadInputHistory(ctx, profileDB, p.ID)
 
 			if providerCfg != nil && decryptedKey != "" {

@@ -29,9 +29,12 @@
    - Clear the extractor model configuration.
    - Trigger a chat turn and confirm extraction uses the main model.
    - Confirm a footer warning is shown while fallback is active.
+   - Footer warning copy should read: **"Extractor model missing — using main model."**
 
 6. **Verify settings**
    - Open settings (Ctrl+J) and adjust the token budget.
+   - Setting label: **"Memory context token budget"** (default **1500**).
+   - Storage: persisted per profile in settings (config) so it survives restarts.
    - Confirm subsequent chat turns use the updated budget.
 
 ## Expected Results

@@ -7,15 +7,15 @@
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Review current memory extraction and retrieval flow in internal/memory/extractor.go and internal/memory/retrieval.go
-- [ ] T002 Review vector index plumbing in internal/vector/ (index.go, sync.go, rebuild.go)
+- [X] T001 Review current memory extraction and retrieval flow in internal/memory/extractor.go and internal/memory/retrieval.go
+- [X] T002 Review vector index plumbing in internal/vector/ (index.go, sync.go, rebuild.go)
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T003 Define token-budget setting storage and settings dialog behavior in specs/005-memory-context/quickstart.md
-- [ ] T004 Define footer warning copy and extractor fallback UX in specs/005-memory-context/quickstart.md
+- [X] T003 Define token-budget setting storage and settings dialog behavior in specs/005-memory-context/quickstart.md
+- [X] T004 Define footer warning copy and extractor fallback UX in specs/005-memory-context/quickstart.md
 
 ---
 
