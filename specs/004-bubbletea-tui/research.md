@@ -39,3 +39,4 @@
 - Inventory effort required to identify all TUI flows and map them to Bubble Tea/Bubbles components.
 - UX behavior should remain consistent with existing patterns unless explicitly documented.
 - Lip Gloss styles should be defined in reusable blocks to prevent drift.
+- Initial audit indicates existing TUI entry points already use Bubble Tea models; no refactor changes identified yet. See tests/integration/tui_flow_regression_test.go for coverage.

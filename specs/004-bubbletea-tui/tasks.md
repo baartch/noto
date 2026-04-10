@@ -30,12 +30,12 @@
 
 ### Tests for User Story 1 (REQUIRED)
 
-- [ ] T006 [P] [US1] Add regression tests for refactored TUI flows in tests/integration/tui_flow_regression_test.go
+- [x] T006 [P] [US1] Add regression tests for refactored TUI flows in tests/integration/tui_flow_regression_test.go
 
 ### Implementation for User Story 1
 
-- [ ] T007 [US1] Refactor any non-Bubble Tea TUI flows to Bubble Tea models in internal/tui/
-- [ ] T008 [US1] Update TUI entry points to use Bubble Tea models in internal/app/ and internal/tui/
+- [x] T007 [US1] Refactor any non-Bubble Tea TUI flows to Bubble Tea models in internal/tui/
+- [x] T008 [US1] Update TUI entry points to use Bubble Tea models in internal/app/ and internal/tui/
 
 ---
 
