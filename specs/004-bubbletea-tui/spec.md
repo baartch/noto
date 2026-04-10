@@ -55,7 +55,8 @@ As a maintainer, I want to reuse existing Bubbles components whenever possible s
 - **FR-001**: The system MUST implement all TUI interaction flows using the Bubble Tea application model.
 - **FR-002**: The system MUST refactor existing TUI interaction flows to use the Bubble Tea application model.
 - **FR-003**: The system MUST prefer existing Bubbles components for TUI elements when they satisfy requirements.
-- **FR-004**: The system MUST document any custom TUI components and explain why no Bubbles component was suitable.
+- **FR-004**: The system MUST define styling using Lip Gloss when styling is required.
+- **FR-005**: The system MUST document any custom TUI components and explain why no Bubbles component was suitable.
 
 ### Non-Functional Requirements *(mandatory)*
 
@@ -72,6 +73,7 @@ As a maintainer, I want to reuse existing Bubbles components whenever possible s
 
 - **TUI Interaction Flow**: Any user-visible terminal UI sequence (screens, dialogs, pickers).
 - **Bubbles Component Usage**: The reuse of a standard Bubbles component in place of custom UI.
+- **Styling Definition**: The set of reusable Lip Gloss style definitions applied to TUI elements.
 
 ## Success Criteria *(mandatory)*
 
@@ -79,9 +81,10 @@ As a maintainer, I want to reuse existing Bubbles components whenever possible s
 
 - **SC-001**: 100% of TUI interaction flows (existing and new) use Bubble Tea models and update loops.
 - **SC-002**: 100% of TUI interactions reuse a Bubbles component when one exists that meets requirements.
-- **SC-003**: Any custom TUI components include documented rationale for not using Bubbles.
-- **SC-004**: 0 lint/format violations in CI for the feature scope.
-- **SC-005**: All new/changed behavior covered by automated tests.
+- **SC-003**: 100% of TUI styling is defined via Lip Gloss when styling is required.
+- **SC-004**: Any custom TUI components include documented rationale for not using Bubbles.
+- **SC-005**: 0 lint/format violations in CI for the feature scope.
+- **SC-006**: All new/changed behavior covered by automated tests.
 
 ## Assumptions
 
