@@ -26,6 +26,7 @@ As a maintainer, I want all TUI interactions to be built with Bubble Tea so that
 1. **Given** any TUI interaction flow, **When** it is implemented, **Then** it is built using Bubble Tea conventions.
 2. **Given** a new TUI surface is added, **When** it is reviewed, **Then** it conforms to the Bubble Tea application model.
 3. **Given** picker overlays or suggestion lists are shown, **When** they render, **Then** the input bar and footer remain anchored to the bottom of the screen.
+4. **Given** a picker overlay is open, **When** the user presses `/` and types, **Then** the list filters to matching items without collapsing or hiding results.
 
 ---
 
@@ -58,7 +59,8 @@ As a maintainer, I want to reuse existing Bubbles components whenever possible s
 - **FR-003**: The system MUST prefer existing Bubbles components for TUI elements when they satisfy requirements.
 - **FR-004**: The system MUST define styling using Lip Gloss when styling is required.
 - **FR-005**: The system MUST keep the input bar and footer anchored to the bottom of the screen when overlays (pickers, suggestions) are visible.
-- **FR-006**: The system MUST document any custom TUI components and explain why no Bubbles component was suitable.
+- **FR-006**: The system MUST support filtering in picker overlays via the Bubbles list filter input without hiding the list results.
+- **FR-007**: The system MUST document any custom TUI components and explain why no Bubbles component was suitable.
 
 ### Non-Functional Requirements _(mandatory)_
 
@@ -85,9 +87,10 @@ As a maintainer, I want to reuse existing Bubbles components whenever possible s
 - **SC-002**: 100% of TUI interactions reuse a Bubbles component when one exists that meets requirements.
 - **SC-003**: 100% of TUI styling is defined via Lip Gloss when styling is required.
 - **SC-004**: Pickers and suggestion lists do not displace the input bar and footer from the bottom of the screen.
-- **SC-005**: Any custom TUI components include documented rationale for not using Bubbles.
-- **SC-006**: 0 lint/format violations in CI for the feature scope.
-- **SC-007**: All new/changed behavior covered by automated tests.
+- **SC-005**: Picker overlays support `/`-triggered filtering that updates the list results in place.
+- **SC-006**: Any custom TUI components include documented rationale for not using Bubbles.
+- **SC-007**: 0 lint/format violations in CI for the feature scope.
+- **SC-008**: All new/changed behavior covered by automated tests.
 
 ## Assumptions
 

@@ -401,8 +401,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.syncViewport()
 
+	// ---- picker: forward all non-key messages (e.g. FilterMatchesMsg) --------
+	default:
+		if m.picker != nil {
+			updated, cmd := m.picker.list.Update(msg)
+			m.picker.list = updated
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+
 	// ---- keyboard -----------------------------------------------------------
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.picker != nil {
 			return m.updatePicker(msg, cmds)
 		}
@@ -498,7 +508,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // updateSuggNav handles keyboard while suggestion navigation is active.
-func (m Model) updateSuggNav(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
+func (m Model) updateSuggNav(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	//exhaustive:ignore
 	switch {
 	case msg.Key().Code == tea.KeyUp:
@@ -624,6 +634,8 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 // openPicker initializes the picker overlay and fires the async data fetch.
 func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	m.pickerKind = kind
+	m.input.SetValue("")
+	m.input.Blur()
 	switch kind {
 	case pickerKindModel:
 		m.picker = newPickerState("Select model", m.width-4)
@@ -714,17 +726,19 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 }
 
 // updatePicker handles keypresses while the picker overlay is open.
-func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
+func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	//exhaustive:ignore
 	switch {
 	case msg.Key().Code == tea.KeyEsc:
 		m.picker = nil
+		cmds = append(cmds, m.input.Focus())
 	case msg.Key().Code == 'd' && msg.Key().Mod == tea.ModCtrl:
 		return m, tea.Quit
 	case msg.Key().Code == 'c' && msg.Key().Mod == tea.ModCtrl:
 		m.picker = nil
 		m.input.SetValue("")
 		m.clearSuggestions()
+		cmds = append(cmds, m.input.Focus())
 		return m, nil
 	case msg.Key().Code == tea.KeyEnter:
 		chosen := m.picker.selectedValue()
@@ -732,6 +746,7 @@ func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 		m.picker = nil
 		m.input.SetValue("")
 		m.clearSuggestions()
+		cmds = append(cmds, m.input.Focus())
 		if chosen == "" {
 			return m, tea.Batch(cmds...)
 		}
@@ -773,6 +788,9 @@ func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 
 	default:
 		if m.picker != nil {
+			ph := max(m.height/2, 6)
+			maxRows := max(ph-2, 5)
+			m.picker.list.SetSize(max(m.width-2, 10), maxRows)
 			updated, cmd := m.picker.list.Update(msg)
 			m.picker.list = updated
 			if cmd != nil {
@@ -875,7 +893,7 @@ func (m Model) View() tea.View {
 	var mid strings.Builder
 	if m.picker != nil {
 		ph := m.height / 2
-		ph = max(ph, 6)
+		ph = max(ph, 10)
 		mid.WriteString(m.picker.render(ph) + "\n")
 	} else if len(m.suggestions) > 0 {
 		mid.WriteString(m.renderSuggestions(m.suggestionMaxHeight()))

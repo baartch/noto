@@ -57,7 +57,7 @@ func (d pickerDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 	}
 
 	line := "  " + indicator + " " + it.display()
-	fmt.Fprint(w, style.Render(fitLine(line, m.Width()))+"\n")
+	fmt.Fprint(w, style.Render(fitLine(line, m.Width())))
 }
 
 // pickerState is the generic overlay picker used for model and profile selection.
@@ -76,7 +76,7 @@ func newPickerState(title string, width int) *pickerState {
 	l.SetShowHelp(false)
 	l.SetFilteringEnabled(true)
 	l.SetShowFilter(true)
-	l.Title = "  " + title + "  (↑↓ navigate · type to filter · Enter select · Esc cancel)"
+	l.Title = "  " + title + "  (↑↓ navigate · / filter · Enter select · Esc cancel)"
 	return &pickerState{title: title, list: l, width: width}
 }
 
@@ -111,9 +111,9 @@ func (p *pickerState) render(maxHeight int) string {
 		return pickerBorderStyle.Render(errStyle.Render(fitLine("  Error: "+p.err.Error(), width)))
 	}
 
-	maxRows := maxHeight - 2
-	maxRows = max(maxRows, 5)
-	p.list.SetSize(width-2, maxRows)
+	listHeight := maxHeight - 2
+	listHeight = max(listHeight, 6)
+	p.list.SetSize(width-2, listHeight)
 
 	return pickerBorderStyle.Render(p.list.View())
 }
