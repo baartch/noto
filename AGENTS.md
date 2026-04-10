@@ -1,8 +1,10 @@
 # noto Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-03-29
+Auto-generated from all feature plans. Last updated: 2026-04-10
 
 ## Active Technologies
+- Go 1.26+ + Bubble Tea + Bubbles + Lip Gloss (TUI), Cobra (command registry is shared by CLI and slash execution) (003-slash-command-navigation)
+- N/A (this feature is UI/interaction behavior; command registry already exists in-memory) (003-slash-command-navigation)
 
 - Go 1.26+ + Cobra (CLI command surface), Bubble Tea + Bubbles + Lip Gloss (TUI), (001-build-profile-memory-cli)
 - Local SQLite per profile (`~/.noto/profiles/<profile>/memory.db`) + profile-local (001-build-profile-memory-cli)
@@ -31,10 +33,10 @@ tests/
 Go 1.26+: Follow standard conventions
 
 ## Recent Changes
+- 003-slash-command-navigation: Added Go 1.26+ + Bubble Tea + Bubbles + Lip Gloss (TUI), Cobra (command registry is shared by CLI and slash execution)
 
 - 002-portable-profiles: Added Go 1.26+ + Cobra (CLI), Bubble Tea/Bubbles/Lip Gloss (TUI)
 - 001-build-profile-memory-cli: Added Go 1.26+ + Cobra, Bubble Tea, Lip Gloss, `modernc.org/sqlite`, OpenAI-compatible provider adapter, **new** pure-Go HNSW implementation under `internal/vector/hnsw` (no cgo)
-- 001-build-profile-memory-cli: Added Go 1.26+ + Cobra, Bubble Tea, Lip Gloss, `modernc.org/sqlite`, OpenAI-compatible provider adapter, **new** pure-Go HNSW implementation (to be added under `internal/vector/hnsw` to avoid cgo)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
