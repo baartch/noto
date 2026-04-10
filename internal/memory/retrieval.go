@@ -45,6 +45,7 @@ type Retrieval struct {
 	cacheRepo       CacheRepository
 	vectorIndexPath string
 	warnFn          func(error)
+	tokenBudget     int
 }
 
 // RetrievalOption configures Retrieval behavior.
@@ -64,11 +65,21 @@ func WithWarnFunc(fn func(error)) RetrievalOption {
 	}
 }
 
+// WithTokenBudget sets the token budget for selecting memory notes.
+func WithTokenBudget(budget int) RetrievalOption {
+	return func(r *Retrieval) {
+		r.tokenBudget = budget
+	}
+}
+
 // NewRetrieval creates a Retrieval service.
 func NewRetrieval(noteRepo *store.MemoryNoteRepo, summaryRepo *store.SessionSummaryRepo, cacheRepo CacheRepository, opts ...RetrievalOption) *Retrieval {
 	r := &Retrieval{noteRepo: noteRepo, summaryRepo: summaryRepo, cacheRepo: cacheRepo}
 	for _, opt := range opts {
 		opt(r)
+	}
+	if r.tokenBudget <= 0 {
+		r.tokenBudget = 1500
 	}
 	return r
 }
@@ -108,7 +119,8 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 		return nil, fmt.Errorf("memory: list notes: %w", err)
 	}
 
-	memoryBlock := BuildMemoryBlock(notes)
+	selectedNotes := SelectNotesForContext(notes, nil, r.tokenBudget)
+	memoryBlock := BuildMemoryBlock(selectedNotes)
 
 	assembled := AssemblePrompt(systemPrompt, summaryText, memoryBlock)
 
@@ -147,6 +159,51 @@ func BuildMemoryBlock(notes []*store.MemoryNote) string {
 		fmt.Fprintf(&sb, "- [%s] %s\n", n.Category, n.Content)
 	}
 	return sb.String()
+}
+
+// SelectNotesForContext orders notes by relevance (rankedIDs) and enforces token budget.
+// If rankedIDs is empty, notes are assumed pre-sorted by importance then recency.
+func SelectNotesForContext(notes []*store.MemoryNote, rankedIDs []string, budget int) []*store.MemoryNote {
+	if len(notes) == 0 {
+		return nil
+	}
+	if budget <= 0 {
+		budget = 1500
+	}
+
+	ordered := notes
+	if len(rankedIDs) > 0 {
+		byID := make(map[string]*store.MemoryNote, len(notes))
+		for _, n := range notes {
+			byID[n.ID] = n
+		}
+		ordered = make([]*store.MemoryNote, 0, len(rankedIDs))
+		for _, id := range rankedIDs {
+			if note, ok := byID[id]; ok {
+				ordered = append(ordered, note)
+			}
+		}
+	}
+
+	selected := make([]*store.MemoryNote, 0, len(ordered))
+	used := 0
+	for _, note := range ordered {
+		cost := estimateTokens(note.Content)
+		if used+cost > budget {
+			break
+		}
+		selected = append(selected, note)
+		used += cost
+	}
+	return selected
+}
+
+func estimateTokens(content string) int {
+	fields := strings.Fields(content)
+	if len(fields) == 0 {
+		return 1
+	}
+	return len(fields)
 }
 
 // AssemblePrompt merges system prompt, summary, and memory block into the final prompt.

@@ -19,12 +19,13 @@ var ErrMetadataNotFound = errors.New("profile: metadata file not found")
 
 // Metadata holds profile metadata stored within the profile directory.
 type Metadata struct {
-	ID               string    `json:"id"`
-	Name             string    `json:"name"`
-	Slug             string    `json:"slug"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
-	SystemPromptPath string    `json:"system_prompt_path"`
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	Slug              string    `json:"slug"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+	SystemPromptPath  string    `json:"system_prompt_path"`
+	MemoryTokenBudget int       `json:"memory_token_budget"`
 }
 
 // DefaultSystemPromptRelPath returns the prompt path relative to the profile directory.
@@ -75,7 +76,7 @@ func ReadMetadataFile(path string) (*Metadata, error) {
 	if err := validateMetadata(&meta); err != nil {
 		return nil, err
 	}
-	return &meta, nil
+	return normalizeMetadata(&meta), nil
 }
 
 // WriteMetadata writes the profile metadata into the profile directory.
@@ -123,6 +124,16 @@ func validateMetadata(meta *Metadata) error {
 		return errors.New("profile: metadata system prompt path must not be empty")
 	}
 	return nil
+}
+
+func normalizeMetadata(meta *Metadata) *Metadata {
+	if meta == nil {
+		return meta
+	}
+	if meta.MemoryTokenBudget <= 0 {
+		meta.MemoryTokenBudget = config.DefaultMemoryTokenBudget
+	}
+	return meta
 }
 
 func removeMetadata(slug string) error {

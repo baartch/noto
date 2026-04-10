@@ -12,6 +12,7 @@ import (
 	"noto/internal/config"
 	"noto/internal/memory"
 	"noto/internal/observe"
+	"noto/internal/profile"
 	"noto/internal/provider"
 	"noto/internal/store"
 	"noto/internal/vector"
@@ -92,6 +93,10 @@ func NewSession(
 	// Build system prompt with injected memory notes + session summary.
 	cacheRepo := store.NewContextCacheRepo(db)
 	vecPath, _ := config.ProfileVectorPath(profileSlug)
+	settings, err := profile.ReadSettings(profileSlug)
+	if err != nil {
+		return nil, fmt.Errorf("session: read settings: %w", err)
+	}
 	ret := memory.NewRetrieval(
 		noteRepo,
 		summaryRepo,
@@ -100,6 +105,7 @@ func NewSession(
 		memory.WithWarnFunc(func(err error) {
 			logger.Infof("vector index issue: %v", err)
 		}),
+		memory.WithTokenBudget(settings.MemoryTokenBudget),
 	)
 	rc, err := ret.Assemble(ctx, profileID, baseSystemPrompt)
 	if err != nil {
