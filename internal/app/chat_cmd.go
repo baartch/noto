@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 
 	"noto/internal/backup"
@@ -358,7 +358,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 		extractorModelSelectedFn,
 		inputHistory,
 	)
-	prog = tea.NewProgram(m, tea.WithAltScreen())
+	prog = tea.NewProgram(m)
 	if _, runErr := prog.Run(); runErr != nil {
 		return fmt.Errorf("chat: TUI error: %w", runErr)
 	}

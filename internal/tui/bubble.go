@@ -5,26 +5,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
-)
-
-// ---- palette ----------------------------------------------------------------
-
-var (
-	// User bubble
-	userBubbleBg   = lipgloss.Color("25")  // dark blue
-	userBubbleFg   = lipgloss.Color("255") // white
-	userLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true)
-	userTimeStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
-	// Assistant bubble
-	asstLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("78")).Bold(true)
-	asstTimeStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
-	// Command output
-	cmdLineStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("243")).Italic(true)
-	cmdPrefixStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	"charm.land/glamour/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // renderer is a cached glamour renderer — recreated when width changes.
@@ -102,11 +84,7 @@ func renderAssistantBubble(content, modelName string, ts time.Time, termWidth in
 	// Wrap rendered markdown in a subtle left border.
 	lines := strings.Split(rendered, "\n")
 	var sb strings.Builder
-	borderStyle := lipgloss.NewStyle().
-		BorderLeft(true).
-		BorderStyle(lipgloss.ThickBorder()).
-		BorderForeground(lipgloss.Color("63")).
-		PaddingLeft(1)
+	borderStyle := assistantBorderStyle
 
 	// Indent wrapped lines to align with the first line.
 	inner := alignWrappedLines(lines, "  ")
@@ -114,7 +92,7 @@ func renderAssistantBubble(content, modelName string, ts time.Time, termWidth in
 
 	modelLabel := ""
 	if modelName != "" {
-		modelLabel = "  " + lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("["+modelName+"]")
+		modelLabel = "  " + modelLabelStyle.Render("["+modelName+"]")
 	}
 	label := asstLabelStyle.Render("Noto") +
 		modelLabel +

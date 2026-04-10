@@ -9,11 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"noto/internal/chat"
 	"noto/internal/commands"
@@ -144,6 +145,9 @@ type Model struct {
 	height      int
 	err         error
 	ready       bool
+	keys        keyMap
+	help        help.Model
+	helpKeys    helpKeyMap
 
 	// slash suggestion state
 	suggestions []suggest.Suggestion
@@ -185,17 +189,42 @@ type chatMessage struct {
 	timestamp time.Time
 }
 
+type keyMap struct {
+	quit       key.Binding
+	openModel  key.Binding
+	clearInput key.Binding
+	toggleHelp key.Binding
+}
+
+type helpKeyMap struct {
+	primary   []key.Binding
+	secondary []key.Binding
+}
+
+func (h helpKeyMap) ShortHelp() []key.Binding {
+	return h.primary
+}
+
+func (h helpKeyMap) FullHelp() [][]key.Binding {
+	if len(h.secondary) == 0 {
+		return [][]key.Binding{h.primary}
+	}
+	return [][]key.Binding{h.primary, h.secondary}
+}
+
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 // ---- styles -----------------------------------------------------------------
 
-var (
-	headerStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Bold(false)
-	errStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
-	suggNormalStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	suggSelectStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("63")).Bold(true)
-	dividerStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
-)
+// InputPlaceholder exposes the current textarea placeholder for tests.
+func (m Model) InputPlaceholder() string {
+	return m.input.Placeholder
+}
+
+// ViewportHeight exposes the viewport height for tests.
+func (m Model) ViewportHeight() int {
+	return m.viewport.Height()
+}
 
 // New creates a new TUI Model.
 func New(
@@ -223,15 +252,33 @@ func New(
 	ti.ShowLineNumbers = false
 	ti.SetHeight(3)
 	ti.Prompt = "  "
-	promptStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	ti.FocusedStyle.Prompt = promptStyle
-	ti.BlurredStyle.Prompt = promptStyle
-	ti.Cursor.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
+	styles := ti.Styles()
+	styles.Focused.Prompt = promptStyle
+	styles.Blurred.Prompt = promptStyle
+	styles.Cursor = cursorStyleDef
+	ti.SetStyles(styles)
 	// Enter sends; Alt+Enter inserts newline.
 	ti.KeyMap.InsertNewline = key.NewBinding(
 		key.WithKeys("alt+enter"),
 		key.WithHelp("alt+enter", "insert newline"),
 	)
+	keys := keyMap{
+		quit:       key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "quit")),
+		openModel:  key.NewBinding(key.WithKeys("ctrl+l"), key.WithHelp("ctrl+l", "model picker")),
+		clearInput: key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "clear")),
+		toggleHelp: key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+	}
+	helpModel := help.New()
+	helpModel.Styles.ShortKey = helpShortStyle
+	helpModel.Styles.ShortDesc = helpShortStyle
+	helpModel.Styles.FullKey = helpFullStyle
+	helpModel.Styles.FullDesc = helpFullStyle
+	helpKeys := helpKeyMap{
+		primary: []key.Binding{keys.toggleHelp, keys.openModel, keys.quit},
+		secondary: []key.Binding{
+			keys.clearInput,
+		},
+	}
 
 	if inputHistory == nil {
 		inputHistory = []string{}
@@ -249,6 +296,9 @@ func New(
 		dispatcher:             dispatcher,
 		execCtx:                execCtx,
 		provider:               providerFn,
+		keys:                   keys,
+		help:                   helpModel,
+		helpKeys:               helpKeys,
 		listModels:             listModels,
 		modelSelected:          modelSelected,
 		listProfiles:           listProfiles,
@@ -277,12 +327,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		vpH := msg.Height - 5 // inputDivider+input+hint+footer
 		vpH = max(vpH, 1)
 		if !m.ready {
-			m.viewport = viewport.New(msg.Width, vpH)
+			m.viewport = viewport.New(viewport.WithWidth(msg.Width), viewport.WithHeight(vpH))
 			m.viewport.SetContent(m.renderHistory())
 			m.ready = true
 		} else {
-			m.viewport.Width = msg.Width
-			m.viewport.Height = vpH
+			m.viewport.SetWidth(msg.Width)
+			m.viewport.SetHeight(vpH)
 		}
 
 	// ---- picker items loaded ------------------------------------------------
@@ -292,8 +342,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.err != nil {
 				m.picker.err = msg.err
 			} else {
-				m.picker.items = msg.items
-				m.picker.cursor = 0
+				m.picker.setItems(msg.items)
 			}
 		}
 
@@ -303,8 +352,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.err != nil {
 				m.picker.err = msg.err
 			} else {
-				m.picker.items = msg.items
-				m.picker.cursor = 0
+				m.picker.setItems(msg.items)
 			}
 		}
 
@@ -314,8 +362,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.err != nil {
 				m.picker.err = msg.err
 			} else {
-				m.picker.items = msg.items
-				m.picker.cursor = 0
+				m.picker.setItems(msg.items)
 			}
 		}
 
@@ -401,8 +448,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.syncViewport()
 
+	// ---- picker: forward all non-key messages (e.g. FilterMatchesMsg) --------
+	default:
+		if m.picker != nil {
+			updated, cmd := m.picker.list.Update(msg)
+			m.picker.list = updated
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+
 	// ---- keyboard -----------------------------------------------------------
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.picker != nil {
 			return m.updatePicker(msg, cmds)
 		}
@@ -411,16 +468,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		//exhaustive:ignore
-		switch msg.Type {
-		case tea.KeyCtrlC:
+		switch {
+		case key.Matches(msg, m.keys.clearInput):
 			m.input.SetValue("")
 			m.clearSuggestions()
 			return m, nil
 
-		case tea.KeyCtrlD:
+		case key.Matches(msg, m.keys.quit):
 			return m, tea.Quit
 
-		case tea.KeyEsc:
+		case key.Matches(msg, m.keys.openModel):
+			return m.openPicker(pickerKindModel, cmds)
+
+		case key.Matches(msg, m.keys.toggleHelp):
+			m.help.ShowAll = !m.help.ShowAll
+			return m, nil
+
+		case msg.Key().Code == tea.KeyEsc:
 			if len(m.suggestions) > 0 {
 				m.clearSuggestions()
 				m.input.SetValue("")
@@ -428,7 +492,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 
-		case tea.KeyUp:
+		case msg.Key().Code == tea.KeyUp:
 			if len(m.suggestions) > 0 {
 				m.suggActive = true
 				m.suggCursor = len(m.suggestions) - 1
@@ -443,7 +507,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport, vpCmd = m.viewport.Update(msg)
 			return m, vpCmd
 
-		case tea.KeyDown:
+		case msg.Key().Code == tea.KeyDown:
 			if len(m.suggestions) > 0 {
 				m.suggActive = true
 				m.suggCursor = 0
@@ -458,12 +522,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport, vpCmd = m.viewport.Update(msg)
 			return m, vpCmd
 
-		case tea.KeyPgUp, tea.KeyPgDown:
+		case msg.Key().Code == tea.KeyPgUp, msg.Key().Code == tea.KeyPgDown:
 			var vpCmd tea.Cmd
 			m.viewport, vpCmd = m.viewport.Update(msg)
 			return m, vpCmd
 
-		case tea.KeyTab:
+		case msg.Key().Code == tea.KeyTab:
 			if len(m.suggestions) > 0 {
 				if m.suggCursor < 0 {
 					m.suggCursor = 0
@@ -474,7 +538,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-		case tea.KeyEnter:
+		case msg.Key().Code == tea.KeyEnter:
 			// Send on Enter (newline handled by textarea only via Alt+Enter)
 			val := strings.TrimSpace(m.input.Value())
 			if val == "" {
@@ -498,24 +562,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // updateSuggNav handles keyboard while suggestion navigation is active.
-func (m Model) updateSuggNav(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
+func (m Model) updateSuggNav(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	//exhaustive:ignore
-	switch msg.Type {
-	case tea.KeyUp:
+	switch {
+	case msg.Key().Code == tea.KeyUp:
 		if m.suggCursor > 0 {
 			m.suggCursor--
 		}
 		m.input.SetValue("/" + m.suggestions[m.suggCursor].CommandPath)
 		m.input.CursorEnd()
 
-	case tea.KeyDown:
+	case msg.Key().Code == tea.KeyDown:
 		if m.suggCursor < len(m.suggestions)-1 {
 			m.suggCursor++
 		}
 		m.input.SetValue("/" + m.suggestions[m.suggCursor].CommandPath)
 		m.input.CursorEnd()
 
-	case tea.KeyTab:
+	case msg.Key().Code == tea.KeyTab:
 		if len(m.suggestions) > 0 {
 			if m.suggCursor < 0 {
 				m.suggCursor = 0
@@ -525,7 +589,7 @@ func (m Model) updateSuggNav(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd
 			return m, tea.Batch(cmds...)
 		}
 
-	case tea.KeyEnter:
+	case msg.Key().Code == tea.KeyEnter:
 		val := strings.TrimSpace(m.input.Value())
 		m.clearSuggestions()
 		m.err = nil
@@ -534,15 +598,26 @@ func (m Model) updateSuggNav(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd
 		}
 		return m.handleSubmit(val, cmds)
 
-	case tea.KeyEsc, tea.KeyCtrlC, tea.KeyCtrlD:
+	case msg.Key().Code == tea.KeyEsc:
 		m.clearSuggestions()
 		m.input.SetValue("")
-		if msg.Type == tea.KeyCtrlD {
-			return m, tea.Quit
-		}
-		if msg.Type == tea.KeyCtrlC {
-			return m, nil
-		}
+	case key.Matches(msg, m.keys.quit):
+		m.clearSuggestions()
+		m.input.SetValue("")
+		return m, tea.Quit
+	case key.Matches(msg, m.keys.clearInput):
+		m.clearSuggestions()
+		m.input.SetValue("")
+		return m, nil
+	case key.Matches(msg, m.keys.openModel):
+		m.clearSuggestions()
+		m.input.SetValue("")
+		return m.openPicker(pickerKindModel, cmds)
+	case key.Matches(msg, m.keys.toggleHelp):
+		m.clearSuggestions()
+		m.input.SetValue("")
+		m.help.ShowAll = !m.help.ShowAll
+		return m, nil
 
 	default:
 		m.suggActive = false
@@ -622,9 +697,12 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 // openPicker initializes the picker overlay and fires the async data fetch.
 func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	m.pickerKind = kind
+	m.input.SetValue("")
+	m.input.Blur()
 	switch kind {
 	case pickerKindModel:
-		m.picker = &pickerState{title: "Select model", loading: true, width: m.width - 4}
+		m.picker = newPickerState("Select model", m.width-4)
+		m.picker.loading = true
 		if m.listModels != nil {
 			cmds = append(cmds, func() tea.Msg {
 				models, err := m.listModels(context.Background())
@@ -643,7 +721,8 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 		}
 
 	case pickerKindProfile:
-		m.picker = &pickerState{title: "Select profile", loading: true, width: m.width - 4}
+		m.picker = newPickerState("Select profile", m.width-4)
+		m.picker.loading = true
 		if m.listProfiles != nil {
 			current := m.profileName
 			cmds = append(cmds, func() tea.Msg {
@@ -666,7 +745,8 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 		}
 
 	case pickerKindBackup:
-		m.picker = &pickerState{title: "Restore backup", loading: true, width: m.width - 4}
+		m.picker = newPickerState("Restore backup", m.width-4)
+		m.picker.loading = true
 		if m.listBackups != nil {
 			cmds = append(cmds, func() tea.Msg {
 				backups, err := m.listBackups(context.Background())
@@ -684,7 +764,8 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 			m.picker.err = errors.New("no backup service available")
 		}
 	case pickerKindExtractorModel:
-		m.picker = &pickerState{title: "Select extractor model", loading: true, width: m.width - 4}
+		m.picker = newPickerState("Select extractor model", m.width-4)
+		m.picker.loading = true
 		if m.listModels != nil {
 			current := m.extractorModel
 			cmds = append(cmds, func() tea.Msg {
@@ -708,26 +789,34 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 }
 
 // updatePicker handles keypresses while the picker overlay is open.
-func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
+func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	//exhaustive:ignore
-	switch msg.Type {
-	case tea.KeyEsc, tea.KeyCtrlC, tea.KeyCtrlD:
-		if msg.Type == tea.KeyCtrlD {
-			return m, tea.Quit
-		}
+	switch {
+	case msg.Key().Code == tea.KeyEsc:
 		m.picker = nil
-		if msg.Type == tea.KeyCtrlC {
-			m.input.SetValue("")
-			m.clearSuggestions()
-			return m, nil
-		}
-
-	case tea.KeyEnter:
+		cmds = append(cmds, m.input.Focus())
+	case key.Matches(msg, m.keys.quit):
+		return m, tea.Quit
+	case key.Matches(msg, m.keys.clearInput):
+		m.picker = nil
+		m.input.SetValue("")
+		m.clearSuggestions()
+		return m, m.input.Focus()
+	case key.Matches(msg, m.keys.openModel):
+		m.picker = nil
+		m.input.SetValue("")
+		m.clearSuggestions()
+		return m.openPicker(pickerKindModel, cmds)
+	case key.Matches(msg, m.keys.toggleHelp):
+		m.help.ShowAll = !m.help.ShowAll
+		return m, nil
+	case msg.Key().Code == tea.KeyEnter:
 		chosen := m.picker.selectedValue()
 		kind := m.pickerKind
 		m.picker = nil
 		m.input.SetValue("")
 		m.clearSuggestions()
+		cmds = append(cmds, m.input.Focus())
 		if chosen == "" {
 			return m, tea.Batch(cmds...)
 		}
@@ -767,32 +856,17 @@ func (m Model) updatePicker(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd)
 			}
 		}
 
-	case tea.KeyUp:
-		if m.picker.cursor > 0 {
-			m.picker.cursor--
-		}
-
-	case tea.KeyDown:
-		list := m.picker.filtered()
-		if m.picker.cursor < len(list)-1 {
-			m.picker.cursor++
-		}
-
-	case tea.KeyBackspace:
-		if len(m.picker.filter) > 0 {
-			m.picker.filter = m.picker.filter[:len(m.picker.filter)-1]
-			m.picker.cursor = 0
-		}
-
 	default:
-		if msg.Type == tea.KeyRunes {
-			m.picker.filter += msg.String()
-			m.picker.cursor = 0
+		if m.picker != nil {
+			ph := max(m.height/2, 6)
+			maxRows := max(ph-2, 5)
+			m.picker.list.SetSize(max(m.width-2, 10), maxRows)
+			updated, cmd := m.picker.list.Update(msg)
+			m.picker.list = updated
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
-	}
-
-	if m.picker != nil {
-		m.picker.clampCursor()
 	}
 	return m, tea.Batch(cmds...)
 }
@@ -880,19 +954,26 @@ func (m *Model) navigateHistory(delta int) bool {
 }
 
 // View implements tea.Model.
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	if !m.ready {
-		return "\n  Initializing…"
+		return tea.NewView("\n  Initializing…")
 	}
 
 	// ---- middle: picker or suggestions ----
 	var mid strings.Builder
 	if m.picker != nil {
 		ph := m.height / 2
-		ph = max(ph, 6)
+		ph = max(ph, 10)
 		mid.WriteString(m.picker.render(ph) + "\n")
 	} else if len(m.suggestions) > 0 {
 		mid.WriteString(m.renderSuggestions(m.suggestionMaxHeight()))
+	}
+
+	helperWidth := max(m.width-2, 0)
+	m.help.SetWidth(helperWidth)
+	var helpBlock string
+	if m.help.ShowAll {
+		helpBlock = "\n" + m.help.View(m.helpKeys) + "\n"
 	}
 
 	var errBlock string
@@ -906,13 +987,23 @@ func (m Model) View() string {
 	inputLine := lipgloss.NewStyle().PaddingLeft(1).Render(inputView)
 
 	footer := m.renderFooter()
+	midStr := mid.String()
+	separatorHeight := 1 // newline between viewport and mid
+	fixedHeight := separatorHeight + lipgloss.Height(midStr) + lipgloss.Height(errBlock) + lipgloss.Height(helpBlock) + 2 + lipgloss.Height(footer)
+	desiredViewportHeight := max(1, m.height-fixedHeight)
+	if m.viewport.Height() != desiredViewportHeight {
+		m.viewport.SetHeight(desiredViewportHeight)
+	}
 
-	return m.viewport.View() + "\n" +
-		mid.String() +
+	view := tea.NewView(m.viewport.View() + "\n" +
+		midStr +
 		errBlock +
+		helpBlock +
 		inputDivider + "\n" +
 		inputLine + "\n" +
-		footer
+		footer)
+	view.AltScreen = true
+	return view
 }
 
 // renderFooter draws the bottom status line.
@@ -947,10 +1038,14 @@ func (m *Model) renderFooter() string {
 
 	left := strings.Join(leftParts, dim.Render("  "))
 
-	// Right: profile + model.
+	// Right: profile + model + help.
 	right := white.Render(m.profileName)
 	if m.activeModel != "" {
 		right = right + dim.Render("  ") + purple.Render("["+m.activeModel+"]")
+	}
+	helpView := m.help.ShortHelpView(m.helpKeys.ShortHelp())
+	if helpView != "" {
+		right = right + dim.Render("  ") + helpView
 	}
 
 	_ = yellow // suppress unused if no cost yet
