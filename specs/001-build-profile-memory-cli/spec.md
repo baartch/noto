@@ -43,6 +43,8 @@ chat in the active profile.
    profile is auto-selected before chat opens.
 4. **Given** an active profile, **When** user sends a message, **Then** the assistant responds
    using the active profile context.
+5. **Given** prior chat messages exist in the active profile, **When** the user presses
+   Up/Down in the chat input, **Then** recent user messages are recalled across restarts.
 
 ---
 
@@ -166,6 +168,8 @@ deletion confirmation behavior.
   `/profile list`, `/prompt show`) consistent with CLI command structure.
 - **FR-026**: System MUST return explicit error feedback and top matching suggestions when an
   unknown slash command is entered.
+- **FR-027**: System MUST let users recall recent chat inputs with Up/Down across restarts
+  using stored conversation history.
 
 ### Non-Functional Requirements *(mandatory)*
 

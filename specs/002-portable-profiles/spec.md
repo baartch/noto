@@ -77,6 +77,7 @@ As a user, I want to continue managing multiple profiles locally without relying
 - **FR-005**: Users MUST be able to select an active profile without global profile metadata.
 - **FR-007**: The system MUST persist the active profile selection in a local app config file per instance.
 - **FR-006**: The system MUST preserve profile portability by allowing a profile directory to be moved between instances without additional steps.
+- **FR-008**: The system MUST NOT create a global database file for profile metadata.
 
 ### Non-Functional Requirements *(mandatory)*
 
@@ -104,6 +105,7 @@ As a user, I want to continue managing multiple profiles locally without relying
 - **SC-004**: Users can select and use profiles after restart without global profile metadata.
 - **SC-005**: 0 lint/format violations in CI for the feature scope.
 - **SC-006**: All new/changed behavior covered by automated tests.
+- **SC-007**: No global database file is created for profile metadata.
 
 ## Assumptions
 
