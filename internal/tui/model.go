@@ -990,9 +990,7 @@ func (m *Model) suggestionMaxHeight() int {
 	}
 	// header(1) + divider(1) + inputDivider(1) + inputLine(1) + footer(1) = 5
 	maxRows := m.height - 5
-	if maxRows < 3 {
-		maxRows = 3
-	}
+	maxRows = max(maxRows, 3)
 	if maxRows > 8 {
 		maxRows = 8
 	}
@@ -1038,17 +1036,11 @@ func suggestionWindow(total, cursor, maxRows int) (start, end int) {
 		cursor = total - 1
 	}
 
-	start = cursor - maxRows/2
-	if start < 0 {
-		start = 0
-	}
+	start = max(cursor-maxRows/2, 0)
 	end = start + maxRows
 	if end > total {
 		end = total
-		start = end - maxRows
-		if start < 0 {
-			start = 0
-		}
+		start = max(end-maxRows, 0)
 	}
 	return start, end
 }

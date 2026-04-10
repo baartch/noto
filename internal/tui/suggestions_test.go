@@ -24,7 +24,7 @@ func TestSuggestionWindowingCentersCursor(t *testing.T) {
 
 func TestSuggestionEngineUnlimited(t *testing.T) {
 	registry := commands.NewRegistry()
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		path := fmt.Sprintf("cmd %d", i)
 		_ = registry.Register(&commands.Command{
 			Path:        path,
