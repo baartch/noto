@@ -10,7 +10,7 @@ import (
 	"noto/internal/tui"
 )
 
-func TestTUIModel_HandlesWindowResize(t *testing.T) {
+func TestTUIModel_UsesBubblesComponents(t *testing.T) {
 	registry := commands.NewRegistry()
 	dispatcher := chat.NewDispatcher(registry)
 	execCtx := &commands.ExecContext{}
@@ -34,8 +34,16 @@ func TestTUIModel_HandlesWindowResize(t *testing.T) {
 		nil,
 	)
 
-	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	if _, ok := updated.(tui.Model); !ok {
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m, ok := updated.(tui.Model)
+	if !ok {
 		t.Fatalf("expected Update to return tui.Model")
+	}
+
+	if m.InputPlaceholder() == "" {
+		t.Fatalf("expected textarea placeholder to be set")
+	}
+	if m.ViewportHeight() == 0 {
+		t.Fatalf("expected viewport to be initialized")
 	}
 }

@@ -47,12 +47,12 @@
 
 ### Tests for User Story 2 (REQUIRED)
 
-- [ ] T009 [P] [US2] Add integration tests validating picker/input behavior in tests/integration/tui_bubbles_usage_test.go
+- [x] T009 [P] [US2] Add integration tests validating picker/input behavior in tests/integration/tui_bubbles_usage_test.go
 
 ### Implementation for User Story 2
 
-- [ ] T010 [US2] Replace custom list/input UI with Bubbles components in internal/tui/
-- [ ] T011 [US2] Document any remaining custom UI rationale in internal/tui/ (code comments or doc blocks)
+- [x] T010 [US2] Replace custom list/input UI with Bubbles components in internal/tui/
+- [x] T011 [US2] Document any remaining custom UI rationale in internal/tui/ (code comments or doc blocks)
 
 ---
 

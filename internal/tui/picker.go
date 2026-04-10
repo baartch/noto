@@ -2,9 +2,12 @@ package tui
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // pickerItem is a single entry in the picker list.
@@ -24,50 +27,75 @@ func (it pickerItem) display() string {
 	return it.Value
 }
 
+func (it pickerItem) Title() string       { return it.display() }
+func (it pickerItem) Description() string { return "" }
+func (it pickerItem) FilterValue() string { return it.display() }
+
+// pickerDelegate renders picker items with active/cursor markers.
+type pickerDelegate struct{}
+
+func (d pickerDelegate) Height() int  { return 1 }
+func (d pickerDelegate) Spacing() int { return 0 }
+func (d pickerDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd {
+	return nil
+}
+
+func (d pickerDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	it, ok := item.(pickerItem)
+	if !ok {
+		return
+	}
+	indicator := " "
+	style := pickerNormalStyle
+	switch {
+	case index == m.Index():
+		indicator = "›"
+		style = pickerCursorStyle
+	case it.Active:
+		indicator = "●"
+		style = pickerActiveStyle
+	}
+
+	line := "  " + indicator + " " + it.display()
+	fmt.Fprint(w, style.Render(fitLine(line, m.Width()))+"\n")
+}
+
 // pickerState is the generic overlay picker used for model and profile selection.
 type pickerState struct {
 	title   string
-	items   []pickerItem
-	cursor  int
-	filter  string
+	list    list.Model
 	loading bool
 	err     error
 	width   int
 }
 
-// filtered returns items whose display string contains the filter (case-insensitive).
-func (p *pickerState) filtered() []pickerItem {
-	if p.filter == "" {
-		return p.items
-	}
-	f := strings.ToLower(p.filter)
-	var out []pickerItem
-	for _, it := range p.items {
-		if strings.Contains(strings.ToLower(it.display()), f) {
-			out = append(out, it)
-		}
-	}
-	return out
+func newPickerState(title string, width int) *pickerState {
+	delegate := pickerDelegate{}
+	l := list.New([]list.Item{}, delegate, width, 0)
+	l.SetShowStatusBar(false)
+	l.SetShowHelp(false)
+	l.SetFilteringEnabled(true)
+	l.SetShowFilter(true)
+	l.Title = "  " + title + "  (↑↓ navigate · type to filter · Enter select · Esc cancel)"
+	return &pickerState{title: title, list: l, width: width}
 }
 
-// clampCursor keeps cursor within the filtered list bounds.
-func (p *pickerState) clampCursor() {
-	list := p.filtered()
-	if p.cursor < 0 {
-		p.cursor = 0
+func (p *pickerState) setItems(items []pickerItem) {
+	listItems := make([]list.Item, len(items))
+	for i, it := range items {
+		listItems[i] = it
 	}
-	if len(list) > 0 && p.cursor >= len(list) {
-		p.cursor = len(list) - 1
-	}
+	p.list.SetItems(listItems)
+	p.list.Select(0)
 }
 
 // selectedValue returns the Value of the highlighted item, or "".
 func (p *pickerState) selectedValue() string {
-	list := p.filtered()
-	if len(list) == 0 || p.cursor >= len(list) {
+	item := p.list.SelectedItem()
+	if item == nil {
 		return ""
 	}
-	return list[p.cursor].Value
+	return item.(pickerItem).Value
 }
 
 // render draws the picker, fitting within maxHeight terminal rows.
@@ -83,50 +111,11 @@ func (p *pickerState) render(maxHeight int) string {
 		return pickerBorderStyle.Render(errStyle.Render(fitLine("  Error: "+p.err.Error(), width)))
 	}
 
-	list := p.filtered()
-	var sb strings.Builder
-	header := "  " + p.title + "  (↑↓ navigate · type to filter · Enter select · Esc cancel)"
-	sb.WriteString(pickerHeaderStyle.Render(fitLine(header, width)) + "\n")
-	filterLine := fmt.Sprintf("  Filter: %s▌", p.filter)
-	sb.WriteString(pickerFilterStyle.Render(fitLine(filterLine, width)) + "\n")
+	maxRows := maxHeight - 2
+	maxRows = max(maxRows, 5)
+	p.list.SetSize(width-2, maxRows)
 
-	maxRows := maxHeight - 4
-	maxRows = max(maxRows, 3)
-
-	start := p.cursor - maxRows/2
-	start = max(start, 0)
-	end := start + maxRows
-	if end > len(list) {
-		end = len(list)
-		start = end - maxRows
-		start = max(start, 0)
-	}
-
-	if len(list) == 0 {
-		sb.WriteString(pickerNormalStyle.Render(fitLine("  (no matches)", width)))
-	}
-	for i := start; i < end; i++ {
-		it := list[i]
-		indicator := " "
-		var style lipgloss.Style
-		switch {
-		case i == p.cursor:
-			indicator = "›"
-			style = pickerCursorStyle
-		case it.Active:
-			indicator = "●"
-			style = pickerActiveStyle
-		default:
-			style = pickerNormalStyle
-		}
-		line := "  " + indicator + " " + it.display()
-		sb.WriteString(style.Render(fitLine(line, width)) + "\n")
-	}
-	if len(list) > maxRows {
-		sb.WriteString(pickerNormalStyle.Render(fitLine(fmt.Sprintf("  … %d items", len(list)), width)))
-	}
-
-	return pickerBorderStyle.Render(sb.String())
+	return pickerBorderStyle.Render(p.list.View())
 }
 
 func fitLine(line string, width int) string {

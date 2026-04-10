@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	tea "charm.land/bubbletea/v2"
+	"charm.land/bubbles/v2/textarea"
+	"charm.land/lipgloss/v2"
+)
 
 // ---- palette ----------------------------------------------------------------
 
@@ -21,10 +25,10 @@ var (
 
 	// Assistant markdown block
 	assistantBorderStyle = lipgloss.NewStyle().
-		BorderLeft(true).
-		BorderStyle(lipgloss.ThickBorder()).
-		BorderForeground(lipgloss.Color("63")).
-		PaddingLeft(1)
+				BorderLeft(true).
+				BorderStyle(lipgloss.ThickBorder()).
+				BorderForeground(lipgloss.Color("63")).
+				PaddingLeft(1)
 	modelLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
 	// Common UI styles
@@ -35,6 +39,7 @@ var (
 	dividerStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
 	promptStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	cursorStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
+	cursorStyleDef  = textarea.CursorStyle{Color: lipgloss.Color("63"), Shape: tea.CursorBlock, Blink: true}
 
 	// Picker styles
 	pickerBorderStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("8")).Padding(0, 1)

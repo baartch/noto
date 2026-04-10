@@ -3,7 +3,7 @@
 **Feature Branch**: `004-bubbletea-tui`  
 **Created**: 2026-04-10  
 **Status**: Draft  
-**Input**: User description: "The TUI of this terminal app should be build with https://github.com/charmbracelet/bubbletea and whenever possible use existing UI components of https://github.com/charmbracelet/bubbles ."
+**Input**: User description: "The TUI of this terminal app should be build with https://charm.land/bubbletea/v2 and whenever possible use existing UI components of https://charm.land/bubbles/v2 ."
 
 ## Clarifications
 
@@ -11,7 +11,7 @@
 
 - Q: Should this requirement force a refactor of existing TUI code? → A: Yes—refactor all existing TUI surfaces to comply.
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Consistent Bubble Tea TUI Usage (Priority: P1)
 
@@ -25,6 +25,7 @@ As a maintainer, I want all TUI interactions to be built with Bubble Tea so that
 
 1. **Given** any TUI interaction flow, **When** it is implemented, **Then** it is built using Bubble Tea conventions.
 2. **Given** a new TUI surface is added, **When** it is reviewed, **Then** it conforms to the Bubble Tea application model.
+3. **Given** picker overlays or suggestion lists are shown, **When** they render, **Then** the input bar and footer remain anchored to the bottom of the screen.
 
 ---
 
@@ -48,7 +49,7 @@ As a maintainer, I want to reuse existing Bubbles components whenever possible s
 - If no appropriate Bubbles component exists, the implementation should explicitly document why a custom component is required.
 - If a Bubble Tea usage pattern conflicts with existing app architecture, the conflict should be documented and resolved before release.
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
@@ -56,9 +57,10 @@ As a maintainer, I want to reuse existing Bubbles components whenever possible s
 - **FR-002**: The system MUST refactor existing TUI interaction flows to use the Bubble Tea application model.
 - **FR-003**: The system MUST prefer existing Bubbles components for TUI elements when they satisfy requirements.
 - **FR-004**: The system MUST define styling using Lip Gloss when styling is required.
-- **FR-005**: The system MUST document any custom TUI components and explain why no Bubbles component was suitable.
+- **FR-005**: The system MUST keep the input bar and footer anchored to the bottom of the screen when overlays (pickers, suggestions) are visible.
+- **FR-006**: The system MUST document any custom TUI components and explain why no Bubbles component was suitable.
 
-### Non-Functional Requirements *(mandatory)*
+### Non-Functional Requirements _(mandatory)_
 
 - **NFR-001 Code Quality**: Changes MUST pass formatting, linting, and static analysis rules
   defined by the project.
@@ -69,22 +71,23 @@ As a maintainer, I want to reuse existing Bubbles components whenever possible s
 - **NFR-004 Performance**: TUI interactions MUST remain responsive with no perceptible lag
   during typical user input workflows.
 
-### Key Entities *(include if feature involves data)*
+### Key Entities _(include if feature involves data)_
 
 - **TUI Interaction Flow**: Any user-visible terminal UI sequence (screens, dialogs, pickers).
 - **Bubbles Component Usage**: The reuse of a standard Bubbles component in place of custom UI.
 - **Styling Definition**: The set of reusable Lip Gloss style definitions applied to TUI elements.
 
-## Success Criteria *(mandatory)*
+## Success Criteria _(mandatory)_
 
 ### Measurable Outcomes
 
 - **SC-001**: 100% of TUI interaction flows (existing and new) use Bubble Tea models and update loops.
 - **SC-002**: 100% of TUI interactions reuse a Bubbles component when one exists that meets requirements.
 - **SC-003**: 100% of TUI styling is defined via Lip Gloss when styling is required.
-- **SC-004**: Any custom TUI components include documented rationale for not using Bubbles.
-- **SC-005**: 0 lint/format violations in CI for the feature scope.
-- **SC-006**: All new/changed behavior covered by automated tests.
+- **SC-004**: Pickers and suggestion lists do not displace the input bar and footer from the bottom of the screen.
+- **SC-005**: Any custom TUI components include documented rationale for not using Bubbles.
+- **SC-006**: 0 lint/format violations in CI for the feature scope.
+- **SC-007**: All new/changed behavior covered by automated tests.
 
 ## Assumptions
 
