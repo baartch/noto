@@ -40,6 +40,11 @@
    - Clear the input (remove the leading `/`).
    - Verify the suggestion list disappears.
 
+## Validation Notes
+
+- **Status**: Pending manual run
+- **Notes**: TODO
+
 ## Expected Results
 
 - Users can reach any command in the list using Up/Down, regardless of list length.

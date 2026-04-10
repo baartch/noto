@@ -463,6 +463,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport, vpCmd = m.viewport.Update(msg)
 			return m, vpCmd
 
+		case tea.KeyTab:
+			if len(m.suggestions) > 0 {
+				if m.suggCursor < 0 {
+					m.suggCursor = 0
+				}
+				m.suggActive = true
+				m.input.SetValue("/" + m.suggestions[m.suggCursor].CommandPath)
+				m.input.CursorEnd()
+				return m, nil
+			}
+
 		case tea.KeyEnter:
 			// Send on Enter (newline handled by textarea only via Alt+Enter)
 			val := strings.TrimSpace(m.input.Value())
@@ -493,8 +504,6 @@ func (m Model) updateSuggNav(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd
 	case tea.KeyUp:
 		if m.suggCursor > 0 {
 			m.suggCursor--
-		} else {
-			m.suggCursor = len(m.suggestions) - 1
 		}
 		m.input.SetValue("/" + m.suggestions[m.suggCursor].CommandPath)
 		m.input.CursorEnd()
@@ -502,11 +511,19 @@ func (m Model) updateSuggNav(msg tea.KeyMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd
 	case tea.KeyDown:
 		if m.suggCursor < len(m.suggestions)-1 {
 			m.suggCursor++
-		} else {
-			m.suggCursor = 0
 		}
 		m.input.SetValue("/" + m.suggestions[m.suggCursor].CommandPath)
 		m.input.CursorEnd()
+
+	case tea.KeyTab:
+		if len(m.suggestions) > 0 {
+			if m.suggCursor < 0 {
+				m.suggCursor = 0
+			}
+			m.input.SetValue("/" + m.suggestions[m.suggCursor].CommandPath)
+			m.input.CursorEnd()
+			return m, tea.Batch(cmds...)
+		}
 
 	case tea.KeyEnter:
 		val := strings.TrimSpace(m.input.Value())
@@ -875,7 +892,7 @@ func (m Model) View() string {
 		ph = max(ph, 6)
 		mid.WriteString(m.picker.render(ph) + "\n")
 	} else if len(m.suggestions) > 0 {
-		mid.WriteString(m.renderSuggestions())
+		mid.WriteString(m.renderSuggestions(m.suggestionMaxHeight()))
 	}
 
 	var errBlock string
@@ -966,10 +983,33 @@ func formatBackupTimestamp(ts string) string {
 	return parsed.UTC().Format("2006-01-02 15:04:05 UTC")
 }
 
-// renderSuggestions draws the suggestion list with cursor highlighted.
-func (m *Model) renderSuggestions() string {
+// suggestionMaxHeight returns the maximum number of rows available for the suggestion list.
+func (m *Model) suggestionMaxHeight() int {
+	if m.height <= 0 {
+		return 6
+	}
+	// header(1) + divider(1) + inputDivider(1) + inputLine(1) + footer(1) = 5
+	maxRows := m.height - 5
+	if maxRows < 3 {
+		maxRows = 3
+	}
+	if maxRows > 8 {
+		maxRows = 8
+	}
+	return maxRows
+}
+
+// renderSuggestions draws the suggestion list with cursor highlighted and windowed.
+func (m *Model) renderSuggestions(maxRows int) string {
+	list := m.suggestions
+	start, end := suggestionWindow(len(list), m.suggCursor, maxRows)
+
 	var sb strings.Builder
-	for i, s := range m.suggestions {
+	if len(list) == 0 {
+		return sb.String()
+	}
+	for i := start; i < end; i++ {
+		s := list[i]
 		line := fmt.Sprintf("  /%s  — %s", s.CommandPath, s.Hint)
 		if i == m.suggCursor {
 			sb.WriteString(suggSelectStyle.Render(line) + "\n")
@@ -977,7 +1017,40 @@ func (m *Model) renderSuggestions() string {
 			sb.WriteString(suggNormalStyle.Render(line) + "\n")
 		}
 	}
+	if len(list) > maxRows {
+		more := len(list) - (end - start)
+		sb.WriteString(suggNormalStyle.Render(fmt.Sprintf("  … %d more", more)) + "\n")
+	}
 	return sb.String()
+}
+
+func suggestionWindow(total, cursor, maxRows int) (start, end int) {
+	if total == 0 {
+		return 0, 0
+	}
+	if maxRows < 3 {
+		maxRows = 3
+	}
+	if cursor < 0 {
+		cursor = 0
+	}
+	if cursor >= total {
+		cursor = total - 1
+	}
+
+	start = cursor - maxRows/2
+	if start < 0 {
+		start = 0
+	}
+	end = start + maxRows
+	if end > total {
+		end = total
+		start = end - maxRows
+		if start < 0 {
+			start = 0
+		}
+	}
+	return start, end
 }
 
 func (m *Model) resolvePending(content string) {

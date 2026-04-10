@@ -53,3 +53,9 @@
   - When suggestions are visible: Up/Down navigates suggestions.
   - When suggestions are not visible: Up/Down navigates input history; otherwise scrolls viewport.
 - Tab behavior is specified in the feature spec; current code should be checked/updated during implementation to match (Tab should autofill selected suggestion, not necessarily require Up/Down first).
+
+## Performance Check
+
+- **Target**: p95 suggestion refresh < 50 ms per keystroke.
+- **Status**: Pending measurement (manual verification needed).
+- **Notes**: TODO

@@ -53,7 +53,7 @@ As a user, I want to navigate the filtered command list with the keyboard and ex
 
 **Acceptance Scenarios**:
 
-1. **Given** the command list is visible, **When** the user presses Up/Down, **Then** the selection moves through the full list and the list window scrolls as needed.
+1. **Given** the command list is visible, **When** the user presses Up/Down, **Then** the selection moves through the full list and the list window scrolls as needed while showing only the visible subset.
 2. **Given** a command is selected, **When** the user presses Tab, **Then** the selected command auto-fills into the input.
 3. **Given** a command is selected, **When** the user presses Enter, **Then** the selected command executes and the input clears.
 
@@ -64,6 +64,7 @@ As a user, I want to navigate the filtered command list with the keyboard and ex
 - If the command list is empty, the UI should indicate that no commands are available.
 - If the user presses Tab without a selected command, the input remains unchanged.
 - If the user presses Enter while the list is visible and no command is selected, the app treats the input as a normal chat message.
+- If the total command list exceeds the visible window size, only the window is shown while navigation scrolls through the full list.
 
 ## Requirements *(mandatory)*
 
@@ -72,9 +73,10 @@ As a user, I want to navigate the filtered command list with the keyboard and ex
 - **FR-001**: The system MUST display available slash commands when the user types `/`.
 - **FR-002**: The system MUST filter the command list as the user types additional characters.
 - **FR-003**: The system MUST allow keyboard navigation (Up/Down) through the full command list, scrolling the visible window as needed.
-- **FR-004**: The system MUST autofill the selected command into the input when Tab is pressed.
-- **FR-005**: The system MUST execute the selected command when Enter is pressed.
-- **FR-006**: The system MUST hide the command list when the input no longer begins with `/`.
+- **FR-004**: The system MUST show a fixed-size visible window of suggestions (max 8 entries) while allowing navigation through the full list.
+- **FR-005**: The system MUST autofill the selected command into the input when Tab is pressed.
+- **FR-006**: The system MUST execute the selected command when Enter is pressed.
+- **FR-007**: The system MUST hide the command list when the input no longer begins with `/`.
 
 ### Non-Functional Requirements *(mandatory)*
 
@@ -99,8 +101,9 @@ As a user, I want to navigate the filtered command list with the keyboard and ex
 - **SC-001**: Users can discover available slash commands within 2 seconds of typing `/`.
 - **SC-002**: Command list filtering updates on every keystroke without visible lag.
 - **SC-003**: Users can execute a command using only Up/Down, Tab, and Enter without typing the full command.
-- **SC-004**: 0 lint/format violations in CI for the feature scope.
-- **SC-005**: All new/changed behavior covered by automated tests.
+- **SC-004**: Users can reach any command in a list longer than 8 entries by scrolling the suggestion window with Up/Down.
+- **SC-005**: 0 lint/format violations in CI for the feature scope.
+- **SC-006**: All new/changed behavior covered by automated tests.
 
 ## Assumptions
 

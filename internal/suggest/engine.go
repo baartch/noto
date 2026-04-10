@@ -9,7 +9,8 @@ import (
 
 const (
 	// MaxSuggestions is the maximum number of suggestions returned for a given prefix.
-	MaxSuggestions = 8
+	// Set to 0 to return all matches.
+	MaxSuggestions = 0
 )
 
 // Suggestion is a ranked command suggestion.
@@ -59,7 +60,7 @@ func (e *Engine) Suggest(prefix string) []Suggestion {
 		return suggestions[i].CommandPath < suggestions[j].CommandPath
 	})
 
-	if len(suggestions) > MaxSuggestions {
+	if MaxSuggestions > 0 && len(suggestions) > MaxSuggestions {
 		suggestions = suggestions[:MaxSuggestions]
 	}
 	return suggestions

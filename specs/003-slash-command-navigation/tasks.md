@@ -9,14 +9,14 @@
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Capture current slash suggestion behavior notes in specs/003-slash-command-navigation/research.md (confirm no changes needed)
-- [ ] T002 [P] Review existing suggestion rendering in internal/tui/model.go and picker windowing in internal/tui/picker.go to confirm reuse strategy
+- [x] T001 Capture current slash suggestion behavior notes in specs/003-slash-command-navigation/research.md (confirm no changes needed)
+- [x] T002 [P] Review existing suggestion rendering in internal/tui/model.go and picker windowing in internal/tui/picker.go to confirm reuse strategy
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T003 Define shared windowing helper or render strategy for suggestions in internal/tui/model.go (document approach inline)
+- [x] T003 Define shared windowing helper or render strategy for suggestions in internal/tui/model.go (document approach inline)
 
 ---
 
@@ -28,11 +28,11 @@
 
 ### Tests for User Story 1 (REQUIRED)
 
-- [ ] T004 [P] [US1] Add unit test coverage for suggestion visibility toggling in tests/unit/tui_suggestions_test.go
+- [x] T004 [P] [US1] Add unit test coverage for suggestion visibility toggling in internal/tui/suggestions_test.go
 
 ### Implementation for User Story 1
 
-- [ ] T005 [US1] Ensure suggestion visibility logic remains correct while adding windowing in internal/tui/model.go
+- [x] T005 [US1] Ensure suggestion visibility logic remains correct while adding windowing in internal/tui/model.go
 
 ---
 
@@ -44,11 +44,11 @@
 
 ### Tests for User Story 2 (REQUIRED)
 
-- [ ] T006 [P] [US2] Add unit test coverage for suggestion filtering updates in tests/unit/tui_suggestions_test.go
+- [x] T006 [P] [US2] Add unit test coverage for suggestion filtering updates in internal/tui/suggestions_test.go
 
 ### Implementation for User Story 2
 
-- [ ] T007 [US2] Preserve filtering behavior while adding windowed rendering in internal/tui/model.go
+- [x] T007 [US2] Preserve filtering behavior while adding windowed rendering in internal/tui/model.go
 
 ---
 
@@ -60,24 +60,24 @@
 
 ### Tests for User Story 3 (REQUIRED)
 
-- [ ] T008 [P] [US3] Add unit test coverage for suggestion cursor windowing logic in tests/unit/tui_suggestions_test.go
-- [ ] T009 [P] [US3] Add integration test for end-to-end suggestion navigation in tests/integration/slash_suggestions_navigation_test.go
+- [x] T008 [P] [US3] Add unit test coverage for suggestion cursor windowing logic in internal/tui/suggestions_test.go
+- [x] T009 [P] [US3] Add integration test for end-to-end suggestion navigation in internal/tui/suggestions_integration_test.go
 
 ### Implementation for User Story 3
 
-- [ ] T010 [US3] Implement windowed rendering for suggestions in internal/tui/model.go (render only visible subset, keep cursor visible)
-- [ ] T011 [US3] Ensure Up/Down updates cursor across full list and triggers window scroll in internal/tui/model.go
-- [ ] T012 [US3] Implement Tab autofill behavior for current suggestion in internal/tui/model.go
-- [ ] T013 [US3] Confirm Enter executes selected suggestion without regression in internal/tui/model.go
+- [x] T010 [US3] Implement windowed rendering for suggestions in internal/tui/model.go (render only visible subset, keep cursor visible)
+- [x] T011 [US3] Ensure Up/Down updates cursor across full list and triggers window scroll in internal/tui/model.go
+- [x] T012 [US3] Implement Tab autofill behavior for current suggestion in internal/tui/model.go
+- [x] T013 [US3] Confirm Enter executes selected suggestion without regression in internal/tui/model.go
 
 ---
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T014 [P] Update quickstart validation notes in specs/003-slash-command-navigation/quickstart.md
+- [x] T014 [P] Update quickstart validation notes in specs/003-slash-command-navigation/quickstart.md
 - [ ] T015 Run manual quickstart in specs/003-slash-command-navigation/quickstart.md and record results in the file
 - [ ] T016 Validate performance target (p95 suggestion refresh < 50 ms) and document check in specs/003-slash-command-navigation/research.md
-- [ ] T017 Ensure lint/test gates pass for all modified files
+- [x] T017 Ensure lint/test gates pass for all modified files
 
 ---
 
