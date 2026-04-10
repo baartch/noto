@@ -144,6 +144,7 @@ type Model struct {
 	height      int
 	err         error
 	ready       bool
+	keys        keyMap
 
 	// slash suggestion state
 	suggestions []suggest.Suggestion
@@ -183,6 +184,12 @@ type chatMessage struct {
 	role      string
 	content   string
 	timestamp time.Time
+}
+
+type keyMap struct {
+	quit       key.Binding
+	openModel  key.Binding
+	clearInput key.Binding
 }
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
@@ -235,6 +242,11 @@ func New(
 		key.WithKeys("alt+enter"),
 		key.WithHelp("alt+enter", "insert newline"),
 	)
+	keys := keyMap{
+		quit:       key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "quit")),
+		openModel:  key.NewBinding(key.WithKeys("ctrl+l"), key.WithHelp("ctrl+l", "model picker")),
+		clearInput: key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "clear")),
+	}
 
 	if inputHistory == nil {
 		inputHistory = []string{}
@@ -252,6 +264,7 @@ func New(
 		dispatcher:             dispatcher,
 		execCtx:                execCtx,
 		provider:               providerFn,
+		keys:                   keys,
 		listModels:             listModels,
 		modelSelected:          modelSelected,
 		listProfiles:           listProfiles,
@@ -422,13 +435,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		//exhaustive:ignore
 		switch {
-		case msg.Key().Code == 'c' && msg.Key().Mod == tea.ModCtrl:
+		case key.Matches(msg, m.keys.clearInput):
 			m.input.SetValue("")
 			m.clearSuggestions()
 			return m, nil
 
-		case msg.Key().Code == 'd' && msg.Key().Mod == tea.ModCtrl:
+		case key.Matches(msg, m.keys.quit):
 			return m, tea.Quit
+
+		case key.Matches(msg, m.keys.openModel):
+			return m.openPicker(pickerKindModel, cmds)
 
 		case msg.Key().Code == tea.KeyEsc:
 			if len(m.suggestions) > 0 {
@@ -547,14 +563,18 @@ func (m Model) updateSuggNav(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, te
 	case msg.Key().Code == tea.KeyEsc:
 		m.clearSuggestions()
 		m.input.SetValue("")
-	case msg.Key().Code == 'd' && msg.Key().Mod == tea.ModCtrl:
+	case key.Matches(msg, m.keys.quit):
 		m.clearSuggestions()
 		m.input.SetValue("")
 		return m, tea.Quit
-	case msg.Key().Code == 'c' && msg.Key().Mod == tea.ModCtrl:
+	case key.Matches(msg, m.keys.clearInput):
 		m.clearSuggestions()
 		m.input.SetValue("")
 		return m, nil
+	case key.Matches(msg, m.keys.openModel):
+		m.clearSuggestions()
+		m.input.SetValue("")
+		return m.openPicker(pickerKindModel, cmds)
 
 	default:
 		m.suggActive = false
@@ -732,14 +752,20 @@ func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea
 	case msg.Key().Code == tea.KeyEsc:
 		m.picker = nil
 		cmds = append(cmds, m.input.Focus())
-	case msg.Key().Code == 'd' && msg.Key().Mod == tea.ModCtrl:
+	case key.Matches(msg, m.keys.quit):
 		return m, tea.Quit
-	case msg.Key().Code == 'c' && msg.Key().Mod == tea.ModCtrl:
+	case key.Matches(msg, m.keys.clearInput):
 		m.picker = nil
 		m.input.SetValue("")
 		m.clearSuggestions()
 		cmds = append(cmds, m.input.Focus())
 		return m, nil
+	case key.Matches(msg, m.keys.openModel):
+		m.picker = nil
+		m.input.SetValue("")
+		m.clearSuggestions()
+		cmds = append(cmds, m.input.Focus())
+		return m.openPicker(pickerKindModel, cmds)
 	case msg.Key().Code == tea.KeyEnter:
 		chosen := m.picker.selectedValue()
 		kind := m.pickerKind
