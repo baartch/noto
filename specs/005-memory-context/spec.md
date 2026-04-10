@@ -33,6 +33,7 @@ As a user, I want Noto to add only the most relevant notes to the context so tha
 4. **Given** the note index is available, **When** relevance is computed, **Then** the system uses the vector index to rank notes.
 5. **Given** the vector index is missing or stale, **When** a chat turn starts, **Then** the system falls back to importance-then-recency ordering.
 6. **Given** the user opens settings, **When** they change the token budget, **Then** subsequent chat turns use the new budget.
+7. **Given** no extractor model is configured, **When** notes are extracted, **Then** the system uses the main model and shows a footer warning.
 
 ---
 
@@ -87,6 +88,7 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 - **FR-009**: The system MUST incrementally update the vector index when notes change.
 - **FR-010**: The system MUST periodically compact or rebuild the vector index when required.
 - **FR-011**: The system MUST fall back to importance-then-recency selection if the index is unavailable.
+- **FR-012**: The system MUST use the main model for extraction when no extractor model is configured and display a footer warning.
 
 ### Non-Functional Requirements _(mandatory)_
 
@@ -111,6 +113,7 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 - **SC-004**: Index maintenance completes without user intervention in 99% of runs.
 - **SC-006**: Incremental updates are applied on note changes without blocking chat turns.
 - **SC-005**: Fallback selection yields deterministic importance-then-recency results when the index is unavailable.
+- **SC-007**: When no extractor model is configured, extraction uses the main model and the footer shows a warning indicator.
 
 ## Assumptions
 
