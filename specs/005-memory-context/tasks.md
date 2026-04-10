@@ -33,7 +33,7 @@
 ### Implementation for User Story 1
 
 - [X] T007 [US1] Add token budget setting (default 1500) and read path in internal/config/ (new settings file)
-- [ ] T008 [US1] Apply token-budgeted relevance selection in internal/memory/retrieval.go
+- [X] T008 [US1] Apply token-budgeted relevance selection in internal/memory/retrieval.go
 - [ ] T009 [US1] Implement importance-then-recency fallback in internal/memory/retrieval.go
 - [ ] T010 [US1] Wire vector index ranking into retrieval in internal/memory/retrieval.go
 

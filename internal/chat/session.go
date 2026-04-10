@@ -56,6 +56,7 @@ type Session struct {
 	db               *store.DB
 	vectorIndexPath  string
 	vectorIndex      vector.Index
+	memoryTokenBudget int
 
 	backupStop   chan struct{}
 	pendingNotes int
@@ -151,10 +152,11 @@ func NewSession(
 		backupStop:       make(chan struct{}),
 		pendingDone:      make(chan struct{}),
 		baseSystemPrompt: baseSystemPrompt,
-		sessionSummary:   rc.SessionSummary,
-		db:               db,
-		vectorIndexPath:  vecPath,
-		vectorIndex:      vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)),
+		sessionSummary:    rc.SessionSummary,
+		db:                db,
+		vectorIndexPath:   vecPath,
+		vectorIndex:       vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)),
+		memoryTokenBudget: settings.MemoryTokenBudget,
 	}
 	if profileSlug != "" {
 		s.startBackupTicker()
@@ -285,17 +287,13 @@ func (s *Session) relevantNotes(ctx context.Context, userMsg string) ([]*store.M
 	if err != nil {
 		return nil, err
 	}
-	byID := make(map[string]*store.MemoryNote, len(noteList))
-	for _, note := range noteList {
-		byID[note.ID] = note
-	}
-	out := make([]*store.MemoryNote, 0, len(results))
+
+	rankedIDs := make([]string, 0, len(results))
 	for _, res := range results {
-		if note, ok := byID[res.Note.ID]; ok {
-			out = append(out, note)
-		}
+		rankedIDs = append(rankedIDs, res.Note.ID)
 	}
-	return out, nil
+	selected := memory.SelectNotesForContext(noteList, rankedIDs, s.memoryTokenBudget)
+	return selected, nil
 }
 
 type noteLister struct {
