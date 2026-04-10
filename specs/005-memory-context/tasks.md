@@ -27,8 +27,8 @@
 
 ### Tests for User Story 1 (REQUIRED) ⚠️
 
-- [ ] T005 [P] [US1] Add integration coverage for token-budgeted relevance selection in tests/integration/context_cache_lifecycle_test.go
-- [ ] T006 [P] [US1] Add integration coverage for fallback ordering in tests/integration/context_cache_lifecycle_test.go
+- [X] T005 [P] [US1] Add integration coverage for token-budgeted relevance selection in tests/integration/context_cache_lifecycle_test.go
+- [X] T006 [P] [US1] Add integration coverage for fallback ordering in tests/integration/context_cache_lifecycle_test.go
 
 ### Implementation for User Story 1
 
