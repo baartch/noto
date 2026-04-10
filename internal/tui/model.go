@@ -990,10 +990,7 @@ func (m *Model) suggestionMaxHeight() int {
 	}
 	// header(1) + divider(1) + inputDivider(1) + inputLine(1) + footer(1) = 5
 	maxRows := m.height - 5
-	maxRows = max(maxRows, 3)
-	if maxRows > 8 {
-		maxRows = 8
-	}
+	maxRows = min(max(maxRows, 3), 8)
 	return maxRows
 }
 
