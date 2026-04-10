@@ -9,6 +9,9 @@ import (
 // ---- palette ----------------------------------------------------------------
 
 var (
+	helpShortStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	helpFullStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+
 	// User bubble
 	userBubbleBg   = lipgloss.Color("25")  // dark blue
 	userBubbleFg   = lipgloss.Color("255") // white

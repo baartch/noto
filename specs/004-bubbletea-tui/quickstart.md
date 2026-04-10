@@ -24,9 +24,16 @@
 5. **Check custom components**
    - If any custom UI remains, confirm rationale is documented.
 
+6. **Verify help UX**
+   - Toggle help and confirm keybinding help shows in the footer.
+   - Expand help and confirm it renders above the input textarea without shifting the footer/input.
+   - Confirm `Ctrl+D` exits and `Ctrl+L` opens the model picker.
+
 ## Expected Results
 
 - All TUI flows are implemented as Bubble Tea models.
 - Bubbles components are used whenever suitable.
 - Lip Gloss styles are reused consistently across the UI.
+- Keybinding help appears in the footer and expanded help renders above the input without layout shifts.
+- `Ctrl+D` exits and `Ctrl+L` opens the model picker.
 - Any remaining custom UI is explicitly justified.

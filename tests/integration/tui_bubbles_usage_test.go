@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -45,5 +46,10 @@ func TestTUIModel_UsesBubblesComponents(t *testing.T) {
 	}
 	if m.ViewportHeight() == 0 {
 		t.Fatalf("expected viewport to be initialized")
+	}
+
+	view := m.View().Content
+	if !strings.Contains(view, "ctrl+d") {
+		t.Fatalf("expected help bindings to be rendered in footer")
 	}
 }

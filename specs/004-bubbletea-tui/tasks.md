@@ -7,13 +7,13 @@
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Review current TUI layout and help usage in internal/tui/model.go
+- [x] T001 Review current TUI layout and help usage in internal/tui/model.go
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T002 Define help/keybinding UX expectations for footer + expanded help in specs/004-bubbletea-tui/quickstart.md
+- [x] T002 Define help/keybinding UX expectations for footer + expanded help in specs/004-bubbletea-tui/quickstart.md
 
 ---
 
@@ -25,15 +25,15 @@
 
 ### Tests for User Story 1 (REQUIRED) ⚠️
 
-- [ ] T003 [P] [US1] Add integration coverage for help placement and footer help in tests/integration/tui_flow_regression_test.go
-- [ ] T004 [P] [US1] Add integration coverage for Ctrl+D and Ctrl+L bindings in tests/integration/tui_flow_regression_test.go
+- [x] T003 [P] [US1] Add integration coverage for help placement and footer help in tests/integration/tui_flow_regression_test.go
+- [x] T004 [P] [US1] Add integration coverage for Ctrl+D and Ctrl+L bindings in tests/integration/tui_flow_regression_test.go
 
 ### Implementation for User Story 1
 
-- [ ] T005 [US1] Add Help component state and keymaps in internal/tui/model.go
-- [ ] T006 [US1] Render footer help via Bubbles Help in internal/tui/model.go
-- [ ] T007 [US1] Render expanded help above input textarea in internal/tui/model.go
-- [ ] T008 [US1] Update styles for help placement in internal/tui/styles.go
+- [x] T005 [US1] Add Help component state and keymaps in internal/tui/model.go
+- [x] T006 [US1] Render footer help via Bubbles Help in internal/tui/model.go
+- [x] T007 [US1] Render expanded help above input textarea in internal/tui/model.go
+- [x] T008 [US1] Update styles for help placement in internal/tui/styles.go
 
 **Checkpoint**: Help renders in footer and above input without shifting anchored elements.
 
@@ -47,12 +47,12 @@
 
 ### Tests for User Story 2 (REQUIRED) ⚠️
 
-- [ ] T009 [P] [US2] Add integration assertion for Bubbles Help usage in tests/integration/tui_bubbles_usage_test.go
+- [x] T009 [P] [US2] Add integration assertion for Bubbles Help usage in tests/integration/tui_bubbles_usage_test.go
 
 ### Implementation for User Story 2
 
-- [ ] T010 [US2] Wire help bindings and toggles with Bubbles key/help in internal/tui/model.go
-- [ ] T011 [US2] Update help-related documentation in internal/tui/doc.go
+- [x] T010 [US2] Wire help bindings and toggles with Bubbles key/help in internal/tui/model.go
+- [x] T011 [US2] Update help-related documentation in internal/tui/doc.go
 
 **Checkpoint**: Help component usage is documented and verified.
 
@@ -60,8 +60,8 @@
 
 ## Phase 5: Polish & Cross-Cutting Concerns
 
-- [ ] T012 [P] Run go test ./... and golangci-lint run; capture results in specs/004-bubbletea-tui/quickstart.md
-- [ ] T013 Validate UX anchoring with help/picker overlays and update specs/004-bubbletea-tui/quickstart.md
+- [x] T012 [P] Run go test ./... and golangci-lint run; capture results in specs/004-bubbletea-tui/quickstart.md
+- [x] T013 Validate UX anchoring with help/picker overlays and update specs/004-bubbletea-tui/quickstart.md
 
 ---
 

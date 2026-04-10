@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/viewport"
@@ -145,6 +146,8 @@ type Model struct {
 	err         error
 	ready       bool
 	keys        keyMap
+	help        help.Model
+	helpKeys    helpKeyMap
 
 	// slash suggestion state
 	suggestions []suggest.Suggestion
@@ -190,6 +193,23 @@ type keyMap struct {
 	quit       key.Binding
 	openModel  key.Binding
 	clearInput key.Binding
+	toggleHelp key.Binding
+}
+
+type helpKeyMap struct {
+	primary   []key.Binding
+	secondary []key.Binding
+}
+
+func (h helpKeyMap) ShortHelp() []key.Binding {
+	return h.primary
+}
+
+func (h helpKeyMap) FullHelp() [][]key.Binding {
+	if len(h.secondary) == 0 {
+		return [][]key.Binding{h.primary}
+	}
+	return [][]key.Binding{h.primary, h.secondary}
 }
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
@@ -246,6 +266,18 @@ func New(
 		quit:       key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "quit")),
 		openModel:  key.NewBinding(key.WithKeys("ctrl+l"), key.WithHelp("ctrl+l", "model picker")),
 		clearInput: key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "clear")),
+		toggleHelp: key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+	}
+	helpModel := help.New()
+	helpModel.Styles.ShortKey = helpShortStyle
+	helpModel.Styles.ShortDesc = helpShortStyle
+	helpModel.Styles.FullKey = helpFullStyle
+	helpModel.Styles.FullDesc = helpFullStyle
+	helpKeys := helpKeyMap{
+		primary: []key.Binding{keys.toggleHelp, keys.openModel, keys.quit},
+		secondary: []key.Binding{
+			keys.clearInput,
+		},
 	}
 
 	if inputHistory == nil {
@@ -265,6 +297,8 @@ func New(
 		execCtx:                execCtx,
 		provider:               providerFn,
 		keys:                   keys,
+		help:                   helpModel,
+		helpKeys:               helpKeys,
 		listModels:             listModels,
 		modelSelected:          modelSelected,
 		listProfiles:           listProfiles,
@@ -446,6 +480,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.openModel):
 			return m.openPicker(pickerKindModel, cmds)
 
+		case key.Matches(msg, m.keys.toggleHelp):
+			m.help.ShowAll = !m.help.ShowAll
+			return m, nil
+
 		case msg.Key().Code == tea.KeyEsc:
 			if len(m.suggestions) > 0 {
 				m.clearSuggestions()
@@ -575,6 +613,11 @@ func (m Model) updateSuggNav(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, te
 		m.clearSuggestions()
 		m.input.SetValue("")
 		return m.openPicker(pickerKindModel, cmds)
+	case key.Matches(msg, m.keys.toggleHelp):
+		m.clearSuggestions()
+		m.input.SetValue("")
+		m.help.ShowAll = !m.help.ShowAll
+		return m, nil
 
 	default:
 		m.suggActive = false
@@ -766,6 +809,9 @@ func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea
 		m.clearSuggestions()
 		cmds = append(cmds, m.input.Focus())
 		return m.openPicker(pickerKindModel, cmds)
+	case key.Matches(msg, m.keys.toggleHelp):
+		m.help.ShowAll = !m.help.ShowAll
+		return m, nil
 	case msg.Key().Code == tea.KeyEnter:
 		chosen := m.picker.selectedValue()
 		kind := m.pickerKind
@@ -925,6 +971,13 @@ func (m Model) View() tea.View {
 		mid.WriteString(m.renderSuggestions(m.suggestionMaxHeight()))
 	}
 
+	helperWidth := max(m.width-2, 0)
+	m.help.SetWidth(helperWidth)
+	var helpBlock string
+	if m.help.ShowAll {
+		helpBlock = "\n" + m.help.View(m.helpKeys) + "\n"
+	}
+
 	var errBlock string
 	if m.err != nil {
 		errBlock = errStyle.Render("  ✗ "+m.err.Error()) + "\n"
@@ -938,7 +991,7 @@ func (m Model) View() tea.View {
 	footer := m.renderFooter()
 	midStr := mid.String()
 	separatorHeight := 1 // newline between viewport and mid
-	fixedHeight := separatorHeight + lipgloss.Height(midStr) + lipgloss.Height(errBlock) + 2 + lipgloss.Height(footer)
+	fixedHeight := separatorHeight + lipgloss.Height(midStr) + lipgloss.Height(errBlock) + lipgloss.Height(helpBlock) + 2 + lipgloss.Height(footer)
 	desiredViewportHeight := max(1, m.height-fixedHeight)
 	if m.viewport.Height() != desiredViewportHeight {
 		m.viewport.SetHeight(desiredViewportHeight)
@@ -947,6 +1000,7 @@ func (m Model) View() tea.View {
 	view := tea.NewView(m.viewport.View() + "\n" +
 		midStr +
 		errBlock +
+		helpBlock +
 		inputDivider + "\n" +
 		inputLine + "\n" +
 		footer)
@@ -986,10 +1040,14 @@ func (m *Model) renderFooter() string {
 
 	left := strings.Join(leftParts, dim.Render("  "))
 
-	// Right: profile + model.
+	// Right: profile + model + help.
 	right := white.Render(m.profileName)
 	if m.activeModel != "" {
 		right = right + dim.Render("  ") + purple.Render("["+m.activeModel+"]")
+	}
+	helpView := m.help.ShortHelpView(m.helpKeys.ShortHelp())
+	if helpView != "" {
+		right = right + dim.Render("  ") + helpView
 	}
 
 	_ = yellow // suppress unused if no cost yet
