@@ -189,13 +189,6 @@ var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 
 // ---- styles -----------------------------------------------------------------
 
-var (
-	headerStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Bold(false)
-	errStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
-	suggNormalStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	suggSelectStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("63")).Bold(true)
-	dividerStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
-)
 
 // New creates a new TUI Model.
 func New(
@@ -223,10 +216,9 @@ func New(
 	ti.ShowLineNumbers = false
 	ti.SetHeight(3)
 	ti.Prompt = "  "
-	promptStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	ti.FocusedStyle.Prompt = promptStyle
 	ti.BlurredStyle.Prompt = promptStyle
-	ti.Cursor.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
+	ti.Cursor.Style = cursorStyle
 	// Enter sends; Alt+Enter inserts newline.
 	ti.KeyMap.InsertNewline = key.NewBinding(
 		key.WithKeys("alt+enter"),

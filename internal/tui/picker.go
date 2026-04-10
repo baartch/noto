@@ -7,15 +7,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var (
-	pickerBorderStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("8")).Padding(0, 1)
-	pickerCursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true)
-	pickerNormalStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
-	pickerActiveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // currently-active item
-	pickerFilterStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
-	pickerHeaderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Bold(true)
-)
-
 // pickerItem is a single entry in the picker list.
 type pickerItem struct {
 	// Value is the ID/slug passed to the selected callback.

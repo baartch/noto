@@ -9,16 +9,16 @@
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Inventory TUI flows and entry points in specs/004-bubbletea-tui/research.md
-- [ ] T002 [P] Catalog existing Bubble Tea models and Bubbles usage in specs/004-bubbletea-tui/research.md
-- [ ] T003 [P] Identify current Lip Gloss style definitions and gaps in specs/004-bubbletea-tui/research.md
+- [x] T001 Inventory TUI flows and entry points in specs/004-bubbletea-tui/research.md
+- [x] T002 [P] Catalog existing Bubble Tea models and Bubbles usage in specs/004-bubbletea-tui/research.md
+- [x] T003 [P] Identify current Lip Gloss style definitions and gaps in specs/004-bubbletea-tui/research.md
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T004 Define a shared Lip Gloss style registry in internal/tui/styles.go
-- [ ] T005 Document TUI flow inventory and component usage in specs/004-bubbletea-tui/data-model.md
+- [x] T004 Define a shared Lip Gloss style registry in internal/tui/styles.go
+- [x] T005 Document TUI flow inventory and component usage in specs/004-bubbletea-tui/data-model.md
 
 ---
 
@@ -64,12 +64,12 @@
 
 ### Tests for User Story 3 (REQUIRED)
 
-- [ ] T012 [P] [US3] Add unit tests covering shared style usage in internal/tui/styles_test.go
+- [x] T012 [P] [US3] Add unit tests covering shared style usage in internal/tui/styles_test.go
 
 ### Implementation for User Story 3
 
-- [ ] T013 [US3] Implement shared style definitions in internal/tui/styles.go
-- [ ] T014 [US3] Update TUI components to use shared Lip Gloss styles in internal/tui/
+- [x] T013 [US3] Implement shared style definitions in internal/tui/styles.go
+- [x] T014 [US3] Update TUI components to use shared Lip Gloss styles in internal/tui/
 
 ---
 
@@ -78,7 +78,7 @@
 - [ ] T015 [P] Update specs/004-bubbletea-tui/quickstart.md with manual validation notes
 - [ ] T016 Run quickstart validation and record results in specs/004-bubbletea-tui/quickstart.md
 - [ ] T017 Validate performance sanity check and document in specs/004-bubbletea-tui/research.md
-- [ ] T018 Ensure lint/test gates pass for all modified files
+- [x] T018 Ensure lint/test gates pass for all modified files
 
 ---
 
