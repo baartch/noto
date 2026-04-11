@@ -245,14 +245,81 @@ func TestTUISettingsEditor_InvalidNumber(t *testing.T) {
 	}
 }
 
+func TestSettingsSubmenuNavigation_EscBehavior(t *testing.T) {
+	db, closeDB := tempDB(t)
+	defer closeDB()
+
+	repo := store.NewProfileRepo(db)
+	svc := profile.NewService(repo)
+	ctx := context.Background()
+	p, err := svc.Create(ctx, "Settings Test")
+	if err != nil {
+		t.Fatalf("create profile: %v", err)
+	}
+
+	execCtx := &commands.ExecContext{ProfileID: p.ID, ProfileSlug: p.Slug, DB: db}
+	model := tui.New(
+		"Profile",
+		"",
+		"",
+		"cache: n/a",
+		"tokens: n/a",
+		false,
+		chat.NewDispatcher(commands.NewRegistry()),
+		execCtx,
+		nil,
+		nil,
+		func(string) error { return nil },
+		nil,
+		func(string) tea.Cmd { return nil },
+		nil,
+		func(string) error { return nil },
+		func(string) error { return nil },
+		nil,
+	)
+
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m := updated.(tui.Model)
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
+	m = updated.(tui.Model)
+
+	// Move to Providers and enter submenu
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updated.(tui.Model)
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updated.(tui.Model)
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updated.(tui.Model)
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = updated.(tui.Model)
+
+	if !strings.Contains(m.View().Content, "Providers") {
+		t.Fatalf("expected providers submenu")
+	}
+
+	// Esc returns to root
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	m = updated.(tui.Model)
+	if !strings.Contains(m.View().Content, "Settings") {
+		t.Fatalf("expected root settings after esc")
+	}
+
+	// Esc closes dialog
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	m = updated.(tui.Model)
+	if strings.Contains(m.View().Content, "Settings") {
+		t.Fatalf("expected settings dialog closed")
+	}
+}
+
 func TestSettingsEntries_AreSortedAlphabetically(t *testing.T) {
 	entries := []tui.SettingsEntry{
 		{Label: "Token Budget"},
-		{Label: "Extractor Model"},
+		{Label: "Model Extractor"},
 		{Label: "Model"},
 	}
 	tui.SortSettingsEntries(entries)
-	if entries[0].Label != "Extractor Model" || entries[1].Label != "Model" || entries[2].Label != "Token Budget" {
+	if entries[0].Label != "Model Extractor" || entries[1].Label != "Model" || entries[2].Label != "Token Budget" {
 		t.Fatalf("entries not sorted alphabetically")
 	}
 }

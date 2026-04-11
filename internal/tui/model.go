@@ -23,6 +23,7 @@ import (
 	"noto/internal/commands"
 	"noto/internal/profile"
 	"noto/internal/provider"
+	"noto/internal/security"
 	"noto/internal/store"
 	"noto/internal/suggest"
 )
@@ -193,6 +194,8 @@ type Model struct {
 	// profile settings
 	memoryTokenBudget int
 	systemPrompt      string
+	providerEndpoint  string
+	providerAPIKey    string // decrypted; displayed obfuscated
 
 	// notes badge
 	notesIndicator string
@@ -531,6 +534,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.settingsEditor, cmd = m.settingsEditor.Update(msg)
 			return m, cmd
 		}
+		if m.settingsOpen && !m.settingsEditing {
+			switch msg.Key().Code {
+			case tea.KeyEsc:
+				if next, ok := NavigateUp(m.settingsMenu); ok {
+					m.settingsMenu = next
+					m.syncSettingsList()
+					return m, nil
+				}
+				m.settingsOpen = false
+				m.settingsErr = ""
+				return m, m.input.Focus()
+			case tea.KeyEnter:
+				return m.handleSettingsEnter()
+			default:
+				var cmd tea.Cmd
+				m.settingsList, cmd = m.settingsList.Update(msg)
+				return m, cmd
+			}
+		}
 		if m.picker != nil {
 			return m.updatePicker(msg, cmds)
 		}
@@ -565,12 +587,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.settingsMenu == nil {
 					m.settingsMenu = DefaultSettingsMenu()
 				}
+				m.input.Blur()
 				m.refreshSettingsValues()
+				m.syncSettingsList()
+			} else {
+				m.input.Focus()
 			}
 			return m, nil
 
 		case msg.Key().Code == tea.KeyEsc:
 			if m.settingsOpen {
+				if !m.settingsEditing {
+					if next, ok := NavigateUp(m.settingsMenu); ok {
+						m.settingsMenu = next
+						return m, nil
+					}
+				}
 				m.settingsOpen = false
 				m.settingsEditing = false
 				m.settingsErr = ""
@@ -584,11 +616,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case msg.Key().Code == tea.KeyUp:
-			if m.settingsOpen && !m.settingsEditing {
-				var cmd tea.Cmd
-				m.settingsList, cmd = m.settingsList.Update(msg)
-				return m, cmd
-			}
 			if len(m.suggestions) > 0 {
 				m.suggActive = true
 				m.suggCursor = len(m.suggestions) - 1
@@ -604,11 +631,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, vpCmd
 
 		case msg.Key().Code == tea.KeyDown:
-			if m.settingsOpen && !m.settingsEditing {
-				var cmd tea.Cmd
-				m.settingsList, cmd = m.settingsList.Update(msg)
-				return m, cmd
-			}
 			if len(m.suggestions) > 0 {
 				m.suggActive = true
 				m.suggCursor = 0
@@ -624,11 +646,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, vpCmd
 
 		case msg.Key().Code == tea.KeyPgUp, msg.Key().Code == tea.KeyPgDown:
-			if m.settingsOpen && !m.settingsEditing {
-				var cmd tea.Cmd
-				m.settingsList, cmd = m.settingsList.Update(msg)
-				return m, cmd
-			}
 			var vpCmd tea.Cmd
 			m.viewport, vpCmd = m.viewport.Update(msg)
 			return m, vpCmd
@@ -645,9 +662,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case msg.Key().Code == tea.KeyEnter:
-			if m.settingsOpen {
-				return m.handleSettingsEnter()
-			}
 			// Send on Enter (newline handled by textarea only via Alt+Enter)
 			val := strings.TrimSpace(m.input.Value())
 			if val == "" {
@@ -1240,6 +1254,17 @@ func (m *Model) renderSettingsDialog(height int) string {
 }
 
 func (m *Model) renderSettingsList(height int) string {
+	m.settingsList.SetHeight(max(height-2, 4))
+	m.settingsList.SetWidth(max(m.width-6, 20))
+	m.settingsList.Title = settingsHelpText
+
+	return pickerBorderStyle.Render(m.settingsList.View())
+}
+
+func (m *Model) syncSettingsList() {
+	if m.settingsMenu == nil {
+		return
+	}
 	entries := make([]SettingsEntry, len(m.settingsMenu.Entries))
 	copy(entries, m.settingsMenu.Entries)
 	SortSettingsEntries(entries)
@@ -1249,11 +1274,11 @@ func (m *Model) renderSettingsList(height int) string {
 		items[i] = settingsItem{entry: entry}
 	}
 	m.settingsList.SetItems(items)
-	m.settingsList.SetHeight(max(height-2, 4))
-	m.settingsList.SetWidth(max(m.width-6, 20))
 	m.settingsList.Title = settingsHelpText
-
-	return pickerBorderStyle.Render(m.settingsList.View())
+	m.settingsList.SetSize(max(m.width-6, 20), max(m.height/2-2, 6))
+	if len(items) > 0 {
+		m.settingsList.Select(0)
+	}
 }
 
 type settingsItem struct {
@@ -1290,11 +1315,15 @@ func (d settingsDelegate) Render(w io.Writer, m list.Model, index int, item list
 	}
 
 	label := it.entry.Label
-	if it.entry.Kind == SettingsEntrySubmenu {
+	switch it.entry.Kind {
+	case SettingsEntrySubmenu:
 		label = label + " ›"
-	}
-	if it.entry.Kind == SettingsEntryValue && it.entry.Value != "" {
-		label = label + ": " + it.entry.Value
+	case SettingsEntryAction:
+		label = label + " →"
+	case SettingsEntryValue:
+		if it.entry.Value != "" {
+			label = label + ": " + it.entry.Value
+		}
 	}
 	line := "  " + indicator + " " + label
 	_, _ = fmt.Fprint(w, style.Render(fitLine(line, m.Width())))
@@ -1344,7 +1373,23 @@ func (m *Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
 	if entry == nil {
 		return m, nil
 	}
+	if entry.Kind == SettingsEntryAction {
+		switch entry.ID {
+		case settingsIDModel:
+			m.settingsOpen = false
+			return m.openPicker(pickerKindModel, nil)
+		case settingsIDExtractorModel:
+			m.settingsOpen = false
+			return m.openPicker(pickerKindExtractorModel, nil)
+		}
+		return m, nil
+	}
 	if entry.Kind == SettingsEntrySubmenu {
+		if next, ok := NavigateToSubmenu(m.settingsMenu, entry.ID); ok {
+			m.settingsMenu = next
+			m.syncSettingsList()
+			return m, nil
+		}
 		return m, nil
 	}
 	if entry.Kind == SettingsEntryValue {
@@ -1352,8 +1397,13 @@ func (m *Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
 		m.settingsEditEntry = entry
 		m.settingsErr = ""
 		m.settingsEditor = newSettingsEditor()
-		m.settingsEditor.SetValue(entry.Value)
-		return m, nil
+		// For the API key, populate with real value (not obfuscated)
+		if entry.ID == settingsIDProviderAPIKey {
+			m.settingsEditor.SetValue(m.providerAPIKey)
+		} else {
+			m.settingsEditor.SetValue(entry.Value)
+		}
+		return m, m.settingsEditor.Focus()
 	}
 	return m, nil
 }
@@ -1379,17 +1429,37 @@ func (m *Model) handleSettingsSave() (tea.Model, tea.Cmd) {
 		}
 	}
 	if entry.ValueType == SettingsValueText {
-		m.systemPrompt = val
-		entry.Value = val
-		if err := m.saveSystemPrompt(val); err != nil {
-			m.settingsErr = err.Error()
-			return m, nil
+		switch entry.ID {
+		case settingsIDSystemPrompt:
+			m.systemPrompt = val
+			entry.Value = val
+			if err := m.saveSystemPrompt(val); err != nil {
+				m.settingsErr = err.Error()
+				return m, nil
+			}
+		case settingsIDProviderEndpoint:
+			m.providerEndpoint = val
+			entry.Value = val
+			if err := m.saveProviderEndpoint(val); err != nil {
+				m.settingsErr = err.Error()
+				return m, nil
+			}
+		case settingsIDProviderAPIKey:
+			m.providerAPIKey = val
+			entry.Value = obfuscateKey(val)
+			if err := m.saveProviderAPIKey(val); err != nil {
+				m.settingsErr = err.Error()
+				return m, nil
+			}
+		default:
+			entry.Value = val
 		}
 	}
 	m.updateSettingsEntry(entry)
 	m.settingsEditing = false
 	m.settingsEditEntry = nil
 	m.settingsErr = ""
+	m.syncSettingsList()
 	return m, nil
 }
 
@@ -1425,6 +1495,7 @@ func (m *Model) refreshSettingsValues() {
 	if m.settingsMenu == nil || m.execCtx == nil {
 		return
 	}
+	ctx := context.Background()
 	if m.execCtx.ProfileSlug != "" {
 		if settings, err := profile.ReadSettings(m.execCtx.ProfileSlug); err == nil {
 			m.memoryTokenBudget = settings.MemoryTokenBudget
@@ -1433,19 +1504,32 @@ func (m *Model) refreshSettingsValues() {
 	if m.execCtx.ProfileID != "" && m.execCtx.DB != nil {
 		repo := store.NewSystemPromptRepo(m.execCtx.DB)
 		promptStore := profile.NewPromptStore(m.execCtx.ProfileID, repo)
-		if prompt, err := promptStore.GetSystemPrompt(context.Background()); err == nil {
+		if prompt, err := promptStore.GetSystemPrompt(ctx); err == nil {
 			m.systemPrompt = prompt
+		}
+		cfgRepo := store.NewProviderConfigRepo(m.execCtx.DB)
+		if cfg, err := cfgRepo.GetActive(ctx, m.execCtx.ProfileID); err == nil {
+			m.providerEndpoint = cfg.Endpoint
+			if pass, err := security.MachinePassphrase(); err == nil {
+				if dec, err := security.Decrypt(cfg.CredentialRef, pass); err == nil {
+					m.providerAPIKey = dec
+				}
+			}
 		}
 	}
 	m.applySettingsValues()
 }
 
 func (m *Model) applySettingsValues() {
-	if m.settingsMenu == nil {
+	applyToMenu(m.settingsMenu, m)
+}
+
+func applyToMenu(menu *SettingsMenu, m *Model) {
+	if menu == nil {
 		return
 	}
-	entries := make([]SettingsEntry, len(m.settingsMenu.Entries))
-	copy(entries, m.settingsMenu.Entries)
+	entries := make([]SettingsEntry, len(menu.Entries))
+	copy(entries, menu.Entries)
 	for i := range entries {
 		switch entries[i].ID {
 		case settingsIDMemoryTokenLimit:
@@ -1454,9 +1538,50 @@ func (m *Model) applySettingsValues() {
 			}
 		case settingsIDSystemPrompt:
 			entries[i].Value = m.systemPrompt
+		case settingsIDProviderEndpoint:
+			entries[i].Value = m.providerEndpoint
+		case settingsIDProviderAPIKey:
+			entries[i].Value = obfuscateKey(m.providerAPIKey)
+		}
+		if entries[i].Submenu != nil {
+			applyToMenu(entries[i].Submenu, m)
 		}
 	}
-	m.settingsMenu.Entries = entries
+	menu.Entries = entries
+}
+
+func obfuscateKey(key string) string {
+	if len(key) == 0 {
+		return ""
+	}
+	if len(key) <= 8 {
+		return strings.Repeat("*", len(key))
+	}
+	return key[:4] + strings.Repeat("*", len(key)-8) + key[len(key)-4:]
+}
+
+func (m *Model) saveProviderEndpoint(endpoint string) error {
+	if m.execCtx == nil || m.execCtx.DB == nil {
+		return errors.New("settings: no database available")
+	}
+	repo := store.NewProviderConfigRepo(m.execCtx.DB)
+	return repo.SetEndpoint(context.Background(), m.execCtx.ProfileID, endpoint)
+}
+
+func (m *Model) saveProviderAPIKey(key string) error {
+	if m.execCtx == nil || m.execCtx.DB == nil {
+		return errors.New("settings: no database available")
+	}
+	pass, err := security.MachinePassphrase()
+	if err != nil {
+		return fmt.Errorf("settings: passphrase: %w", err)
+	}
+	encrypted, err := security.Encrypt(key, pass)
+	if err != nil {
+		return fmt.Errorf("settings: encrypt key: %w", err)
+	}
+	repo := store.NewProviderConfigRepo(m.execCtx.DB)
+	return repo.SetCredentialRef(context.Background(), m.execCtx.ProfileID, encrypted)
 }
 
 func (m *Model) saveSystemPrompt(prompt string) error {

@@ -10,6 +10,8 @@ const (
 	settingsIDProviders        = "providers"
 	settingsIDProfiles         = "profiles"
 	settingsIDThemes           = "themes"
+	settingsIDProviderEndpoint = "provider_endpoint"
+	settingsIDProviderAPIKey   = "provider_api_key"
 )
 
 // SettingsEntryKind describes whether an entry is a value or submenu.
@@ -18,6 +20,7 @@ type SettingsEntryKind string
 const (
 	SettingsEntryValue   SettingsEntryKind = "value"
 	SettingsEntrySubmenu SettingsEntryKind = "submenu"
+	SettingsEntryAction  SettingsEntryKind = "action"
 )
 
 // SettingsValueType indicates how a value should be edited.
@@ -56,22 +59,63 @@ type SettingsMenu struct {
 	Parent  *SettingsMenu
 }
 
+// NavigateToSubmenu updates the menu to the selected submenu if present.
+func NavigateToSubmenu(menu *SettingsMenu, entryID string) (*SettingsMenu, bool) {
+	if menu == nil {
+		return menu, false
+	}
+	for _, entry := range menu.Entries {
+		if entry.ID == entryID && entry.Submenu != nil {
+			entry.Submenu.Parent = menu
+			return entry.Submenu, true
+		}
+	}
+	return menu, false
+}
+
+// NavigateUp returns the parent menu if available.
+func NavigateUp(menu *SettingsMenu) (*SettingsMenu, bool) {
+	if menu == nil || menu.Parent == nil {
+		return menu, false
+	}
+	return menu.Parent, true
+}
+
 // DefaultSettingsMenu returns the root settings menu entries.
 func DefaultSettingsMenu() *SettingsMenu {
-	return &SettingsMenu{
+	providersMenu := &SettingsMenu{
+		ID:    settingsIDProviders,
+		Title: "Provider",
+		Entries: []SettingsEntry{
+			{
+				ID:        "provider_endpoint",
+				Label:     "Endpoint",
+				Kind:      SettingsEntryValue,
+				ValueType: SettingsValueText,
+			},
+			{
+				ID:        "provider_api_key",
+				Label:     "Key",
+				Kind:      SettingsEntryValue,
+				ValueType: SettingsValueText,
+			},
+		},
+	}
+
+	menu := &SettingsMenu{
 		ID:    "settings",
 		Title: "Settings",
 		Entries: []SettingsEntry{
 			{
 				ID:        settingsIDModel,
 				Label:     "Model",
-				Kind:      SettingsEntrySubmenu,
+				Kind:      SettingsEntryAction,
 				ValueType: SettingsValueAction,
 			},
 			{
 				ID:        settingsIDExtractorModel,
-				Label:     "Extractor Model",
-				Kind:      SettingsEntrySubmenu,
+				Label:     "Model Extractor",
+				Kind:      SettingsEntryAction,
 				ValueType: SettingsValueAction,
 			},
 			{
@@ -90,9 +134,10 @@ func DefaultSettingsMenu() *SettingsMenu {
 			},
 			{
 				ID:        settingsIDProviders,
-				Label:     "Providers",
+				Label:     "Provider",
 				Kind:      SettingsEntrySubmenu,
 				ValueType: SettingsValueAction,
+				Submenu:   providersMenu,
 			},
 			{
 				ID:        settingsIDProfiles,
@@ -108,6 +153,14 @@ func DefaultSettingsMenu() *SettingsMenu {
 			},
 		},
 	}
+
+	for i, entry := range menu.Entries {
+		if entry.Submenu != nil {
+			entry.Submenu.Parent = menu
+			menu.Entries[i] = entry
+		}
+	}
+	return menu
 }
 
 // SortSettingsEntries orders settings entries alphabetically by label.

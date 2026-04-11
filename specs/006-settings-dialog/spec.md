@@ -41,6 +41,7 @@ As a user, I want to select a setting and edit its value so I can customize the 
 
 1. **Given** a settings entry represents a value, **When** the user selects it and presses Enter, **Then** a textarea editor opens to update the value.
 2. **Given** the editor is open for a text or numeric value, **When** the user presses Enter, **Then** the updated value is stored and visible in the list.
+2a. **Given** the user saves a new system prompt, **When** the value is persisted, **Then** the conversation context cache is invalidated so the new prompt takes effect immediately.
 3. **Given** the editor is open for a numeric value, **When** the user enters a non-numeric value, **Then** the system rejects it and keeps the editor open with an error.
 4. **Given** the editor is open for a text or numeric value, **When** the user presses Esc, **Then** the edit is canceled and the original value remains.
 
@@ -81,6 +82,7 @@ As a user, I want to navigate into and out of submenus so I can manage grouped s
 - **FR-007**: When at the top-level settings menu, pressing Esc MUST close the settings dialog.
 - **FR-008**: The settings dialog MUST cover all app settings, including model selection, extractor model selection, provider configuration (submenu), token budget, and system prompt editing.
 - **FR-008a**: The system MUST store the system prompt in the profile database, not a standalone file, defaulting to "You are Noto. A buddy who takes notes." when missing.
+- **FR-008b**: The system MUST invalidate the conversation context cache whenever the system prompt is saved via the settings dialog.
 - **FR-009**: After a value is edited, the updated value MUST be persisted and displayed in the list.
 - **FR-010**: The editor MUST save changes on Enter and cancel changes on Esc.
 

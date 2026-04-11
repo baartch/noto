@@ -62,6 +62,7 @@
 - [X] T013a [US2] Define numeric validation error messaging/state in internal/tui/model.go
 - [X] T014 [US2] Persist token budget updates in internal/profile/settings.go
 - [X] T015 [US2] Store system prompt in SQLite via internal/store/system_prompt_repo.go (new) and wire save/load in internal/profile/
+- [X] T015a [US2] Invalidate context cache when system prompt is saved via settings dialog (via ExecContext.OnPromptChanged)
 
 **Checkpoint**: Editing values works with validation and persistence.
 
@@ -75,13 +76,13 @@
 
 ### Tests for User Story 3 (REQUIRED) ⚠️
 
-- [ ] T016 [P] [US3] Add integration test for submenu navigation and Esc behavior in tests/integration/tui_flow_regression_test.go
+- [X] T016 [P] [US3] Add integration test for submenu navigation and Esc behavior in tests/integration/tui_flow_regression_test.go
 
 ### Implementation for User Story 3
 
-- [ ] T017 [US3] Implement submenu navigation stack in internal/tui/settings_menu.go
-- [ ] T018 [US3] Wire Esc behavior for submenu/back/close in internal/tui/model.go
-- [ ] T019 [US3] Add provider configuration submenu entries in internal/tui/settings_menu.go
+- [X] T017 [US3] Implement submenu navigation stack in internal/tui/settings_menu.go
+- [X] T018 [US3] Wire Esc behavior for submenu/back/close in internal/tui/model.go
+- [X] T019 [US3] Add provider configuration submenu entries in internal/tui/settings_menu.go
 
 **Checkpoint**: Submenus navigate correctly and Esc behaves per spec.
 
