@@ -11,7 +11,7 @@ Add a Ctrl+, settings dialog built with Bubble Tea + Bubbles list, showing alpha
 
 **Language/Version**: Go 1.26+
 **Primary Dependencies**: charm.land/bubbletea/v2, charm.land/bubbles/v2, charm.land/lipgloss/v2, Cobra
-**Storage**: Profile metadata (profile.json) + per-profile SQLite for existing provider data/system prompt/data
+**Storage**: Profile metadata (profile.json) + per-profile SQLite for existing provider data/system prompt data (default prompt "You are Noto. A buddy who takes notes." when missing)
 **Testing**: `go test ./...`, integration tests under `tests/integration`
 **Target Platform**: Terminal (Linux/macOS/Windows)
 **Project Type**: CLI/TUI application
@@ -96,7 +96,7 @@ Run: `.specify/scripts/bash/update-agent-context.sh pi`
 2. Build settings dialog list with alphabetical ordering, value entries, and submenu entries.
 3. Implement submenu navigation (Enter to enter, Esc to go back) and top-level Esc to close.
 4. Implement value editor using Bubbles textarea; Enter saves, Esc cancels; validate numeric entries with inline error feedback.
-5. Wire settings entries to current settings sources: model/extractor model, provider configuration submenu, token budget, system prompt stored in SQLite.
+5. Wire settings entries to current settings sources: model/extractor model, provider configuration submenu, token budget, system prompt stored in SQLite with default prompt "You are Noto. A buddy who takes notes." when missing.
 6. Add integration tests for open/close, submenu navigation, edit/save/cancel flows, and numeric validation errors.
 
 ## Complexity Tracking

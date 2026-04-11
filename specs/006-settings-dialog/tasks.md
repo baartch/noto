@@ -17,7 +17,7 @@
 ## Phase 2: Foundational (Blocking Prerequisites)
 
 - [ ] T003 Define settings menu structure and entry mapping in internal/tui/settings_menu.go (new)
-- [ ] T004 Add system prompt persistence in SQLite via internal/store/ (new repo + migration)
+- [ ] T004 Add system prompt persistence in SQLite via internal/store/system_prompt_repo.go (no migration; start with default prompt "You are Noto. A buddy who takes notes." for existing/new profiles when missing)
 
 **Checkpoint**: Settings menu structure and storage layer ready.
 
@@ -59,6 +59,7 @@
 
 - [ ] T012 [US2] Add textarea editor flow for settings values in internal/tui/model.go
 - [ ] T013 [US2] Implement numeric validation and error state in internal/tui/model.go
+- [ ] T013a [US2] Define numeric validation error messaging/state in internal/tui/model.go
 - [ ] T014 [US2] Persist token budget updates in internal/profile/settings.go
 - [ ] T015 [US2] Store system prompt in SQLite via internal/store/system_prompt_repo.go (new) and wire save/load in internal/profile/
 

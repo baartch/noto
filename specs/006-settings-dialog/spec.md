@@ -80,7 +80,7 @@ As a user, I want to navigate into and out of submenus so I can manage grouped s
 - **FR-006**: When inside a submenu, pressing Esc MUST return to the previous menu level.
 - **FR-007**: When at the top-level settings menu, pressing Esc MUST close the settings dialog.
 - **FR-008**: The settings dialog MUST cover all app settings, including model selection, extractor model selection, provider configuration (submenu), token budget, and system prompt editing.
-- **FR-008a**: The system MUST store the system prompt in the profile database, not a standalone file.
+- **FR-008a**: The system MUST store the system prompt in the profile database, not a standalone file, defaulting to "You are Noto. A buddy who takes notes." when missing.
 - **FR-009**: After a value is edited, the updated value MUST be persisted and displayed in the list.
 - **FR-010**: The editor MUST save changes on Enter and cancel changes on Esc.
 
@@ -118,4 +118,4 @@ As a user, I want to navigate into and out of submenus so I can manage grouped s
 - Settings are profile-scoped unless explicitly noted otherwise.
 - Existing configuration flows (model selection, provider setup, system prompt edit) can be invoked from settings.
 - The dialog can display blank values for unset settings without blocking edits.
-- The system prompt is stored in the profile database (no separate prompt file).
+- The system prompt is stored in the profile database (no separate prompt file) and defaults to "You are Noto. A buddy who takes notes." when missing.
