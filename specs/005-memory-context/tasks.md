@@ -101,8 +101,8 @@
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T021 [P] Run go test ./... and golangci-lint run; capture results in specs/005-memory-context/quickstart.md
-- [ ] T022 Validate UX and performance goals; update specs/005-memory-context/quickstart.md
+- [X] T021 [P] Run go test ./... and golangci-lint run; capture results in specs/005-memory-context/quickstart.md
+- [X] T022 Validate UX and performance goals; update specs/005-memory-context/quickstart.md
 
 ---
 

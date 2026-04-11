@@ -45,3 +45,8 @@
 - Fallback ranking is deterministic.
 - Settings changes take effect for context retrieval.
 - Extractor fallback uses the main model with a visible footer warning.
+
+## Validation Results
+
+- `go test ./...` (2026-04-11): **pass**
+- `make lint` (golangci-lint run ./...) (2026-04-11): **pass**
