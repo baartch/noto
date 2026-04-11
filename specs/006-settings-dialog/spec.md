@@ -35,13 +35,14 @@ As a user, I want to select a setting and edit its value so I can customize the 
 
 **Why this priority**: Editing values is the primary purpose of the settings dialog.
 
-**Independent Test**: Select a value entry, press Enter, edit it, and confirm the new value is saved.
+**Independent Test**: Select a value entry, press Enter, edit it in a textarea, and confirm the new value is saved.
 
 **Acceptance Scenarios**:
 
-1. **Given** a settings entry represents a value, **When** the user selects it and presses Enter, **Then** an editor opens to update the value.
+1. **Given** a settings entry represents a value, **When** the user selects it and presses Enter, **Then** a textarea editor opens to update the value.
 2. **Given** the editor is open for a text or numeric value, **When** the user presses Enter, **Then** the updated value is stored and visible in the list.
-3. **Given** the editor is open for a text or numeric value, **When** the user presses Esc, **Then** the edit is canceled and the original value remains.
+3. **Given** the editor is open for a numeric value, **When** the user enters a non-numeric value, **Then** the system rejects it and keeps the editor open with an error.
+4. **Given** the editor is open for a text or numeric value, **When** the user presses Esc, **Then** the edit is canceled and the original value remains.
 
 ---
 
@@ -73,11 +74,13 @@ As a user, I want to navigate into and out of submenus so I can manage grouped s
 - **FR-001**: The system MUST open the settings dialog when the user presses Ctrl+,
 - **FR-002**: The settings list MUST display key/value entries and submenu entries sorted alphabetically.
 - **FR-003**: Users MUST be able to select a value entry and press Enter to edit it.
-- **FR-004**: The system MUST allow editing of text and numeric values through a dedicated editor flow.
+- **FR-004**: The system MUST allow editing of text and numeric values through a dedicated textarea editor flow.
+- **FR-004a**: The system MUST validate numeric values and reject invalid entries with an error state.
 - **FR-005**: Users MUST be able to enter submenus by selecting them and pressing Enter.
 - **FR-006**: When inside a submenu, pressing Esc MUST return to the previous menu level.
 - **FR-007**: When at the top-level settings menu, pressing Esc MUST close the settings dialog.
 - **FR-008**: The settings dialog MUST cover all app settings, including model selection, extractor model selection, provider configuration (submenu), token budget, and system prompt editing.
+- **FR-008a**: The system MUST store the system prompt in the profile database, not a standalone file.
 - **FR-009**: After a value is edited, the updated value MUST be persisted and displayed in the list.
 - **FR-010**: The editor MUST save changes on Enter and cancel changes on Esc.
 
@@ -96,6 +99,7 @@ As a user, I want to navigate into and out of submenus so I can manage grouped s
 - **Settings Entry**: A named item representing a value or submenu.
 - **Settings Menu**: A collection of settings entries at a given level.
 - **Setting Value**: The editable value associated with a settings entry.
+- **System Prompt**: The stored prompt value persisted in the profile database.
 
 ## Success Criteria *(mandatory)*
 
@@ -114,3 +118,4 @@ As a user, I want to navigate into and out of submenus so I can manage grouped s
 - Settings are profile-scoped unless explicitly noted otherwise.
 - Existing configuration flows (model selection, provider setup, system prompt edit) can be invoked from settings.
 - The dialog can display blank values for unset settings without blocking edits.
+- The system prompt is stored in the profile database (no separate prompt file).
