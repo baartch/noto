@@ -108,7 +108,7 @@ func TestTUIModel_OpenSettingsShortcut(t *testing.T) {
 
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m := updated.(tui.Model)
-	updated, _ = m.Update(tea.KeyPressMsg{Code: ',', Mod: tea.ModCtrl})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	m = updated.(tui.Model)
 
 	view := m.View().Content
@@ -152,7 +152,7 @@ func TestTUISettingsEditor_SaveAndCancel(t *testing.T) {
 
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m := updated.(tui.Model)
-	updated, _ = m.Update(tea.KeyPressMsg{Code: ',', Mod: tea.ModCtrl})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	m = updated.(tui.Model)
 
 	// Move to System Prompt (sorted) and open editor
@@ -224,7 +224,7 @@ func TestTUISettingsEditor_InvalidNumber(t *testing.T) {
 
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m := updated.(tui.Model)
-	updated, _ = m.Update(tea.KeyPressMsg{Code: ',', Mod: tea.ModCtrl})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	m = updated.(tui.Model)
 
 	// Memory Token Budget should be last; move down to it

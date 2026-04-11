@@ -94,7 +94,6 @@ func runChat(_ *cobra.Command, _ []string) error {
 		ProfileSlug: activeProfile.Slug,
 		Output:      os.Stdout,
 		DB:          profileDB,
-		DB:          profileDB,
 		Confirm: func(prompt string) bool {
 			fmt.Fprintf(os.Stderr, "%s [yes/no]: ", prompt)
 			var ans string

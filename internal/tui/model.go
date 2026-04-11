@@ -304,7 +304,7 @@ func New(
 		openModel:    key.NewBinding(key.WithKeys("ctrl+l"), key.WithHelp("ctrl+l", "model picker")),
 		clearInput:   key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "clear")),
 		toggleHelp:   key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "help")),
-		openSettings: key.NewBinding(key.WithKeys("ctrl+,"), key.WithHelp("ctrl+,", "settings")),
+		openSettings: key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j", "settings")),
 	}
 	helpModel := help.New()
 	helpModel.Styles.ShortKey = helpShortStyle
@@ -312,8 +312,11 @@ func New(
 	helpModel.Styles.FullKey = helpFullStyle
 	helpModel.Styles.FullDesc = helpFullStyle
 	helpKeys := helpKeyMap{
-		primary: []key.Binding{keys.toggleHelp, keys.openSettings, keys.openModel, keys.quit},
+		primary: []key.Binding{keys.toggleHelp},
 		secondary: []key.Binding{
+			keys.openSettings,
+			keys.openModel,
+			keys.quit,
 			keys.clearInput,
 		},
 	}
@@ -552,7 +555,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.help.ShowAll = !m.help.ShowAll
 			return m, nil
 
-		case key.Matches(msg, m.keys.openSettings):
+		case key.Matches(msg, m.keys.openSettings) || msg.String() == "ctrl+j" || msg.Key().Keystroke() == "ctrl+j":
 			m.clearSuggestions()
 			m.input.SetValue("")
 			m.settingsOpen = !m.settingsOpen

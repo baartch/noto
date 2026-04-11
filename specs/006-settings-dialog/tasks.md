@@ -27,16 +27,16 @@
 
 **Goal**: Open settings dialog with Ctrl+, and show alphabetically sorted entries.
 
-**Independent Test**: Press Ctrl+, verify dialog opens and entries are sorted alphabetically.
+**Independent Test**: Press Ctrl+J, verify dialog opens and entries are sorted alphabetically.
 
 ### Tests for User Story 1 (REQUIRED) ⚠️
 
-- [X] T005 [P] [US1] Add integration test for Ctrl+, opening settings in tests/integration/tui_flow_regression_test.go
+- [X] T005 [P] [US1] Add integration test for Ctrl+J opening settings in tests/integration/tui_flow_regression_test.go
 - [X] T006 [P] [US1] Add integration test for alphabetical ordering in tests/integration/tui_flow_regression_test.go
 
 ### Implementation for User Story 1
 
-- [X] T007 [US1] Add Ctrl+, keybinding and help hint in internal/tui/model.go
+- [X] T007 [US1] Add Ctrl+J keybinding and help hint in internal/tui/model.go
 - [X] T008 [US1] Render settings dialog list overlay in internal/tui/model.go
 - [X] T009 [US1] Populate settings menu entries in internal/tui/settings_menu.go
 

@@ -25,6 +25,28 @@ type SystemPromptRepo struct {
 	db *DB
 }
 
+func (r *SystemPromptRepo) ensureTable(ctx context.Context) error {
+	_, err := r.db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS system_prompts (
+			id          TEXT PRIMARY KEY,
+			profile_id  TEXT NOT NULL UNIQUE,
+			prompt      TEXT NOT NULL,
+			created_at  DATETIME NOT NULL DEFAULT (datetime('now')),
+			updated_at  DATETIME NOT NULL DEFAULT (datetime('now'))
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("store: ensure system prompts table: %w", err)
+	}
+	_, err = r.db.ExecContext(ctx, `
+		CREATE INDEX IF NOT EXISTS idx_system_prompts_profile_id ON system_prompts(profile_id)
+	`)
+	if err != nil {
+		return fmt.Errorf("store: ensure system prompts index: %w", err)
+	}
+	return nil
+}
+
 // NewSystemPromptRepo creates a SystemPromptRepo.
 func NewSystemPromptRepo(db *DB) *SystemPromptRepo {
 	return &SystemPromptRepo{db: db}
@@ -32,6 +54,9 @@ func NewSystemPromptRepo(db *DB) *SystemPromptRepo {
 
 // GetByProfile returns the system prompt for a profile.
 func (r *SystemPromptRepo) GetByProfile(ctx context.Context, profileID string) (*SystemPrompt, error) {
+	if err := r.ensureTable(ctx); err != nil {
+		return nil, err
+	}
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, profile_id, prompt, created_at, updated_at
 		FROM system_prompts
@@ -54,6 +79,9 @@ func (r *SystemPromptRepo) Upsert(ctx context.Context, p *SystemPrompt) error {
 	}
 	if p.ProfileID == "" {
 		return errors.New("store: system prompt missing profile_id")
+	}
+	if err := r.ensureTable(ctx); err != nil {
+		return err
 	}
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO system_prompts

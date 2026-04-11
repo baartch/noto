@@ -3,7 +3,7 @@
 **Feature Branch**: `006-settings-dialog`
 **Created**: 2026-04-11
 **Status**: Draft
-**Input**: User description: "I want ctrl+, opening a Settings dialog (Bubbles list). It shows key/value pairs or submenues ordered alphabetically. value pairs can be edited by selecting and pressing Enter. text or numbers editing should open a Bubbles Textarea. Being in a submenu Esc should go a level up, otherwise close the settings dialog. The settings should cover all possible App settings. Model/Extractor model selection, provider configuration (Submenu), token budget, System prompt edit"
+**Input**: User description: "I want ctrl+j opening a Settings dialog (Bubbles list). It shows key/value pairs or submenues ordered alphabetically. value pairs can be edited by selecting and pressing Enter. text or numbers editing should open a Bubbles Textarea. Being in a submenu Esc should go a level up, otherwise close the settings dialog. The settings should cover all possible App settings. Model/Extractor model selection, provider configuration (Submenu), token budget, System prompt edit"
 
 ## Clarifications
 
@@ -19,11 +19,11 @@ As a user, I want a dedicated settings dialog so I can find and adjust app setti
 
 **Why this priority**: Settings access is foundational for configuring the app across profiles.
 
-**Independent Test**: Press Ctrl+, and verify the settings dialog opens with entries ordered alphabetically.
+**Independent Test**: Press Ctrl+J, and verify the settings dialog opens with entries ordered alphabetically.
 
 **Acceptance Scenarios**:
 
-1. **Given** the TUI is active, **When** the user presses Ctrl+,, **Then** the settings dialog opens.
+1. **Given** the TUI is active, **When** the user presses Ctrl+J, **Then** the settings dialog opens.
 2. **Given** the settings dialog is open, **When** entries are rendered, **Then** key/value pairs and submenus are sorted alphabetically.
 3. **Given** the settings dialog is open at the top level, **When** the user presses Esc, **Then** the dialog closes.
 
@@ -71,7 +71,7 @@ As a user, I want to navigate into and out of submenus so I can manage grouped s
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST open the settings dialog when the user presses Ctrl+,
+- **FR-001**: The system MUST open the settings dialog when the user presses Ctrl+J
 - **FR-002**: The settings list MUST display key/value entries and submenu entries sorted alphabetically.
 - **FR-003**: Users MUST be able to select a value entry and press Enter to edit it.
 - **FR-004**: The system MUST allow editing of text and numeric values through a dedicated textarea editor flow.
