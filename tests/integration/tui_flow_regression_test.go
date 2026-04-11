@@ -69,7 +69,7 @@ func TestTUIModel_TogglesHelp(t *testing.T) {
 
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m := updated.(tui.Model)
-	updated, _ = m.Update(tea.KeyPressMsg{Code: '?'})
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'h', Mod: tea.ModCtrl})
 	m = updated.(tui.Model)
 
 	view := m.View().Content

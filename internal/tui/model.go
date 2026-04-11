@@ -270,7 +270,7 @@ func New(
 		quit:       key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "quit")),
 		openModel:  key.NewBinding(key.WithKeys("ctrl+l"), key.WithHelp("ctrl+l", "model picker")),
 		clearInput: key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "clear")),
-		toggleHelp: key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+		toggleHelp: key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "help")),
 	}
 	helpModel := help.New()
 	helpModel.Styles.ShortKey = helpShortStyle
