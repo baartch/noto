@@ -36,9 +36,9 @@
 
 ### Implementation for User Story 1
 
-- [ ] T007 [US1] Add Ctrl+, keybinding and help hint in internal/tui/model.go
-- [ ] T008 [US1] Render settings dialog list overlay in internal/tui/model.go
-- [ ] T009 [US1] Populate settings menu entries in internal/tui/settings_menu.go
+- [X] T007 [US1] Add Ctrl+, keybinding and help hint in internal/tui/model.go
+- [X] T008 [US1] Render settings dialog list overlay in internal/tui/model.go
+- [X] T009 [US1] Populate settings menu entries in internal/tui/settings_menu.go
 
 **Checkpoint**: Settings dialog opens and lists sorted entries.
 

@@ -168,6 +168,10 @@ type Model struct {
 	picker     *pickerState
 	pickerKind pickerKind
 
+	// settings dialog
+	settingsOpen bool
+	settingsMenu *SettingsMenu
+
 	// notes badge
 	notesIndicator string
 
@@ -196,10 +200,11 @@ type chatMessage struct {
 }
 
 type keyMap struct {
-	quit       key.Binding
-	openModel  key.Binding
-	clearInput key.Binding
-	toggleHelp key.Binding
+	quit         key.Binding
+	openModel    key.Binding
+	clearInput   key.Binding
+	toggleHelp   key.Binding
+	openSettings key.Binding
 }
 
 type helpKeyMap struct {
@@ -270,10 +275,11 @@ func New(
 		key.WithHelp("alt+enter", "insert newline"),
 	)
 	keys := keyMap{
-		quit:       key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "quit")),
-		openModel:  key.NewBinding(key.WithKeys("ctrl+l"), key.WithHelp("ctrl+l", "model picker")),
-		clearInput: key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "clear")),
-		toggleHelp: key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "help")),
+		quit:         key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "quit")),
+		openModel:    key.NewBinding(key.WithKeys("ctrl+l"), key.WithHelp("ctrl+l", "model picker")),
+		clearInput:   key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "clear")),
+		toggleHelp:   key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "help")),
+		openSettings: key.NewBinding(key.WithKeys("ctrl+,"), key.WithHelp("ctrl+,", "settings")),
 	}
 	helpModel := help.New()
 	helpModel.Styles.ShortKey = helpShortStyle
@@ -281,7 +287,7 @@ func New(
 	helpModel.Styles.FullKey = helpFullStyle
 	helpModel.Styles.FullDesc = helpFullStyle
 	helpKeys := helpKeyMap{
-		primary: []key.Binding{keys.toggleHelp, keys.openModel, keys.quit},
+		primary: []key.Binding{keys.toggleHelp, keys.openSettings, keys.openModel, keys.quit},
 		secondary: []key.Binding{
 			keys.clearInput,
 		},
@@ -631,6 +637,14 @@ func (m Model) updateSuggNav(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, te
 		m.input.SetValue("")
 		m.help.ShowAll = !m.help.ShowAll
 		return m, nil
+	case key.Matches(msg, m.keys.openSettings):
+		m.clearSuggestions()
+		m.input.SetValue("")
+		m.settingsOpen = !m.settingsOpen
+		if m.settingsOpen {
+			m.settingsMenu = DefaultSettingsMenu()
+		}
+		return m, nil
 
 	default:
 		m.suggActive = false
@@ -978,6 +992,8 @@ func (m Model) View() tea.View {
 		ph := m.height / 2
 		ph = max(ph, 10)
 		mid.WriteString(m.picker.render(ph) + "\n")
+	} else if m.settingsOpen {
+		mid.WriteString(m.renderSettingsDialog(max(m.height/2, 10)) + "\n")
 	} else if len(m.suggestions) > 0 {
 		mid.WriteString(m.renderSuggestions(m.suggestionMaxHeight()))
 	}
@@ -1126,6 +1142,37 @@ func (m *Model) renderSuggestions(maxRows int) string {
 	if len(list) > maxRows {
 		more := len(list) - (end - start)
 		sb.WriteString(suggNormalStyle.Render(fmt.Sprintf("  … %d more", more)) + "\n")
+	}
+	return sb.String()
+}
+
+func (m *Model) renderSettingsDialog(height int) string {
+	if m.settingsMenu == nil {
+		return ""
+	}
+	entries := make([]SettingsEntry, len(m.settingsMenu.Entries))
+	copy(entries, m.settingsMenu.Entries)
+	SortSettingsEntries(entries)
+
+	maxRows := max(height-1, 0)
+	var sb strings.Builder
+	if m.settingsMenu.Title != "" {
+		sb.WriteString(lipgloss.NewStyle().Bold(true).Render(m.settingsMenu.Title) + "\n")
+	} else {
+		sb.WriteString(lipgloss.NewStyle().Bold(true).Render("Settings") + "\n")
+	}
+	for i := 0; i < min(maxRows, len(entries)); i++ {
+		entry := entries[i]
+		label := entry.Label
+		if entry.Kind == SettingsEntrySubmenu {
+			label = label + " ›"
+		}
+		if entry.Kind == SettingsEntryValue {
+			if entry.Value != "" {
+				label = label + ": " + entry.Value
+			}
+		}
+		sb.WriteString("  " + label + "\n")
 	}
 	return sb.String()
 }
