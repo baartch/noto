@@ -35,7 +35,7 @@
 
 ## Expected Results
 
-- Ctrl+, opens the settings dialog in under 1 second.
+- Ctrl+, opens the settings dialog in under 1 second (manual measurement acceptable).
 - Entries and submenus are sorted alphabetically.
 - Enter saves edits; Esc cancels edits.
 - Esc navigates up from submenus and closes at the top level.

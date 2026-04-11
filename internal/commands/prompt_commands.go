@@ -7,13 +7,16 @@ import (
 	"os"
 	"os/exec"
 
+	"noto/internal/config"
 	"noto/internal/profile"
+	"noto/internal/store"
 )
 
 // ErrOpenEditor is returned by promptEditHandler to signal the TUI that it
 // should open an editor via tea.ExecProcess. The Path field holds the file.
 type ErrOpenEditor struct {
-	Path string
+	Path   string
+	OnSave func() error
 }
 
 func (e *ErrOpenEditor) Error() string { return "open-editor:" + e.Path }
@@ -54,11 +57,24 @@ func RegisterPromptCommands(r *Registry) error {
 }
 
 func promptShowHandler(ctx *ExecContext, _ []string) error {
-	if ctx.ProfileSlug == "" {
+	if ctx.ProfileSlug == "" || ctx.ProfileID == "" {
 		return errors.New("no active profile")
 	}
-	ps := profile.NewPromptStore(ctx.ProfileSlug)
-	content, err := ps.GetSystemPrompt()
+	path, err := config.ProfileDBPath(ctx.ProfileSlug)
+	if err != nil {
+		return err
+	}
+	db, err := store.OpenProfile(path)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = db.Close()
+	}()
+
+	repo := store.NewSystemPromptRepo(db)
+	ps := profile.NewPromptStore(ctx.ProfileID, repo)
+	content, err := ps.GetSystemPrompt(context.Background())
 	if err != nil {
 		return fmt.Errorf("prompt show: %w", err)
 	}
@@ -69,25 +85,50 @@ func promptShowHandler(ctx *ExecContext, _ []string) error {
 }
 
 func promptEditHandler(ctx *ExecContext, _ []string) error {
-	if ctx.ProfileSlug == "" {
+	if ctx.ProfileSlug == "" || ctx.ProfileID == "" {
 		return errors.New("no active profile")
 	}
-
-	ps := profile.NewPromptStore(ctx.ProfileSlug)
-
-	// Ensure the file exists.
-	if _, err := ps.GetSystemPrompt(); err != nil {
-		return fmt.Errorf("prompt edit: %w", err)
+	path, err := config.ProfileDBPath(ctx.ProfileSlug)
+	if err != nil {
+		return err
 	}
-
-	promptPath, err := promptFilePath(ctx.ProfileSlug)
+	db, err := store.OpenProfile(path)
 	if err != nil {
 		return err
 	}
 
-	if ctx.SuspendForEditor == nil {
-		// CLI / non-TUI mode — exec directly.
-		if err := openInEditor(promptPath); err != nil {
+	repo := store.NewSystemPromptRepo(db)
+	ps := profile.NewPromptStore(ctx.ProfileID, repo)
+	content, err := ps.GetSystemPrompt(context.Background())
+	if err != nil {
+		_ = db.Close()
+		return fmt.Errorf("prompt edit: %w", err)
+	}
+
+	tmpFile, err := os.CreateTemp("", "noto-prompt-*.md")
+	if err != nil {
+		_ = db.Close()
+		return fmt.Errorf("prompt edit: %w", err)
+	}
+	promptPath := tmpFile.Name()
+	if _, err := tmpFile.WriteString(content); err != nil {
+		_ = tmpFile.Close()
+		_ = db.Close()
+		_ = os.Remove(promptPath)
+		return fmt.Errorf("prompt edit: %w", err)
+	}
+	_ = tmpFile.Close()
+
+	save := func() error {
+		defer func() {
+			_ = os.Remove(promptPath)
+			_ = db.Close()
+		}()
+		data, err := os.ReadFile(promptPath)
+		if err != nil {
+			return fmt.Errorf("prompt edit: %w", err)
+		}
+		if err := ps.SetSystemPrompt(context.Background(), string(data)); err != nil {
 			return err
 		}
 		if ctx.OnPromptChanged != nil {
@@ -96,8 +137,17 @@ func promptEditHandler(ctx *ExecContext, _ []string) error {
 		return nil
 	}
 
+	if ctx.SuspendForEditor == nil {
+		// CLI / non-TUI mode — exec directly.
+		if err := openInEditor(promptPath); err != nil {
+			_ = save()
+			return err
+		}
+		return save()
+	}
+
 	// TUI mode — signal via sentinel error so the TUI can use tea.ExecProcess.
-	return &ErrOpenEditor{Path: promptPath}
+	return &ErrOpenEditor{Path: promptPath, OnSave: save}
 }
 
 func openInEditor(path string) error {
@@ -114,12 +164,4 @@ func openInEditor(path string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
-}
-
-func promptFilePath(slug string) (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return home + "/.noto/profiles/" + slug + "/prompts/system.md", nil
 }

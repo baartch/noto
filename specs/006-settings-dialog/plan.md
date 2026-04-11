@@ -26,7 +26,7 @@ _GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 - **Code Quality Gate**: Run `golangci-lint run` (via `make lint`) and `go test ./...` before merge.
 - **Testing Standards Gate**: Add integration coverage for Ctrl+, dialog navigation, value editing, and Esc behavior.
 - **UX Consistency Gate**: Match existing footer/help patterns and picker overlay layout; document deviations if needed.
-- **Performance Gate**: Confirm settings dialog opens in under 1 second for typical profiles.
+- **Performance Gate**: Confirm settings dialog opens in under 1 second for typical profiles (manual measurement acceptable).
 
 ## Project Structure
 

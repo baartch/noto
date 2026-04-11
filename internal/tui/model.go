@@ -103,7 +103,10 @@ type backupsLoadedMsg struct {
 type notesSavedMsg struct{ saved, updated int }
 type notesSavingMsg struct{}
 type clearNotesIndicatorMsg struct{}
-type editorFinishedMsg struct{ err error }
+type editorFinishedMsg struct {
+	err    error
+	onSave func() error
+}
 type statsUpdatedMsg struct{ formatted string }
 type profileSwitchedMsg struct {
 	profileName            string
@@ -401,9 +404,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editorFinishedMsg:
 		if msg.err != nil {
 			m.err = msg.err
-		} else {
-			m.messages = append(m.messages, chatMessage{role: "command", content: "System prompt updated.", timestamp: time.Now()})
-			m.syncViewport()
+		} else if msg.onSave != nil {
+			if err := msg.onSave(); err != nil {
+				m.err = err
+			} else {
+				m.messages = append(m.messages, chatMessage{role: "command", content: "System prompt updated.", timestamp: time.Now()})
+				m.syncViewport()
+			}
 		}
 
 	// ---- stats update -------------------------------------------------------
@@ -650,7 +657,7 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	if result.IsSlash {
 		if result.Err != nil {
 			if openErr, ok := commands.AsErrOpenEditor(result.Err); ok {
-				return m, m.openEditor(openErr.Path, cmds)
+				return m, m.openEditor(openErr.Path, openErr.OnSave, cmds)
 			}
 			if commands.AsErrOpenProfilePicker(result.Err) {
 				return m.openPicker(pickerKindProfile, cmds)
@@ -878,7 +885,7 @@ func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea
 }
 
 // openEditor suspends the TUI and opens a file in $EDITOR via tea.ExecProcess.
-func (m Model) openEditor(path string, cmds []tea.Cmd) tea.Cmd {
+func (m Model) openEditor(path string, onSave func() error, cmds []tea.Cmd) tea.Cmd {
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
 		editor = os.Getenv("VISUAL")
@@ -888,7 +895,7 @@ func (m Model) openEditor(path string, cmds []tea.Cmd) tea.Cmd {
 	}
 	c := exec.CommandContext(context.Background(), editor, path)
 	cmds = append(cmds, tea.ExecProcess(c, func(err error) tea.Msg {
-		return editorFinishedMsg{err: err}
+		return editorFinishedMsg{err: err, onSave: onSave}
 	}))
 	return tea.Batch(cmds...)
 }

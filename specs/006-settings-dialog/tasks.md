@@ -9,15 +9,15 @@
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Review existing TUI keybindings/help and picker patterns in internal/tui/model.go
-- [ ] T002 Review settings-related storage for profile metadata and provider/system prompt data in internal/profile/ and internal/store/
+- [X] T001 Review existing TUI keybindings/help and picker patterns in internal/tui/model.go
+- [X] T002 Review settings-related storage for profile metadata and provider/system prompt data in internal/profile/ and internal/store/
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T003 Define settings menu structure and entry mapping in internal/tui/settings_menu.go (new)
-- [ ] T004 Add system prompt persistence in SQLite via internal/store/system_prompt_repo.go (no migration; start with default prompt "You are Noto. A buddy who takes notes." for existing/new profiles when missing)
+- [X] T003 Define settings menu structure and entry mapping in internal/tui/settings_menu.go (new)
+- [X] T004 Add system prompt persistence in SQLite via internal/store/system_prompt_repo.go (no migration; start with default prompt "You are Noto. A buddy who takes notes." for existing/new profiles when missing)
 
 **Checkpoint**: Settings menu structure and storage layer ready.
 
@@ -90,7 +90,7 @@
 ## Phase 6: Polish & Cross-Cutting Concerns
 
 - [ ] T020 [P] Run go test ./... and make lint; capture results in specs/006-settings-dialog/quickstart.md
-- [ ] T021 Validate quickstart steps and update specs/006-settings-dialog/quickstart.md
+- [ ] T021 Validate quickstart steps and update specs/006-settings-dialog/quickstart.md (manual performance measurement acceptable)
 
 ---
 

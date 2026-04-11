@@ -14,7 +14,7 @@ import (
 	chatpkg "noto/internal/chat"
 	"noto/internal/commands"
 	"noto/internal/observe"
-	"noto/internal/profile"
+	profilepkg "noto/internal/profile"
 	"noto/internal/provider"
 	"noto/internal/security"
 	"noto/internal/store"
@@ -33,7 +33,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 	ctx := context.Background()
 
 	// Resolve or auto-create active profile.
-	profSvc := profile.NewService(nil)
+	profSvc := profilepkg.NewService(nil)
 
 	flow := NewStartupFlow(profSvc)
 	activeProfileResult, err := flow.Resolve(
@@ -137,7 +137,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 			APIKey:       decryptedKey,
 		}
 
-		systemPrompt := loadSystemPrompt(activeProfile.Slug)
+		systemPrompt := loadSystemPrompt(ctx, profileDB, activeProfile)
 
 		convRepo := store.NewConversationRepo(profileDB)
 		msgRepo := store.NewMessageRepo(profileDB)
@@ -271,7 +271,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 					Endpoint:     providerCfg.Endpoint,
 					APIKey:       decryptedKey,
 				}
-				systemPrompt := loadSystemPrompt(p.Slug)
+				systemPrompt := loadSystemPrompt(ctx, profileDB, p)
 				convRepo := store.NewConversationRepo(profileDB)
 				msgRepo := store.NewMessageRepo(profileDB)
 				noteRepo := store.NewMemoryNoteRepo(profileDB)
@@ -378,15 +378,19 @@ func runChat(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-// loadSystemPrompt reads the profile system prompt file, falling back to a default.
-func loadSystemPrompt(slug string) string {
-	home, _ := os.UserHomeDir()
-	path := home + "/.noto/profiles/" + slug + "/prompts/system.md"
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "You are a helpful assistant."
+// loadSystemPrompt reads the profile system prompt from SQLite, falling back to a default.
+func loadSystemPrompt(ctx context.Context, db *store.DB, profile *store.Profile) string {
+	if profile == nil || db == nil {
+		return "You are Noto. A buddy who takes notes."
 	}
-	return strings.TrimSpace(string(data))
+	repo := store.NewSystemPromptRepo(db)
+	ps := profilepkg.NewPromptStore(profile.ID, repo)
+	prompt, err := ps.GetSystemPrompt(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "chat: load system prompt: %v\n", err)
+		return "You are Noto. A buddy who takes notes."
+	}
+	return strings.TrimSpace(prompt)
 }
 
 // loadProviderConfig reads the active provider config and decrypts the API key.
