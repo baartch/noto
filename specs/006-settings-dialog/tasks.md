@@ -52,16 +52,16 @@
 
 ### Tests for User Story 2 (REQUIRED) ⚠️
 
-- [ ] T010 [P] [US2] Add integration test for textarea editing save/cancel in tests/integration/tui_flow_regression_test.go
-- [ ] T011 [P] [US2] Add integration test for numeric validation error in tests/integration/tui_flow_regression_test.go
+- [X] T010 [P] [US2] Add integration test for textarea editing save/cancel in tests/integration/tui_flow_regression_test.go
+- [X] T011 [P] [US2] Add integration test for numeric validation error in tests/integration/tui_flow_regression_test.go
 
 ### Implementation for User Story 2
 
-- [ ] T012 [US2] Add textarea editor flow for settings values in internal/tui/model.go
-- [ ] T013 [US2] Implement numeric validation and error state in internal/tui/model.go
-- [ ] T013a [US2] Define numeric validation error messaging/state in internal/tui/model.go
-- [ ] T014 [US2] Persist token budget updates in internal/profile/settings.go
-- [ ] T015 [US2] Store system prompt in SQLite via internal/store/system_prompt_repo.go (new) and wire save/load in internal/profile/
+- [X] T012 [US2] Add textarea editor flow for settings values in internal/tui/model.go
+- [X] T013 [US2] Implement numeric validation and error state in internal/tui/model.go
+- [X] T013a [US2] Define numeric validation error messaging/state in internal/tui/model.go
+- [X] T014 [US2] Persist token budget updates in internal/profile/settings.go
+- [X] T015 [US2] Store system prompt in SQLite via internal/store/system_prompt_repo.go (new) and wire save/load in internal/profile/
 
 **Checkpoint**: Editing values works with validation and persistence.
 

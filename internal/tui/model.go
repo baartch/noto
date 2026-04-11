@@ -4,13 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -18,6 +21,7 @@ import (
 
 	"noto/internal/chat"
 	"noto/internal/commands"
+	"noto/internal/profile"
 	"noto/internal/provider"
 	"noto/internal/store"
 	"noto/internal/suggest"
@@ -61,7 +65,7 @@ func NotesSaving() tea.Msg { return notesSavingMsg{} }
 func StatsUpdated(formatted string) tea.Msg { return statsUpdatedMsg{formatted: formatted} }
 
 // ProfileSwitched updates the TUI state after switching profiles.
-func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, tokenStatus string, extractorFallback bool, provider ProviderFunc, listModels ListModelsFunc, modelSelected ModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, history []string) profileSwitchedMsg {
+func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, tokenStatus string, extractorFallback bool, provider ProviderFunc, listModels ListModelsFunc, modelSelected ModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, settings *SettingsMenu, history []string) profileSwitchedMsg {
 	return profileSwitchedMsg{
 		profileName:            profileName,
 		activeModel:            activeModel,
@@ -73,6 +77,7 @@ func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, toke
 		listModels:             listModels,
 		modelSelected:          modelSelected,
 		extractorModelSelected: extractorModelSelected,
+		settings:               settings,
 		history:                history,
 	}
 }
@@ -119,6 +124,7 @@ type profileSwitchedMsg struct {
 	listModels             ListModelsFunc
 	modelSelected          ModelSelectedFunc
 	extractorModelSelected ExtractorModelSelectedFunc
+	settings               *SettingsMenu
 	history                []string
 }
 type profileSwitchFailedMsg struct{ err error }
@@ -133,6 +139,11 @@ const (
 	pickerKindProfile        pickerKind = iota
 	pickerKindBackup         pickerKind = iota
 	pickerKindExtractorModel pickerKind = iota
+)
+
+const (
+	settingsHeaderText = "Settings"
+	settingsHelpText   = "  Settings (↑↓ navigate · Enter edit/select · Esc close)"
 )
 
 // ---- TUI model --------------------------------------------------------------
@@ -171,6 +182,17 @@ type Model struct {
 	// settings dialog
 	settingsOpen bool
 	settingsMenu *SettingsMenu
+
+	// settings editor
+	settingsList      list.Model
+	settingsEditing   bool
+	settingsEditor    textarea.Model
+	settingsEditEntry *SettingsEntry
+	settingsErr       string
+
+	// profile settings
+	memoryTokenBudget int
+	systemPrompt      string
 
 	// notes badge
 	notesIndicator string
@@ -269,6 +291,9 @@ func New(
 	styles.Blurred.Prompt = promptStyle
 	styles.Cursor = cursorStyleDef
 	ti.SetStyles(styles)
+
+	settingsList := newSettingsList(30)
+	settingsEditor := newSettingsEditor()
 	// Enter sends; Alt+Enter inserts newline.
 	ti.KeyMap.InsertNewline = key.NewBinding(
 		key.WithKeys("alt+enter"),
@@ -321,6 +346,10 @@ func New(
 		extractorModel:         extractorModel,
 		extractorModelSelected: extractorModelSelected,
 		extractorFallback:      extractorFallback,
+		settingsMenu:           DefaultSettingsMenu(),
+		settingsList:           settingsList,
+		settingsEditor:         settingsEditor,
+		settingsErr:            "",
 	}
 }
 
@@ -434,6 +463,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.listModels = msg.listModels
 		m.modelSelected = msg.modelSelected
 		m.extractorModelSelected = msg.extractorModelSelected
+		m.settingsMenu = msg.settings
+		m.memoryTokenBudget = 0
+		m.systemPrompt = ""
+		m.settingsEditEntry = nil
+		m.settingsEditing = false
+		m.settingsErr = ""
 		m.history = msg.history
 		m.historyIndex = len(msg.history)
 		m.historyDraft = ""
@@ -479,6 +514,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ---- keyboard -----------------------------------------------------------
 	case tea.KeyPressMsg:
+		if m.settingsOpen && m.settingsEditing {
+			switch msg.Key().Code {
+			case tea.KeyEsc:
+				m.settingsEditing = false
+				m.settingsEditEntry = nil
+				m.settingsErr = ""
+				return m, nil
+			case tea.KeyEnter:
+				return m.handleSettingsSave()
+			}
+			var cmd tea.Cmd
+			m.settingsEditor, cmd = m.settingsEditor.Update(msg)
+			return m, cmd
+		}
 		if m.picker != nil {
 			return m.updatePicker(msg, cmds)
 		}
@@ -503,7 +552,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.help.ShowAll = !m.help.ShowAll
 			return m, nil
 
+		case key.Matches(msg, m.keys.openSettings):
+			m.clearSuggestions()
+			m.input.SetValue("")
+			m.settingsOpen = !m.settingsOpen
+			if m.settingsOpen {
+				m.settingsEditing = false
+				m.settingsErr = ""
+				if m.settingsMenu == nil {
+					m.settingsMenu = DefaultSettingsMenu()
+				}
+				m.refreshSettingsValues()
+			}
+			return m, nil
+
 		case msg.Key().Code == tea.KeyEsc:
+			if m.settingsOpen {
+				m.settingsOpen = false
+				m.settingsEditing = false
+				m.settingsErr = ""
+				return m, nil
+			}
 			if len(m.suggestions) > 0 {
 				m.clearSuggestions()
 				m.input.SetValue("")
@@ -512,6 +581,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case msg.Key().Code == tea.KeyUp:
+			if m.settingsOpen && !m.settingsEditing {
+				var cmd tea.Cmd
+				m.settingsList, cmd = m.settingsList.Update(msg)
+				return m, cmd
+			}
 			if len(m.suggestions) > 0 {
 				m.suggActive = true
 				m.suggCursor = len(m.suggestions) - 1
@@ -527,6 +601,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, vpCmd
 
 		case msg.Key().Code == tea.KeyDown:
+			if m.settingsOpen && !m.settingsEditing {
+				var cmd tea.Cmd
+				m.settingsList, cmd = m.settingsList.Update(msg)
+				return m, cmd
+			}
 			if len(m.suggestions) > 0 {
 				m.suggActive = true
 				m.suggCursor = 0
@@ -542,6 +621,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, vpCmd
 
 		case msg.Key().Code == tea.KeyPgUp, msg.Key().Code == tea.KeyPgDown:
+			if m.settingsOpen && !m.settingsEditing {
+				var cmd tea.Cmd
+				m.settingsList, cmd = m.settingsList.Update(msg)
+				return m, cmd
+			}
 			var vpCmd tea.Cmd
 			m.viewport, vpCmd = m.viewport.Update(msg)
 			return m, vpCmd
@@ -558,6 +642,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case msg.Key().Code == tea.KeyEnter:
+			if m.settingsOpen {
+				return m.handleSettingsEnter()
+			}
 			// Send on Enter (newline handled by textarea only via Alt+Enter)
 			val := strings.TrimSpace(m.input.Value())
 			if val == "" {
@@ -636,14 +723,6 @@ func (m Model) updateSuggNav(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, te
 		m.clearSuggestions()
 		m.input.SetValue("")
 		m.help.ShowAll = !m.help.ShowAll
-		return m, nil
-	case key.Matches(msg, m.keys.openSettings):
-		m.clearSuggestions()
-		m.input.SetValue("")
-		m.settingsOpen = !m.settingsOpen
-		if m.settingsOpen {
-			m.settingsMenu = DefaultSettingsMenu()
-		}
 		return m, nil
 
 	default:
@@ -837,6 +916,7 @@ func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea
 	case key.Matches(msg, m.keys.toggleHelp):
 		m.help.ShowAll = !m.help.ShowAll
 		return m, nil
+
 	case msg.Key().Code == tea.KeyEnter:
 		chosen := m.picker.selectedValue()
 		kind := m.pickerKind
@@ -1150,31 +1230,265 @@ func (m *Model) renderSettingsDialog(height int) string {
 	if m.settingsMenu == nil {
 		return ""
 	}
+	if m.settingsEditing {
+		return m.renderSettingsEditor(height)
+	}
+	return m.renderSettingsList(height)
+}
+
+func (m *Model) renderSettingsList(height int) string {
 	entries := make([]SettingsEntry, len(m.settingsMenu.Entries))
 	copy(entries, m.settingsMenu.Entries)
 	SortSettingsEntries(entries)
 
-	maxRows := max(height-1, 0)
-	var sb strings.Builder
-	if m.settingsMenu.Title != "" {
-		sb.WriteString(lipgloss.NewStyle().Bold(true).Render(m.settingsMenu.Title) + "\n")
-	} else {
-		sb.WriteString(lipgloss.NewStyle().Bold(true).Render("Settings") + "\n")
+	items := make([]list.Item, len(entries))
+	for i, entry := range entries {
+		items[i] = settingsItem{entry: entry}
 	}
-	for i := 0; i < min(maxRows, len(entries)); i++ {
-		entry := entries[i]
-		label := entry.Label
-		if entry.Kind == SettingsEntrySubmenu {
-			label = label + " ›"
+	m.settingsList.SetItems(items)
+	m.settingsList.SetHeight(max(height-2, 4))
+	m.settingsList.SetWidth(max(m.width-6, 20))
+	m.settingsList.Title = settingsHelpText
+
+	return pickerBorderStyle.Render(m.settingsList.View())
+}
+
+type settingsItem struct {
+	entry SettingsEntry
+}
+
+func (s settingsItem) Title() string { return s.entry.Label }
+func (s settingsItem) Description() string {
+	if s.entry.Kind == SettingsEntrySubmenu {
+		return "submenu"
+	}
+	return s.entry.Value
+}
+func (s settingsItem) FilterValue() string { return s.entry.Label }
+
+type settingsDelegate struct{}
+
+func (d settingsDelegate) Height() int  { return 1 }
+func (d settingsDelegate) Spacing() int { return 0 }
+func (d settingsDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd {
+	return nil
+}
+
+func (d settingsDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	it, ok := item.(settingsItem)
+	if !ok {
+		return
+	}
+	indicator := " "
+	style := pickerNormalStyle
+	if index == m.Index() {
+		indicator = "›"
+		style = pickerCursorStyle
+	}
+
+	label := it.entry.Label
+	if it.entry.Kind == SettingsEntrySubmenu {
+		label = label + " ›"
+	}
+	if it.entry.Kind == SettingsEntryValue && it.entry.Value != "" {
+		label = label + ": " + it.entry.Value
+	}
+	line := "  " + indicator + " " + label
+	_, _ = fmt.Fprint(w, style.Render(fitLine(line, m.Width())))
+}
+
+func newSettingsList(width int) list.Model {
+	delegate := settingsDelegate{}
+	l := list.New([]list.Item{}, delegate, width, 0)
+	l.SetShowHelp(false)
+	l.SetShowStatusBar(false)
+	l.SetFilteringEnabled(false)
+	return l
+}
+
+func newSettingsEditor() textarea.Model {
+	editor := textarea.New()
+	editor.ShowLineNumbers = false
+	editor.Prompt = "  "
+	editor.SetHeight(5)
+	editor.CharLimit = 8000
+	styles := editor.Styles()
+	styles.Cursor = cursorStyleDef
+	editor.SetStyles(styles)
+	editor.KeyMap.InsertNewline = key.NewBinding(
+		key.WithKeys("alt+enter"),
+		key.WithHelp("alt+enter", "insert newline"),
+	)
+	return editor
+}
+
+func parsePositiveInt(val string) (int, error) {
+	if val == "" {
+		return 0, errors.New("value must be a positive number")
+	}
+	parsed, err := strconv.Atoi(val)
+	if err != nil || parsed <= 0 {
+		return 0, errors.New("value must be a positive number")
+	}
+	return parsed, nil
+}
+
+func (m *Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
+	if m.settingsMenu == nil {
+		return m, nil
+	}
+	entry := m.selectedSettingsEntry()
+	if entry == nil {
+		return m, nil
+	}
+	if entry.Kind == SettingsEntrySubmenu {
+		return m, nil
+	}
+	if entry.Kind == SettingsEntryValue {
+		m.settingsEditing = true
+		m.settingsEditEntry = entry
+		m.settingsErr = ""
+		m.settingsEditor = newSettingsEditor()
+		m.settingsEditor.SetValue(entry.Value)
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m *Model) handleSettingsSave() (tea.Model, tea.Cmd) {
+	if m.settingsEditEntry == nil {
+		m.settingsEditing = false
+		return m, nil
+	}
+	val := strings.TrimSpace(m.settingsEditor.Value())
+	entry := *m.settingsEditEntry
+	if entry.ValueType == SettingsValueNumber {
+		parsed, err := parsePositiveInt(val)
+		if err != nil {
+			m.settingsErr = err.Error()
+			return m, nil
 		}
-		if entry.Kind == SettingsEntryValue {
-			if entry.Value != "" {
-				label = label + ": " + entry.Value
+		m.memoryTokenBudget = parsed
+		entry.Value = fmt.Sprintf("%d", parsed)
+		if err := profile.WriteSettings(m.execCtx.ProfileSlug, &profile.Settings{MemoryTokenBudget: parsed}); err != nil {
+			m.settingsErr = err.Error()
+			return m, nil
+		}
+	}
+	if entry.ValueType == SettingsValueText {
+		m.systemPrompt = val
+		entry.Value = val
+		if err := m.saveSystemPrompt(val); err != nil {
+			m.settingsErr = err.Error()
+			return m, nil
+		}
+	}
+	m.updateSettingsEntry(entry)
+	m.settingsEditing = false
+	m.settingsEditEntry = nil
+	m.settingsErr = ""
+	return m, nil
+}
+
+func (m *Model) selectedSettingsEntry() *SettingsEntry {
+	item := m.settingsList.SelectedItem()
+	if item == nil {
+		return nil
+	}
+	settingsItem, ok := item.(settingsItem)
+	if !ok {
+		return nil
+	}
+	entry := settingsItem.entry
+	return &entry
+}
+
+func (m *Model) updateSettingsEntry(updated SettingsEntry) {
+	if m.settingsMenu == nil {
+		return
+	}
+	entries := make([]SettingsEntry, len(m.settingsMenu.Entries))
+	copy(entries, m.settingsMenu.Entries)
+	for i, entry := range entries {
+		if entry.ID == updated.ID {
+			entries[i] = updated
+			break
+		}
+	}
+	m.settingsMenu.Entries = entries
+}
+
+func (m *Model) refreshSettingsValues() {
+	if m.settingsMenu == nil || m.execCtx == nil {
+		return
+	}
+	if m.execCtx.ProfileSlug != "" {
+		if settings, err := profile.ReadSettings(m.execCtx.ProfileSlug); err == nil {
+			m.memoryTokenBudget = settings.MemoryTokenBudget
+		}
+	}
+	if m.execCtx.ProfileID != "" && m.execCtx.DB != nil {
+		repo := store.NewSystemPromptRepo(m.execCtx.DB)
+		promptStore := profile.NewPromptStore(m.execCtx.ProfileID, repo)
+		if prompt, err := promptStore.GetSystemPrompt(context.Background()); err == nil {
+			m.systemPrompt = prompt
+		}
+	}
+	m.applySettingsValues()
+}
+
+func (m *Model) applySettingsValues() {
+	if m.settingsMenu == nil {
+		return
+	}
+	entries := make([]SettingsEntry, len(m.settingsMenu.Entries))
+	copy(entries, m.settingsMenu.Entries)
+	for i := range entries {
+		switch entries[i].ID {
+		case settingsIDMemoryTokenLimit:
+			if m.memoryTokenBudget > 0 {
+				entries[i].Value = fmt.Sprintf("%d", m.memoryTokenBudget)
 			}
+		case settingsIDSystemPrompt:
+			entries[i].Value = m.systemPrompt
 		}
-		sb.WriteString("  " + label + "\n")
 	}
-	return sb.String()
+	m.settingsMenu.Entries = entries
+}
+
+func (m *Model) saveSystemPrompt(prompt string) error {
+	if m.execCtx == nil || m.execCtx.DB == nil {
+		return errors.New("settings: no database available")
+	}
+	repo := store.NewSystemPromptRepo(m.execCtx.DB)
+	promptStore := profile.NewPromptStore(m.execCtx.ProfileID, repo)
+	if err := promptStore.SetSystemPrompt(context.Background(), prompt); err != nil {
+		return err
+	}
+	if m.execCtx.OnPromptChanged != nil {
+		return m.execCtx.OnPromptChanged(m.execCtx.ProfileSlug)
+	}
+	return nil
+}
+
+func (m *Model) renderSettingsEditor(height int) string {
+	if m.settingsEditEntry == nil {
+		return ""
+	}
+	height = max(height-4, 6)
+	m.settingsEditor.SetHeight(height)
+	m.settingsEditor.SetWidth(max(m.width-8, 40))
+	m.settingsEditor.Focus()
+	m.settingsEditor.Prompt = "  "
+	m.settingsEditor.SetValue(m.settingsEditor.Value())
+
+	header := lipgloss.NewStyle().Bold(true).Render(m.settingsEditEntry.Label)
+	body := m.settingsEditor.View()
+	var errBlock string
+	if m.settingsErr != "" {
+		errBlock = "\n" + errStyle.Render("  "+m.settingsErr)
+	}
+	return pickerBorderStyle.Render(header + "\n" + body + errBlock)
 }
 
 func suggestionWindow(total, cursor, maxRows int) (start, end int) {

@@ -40,6 +40,14 @@ type SettingsEntry struct {
 	Source    string
 }
 
+// SettingsSource indicates the origin of a setting value.
+type SettingsSource string
+
+const (
+	SettingsSourceProfile SettingsSource = "profile"
+	SettingsSourceDB      SettingsSource = "db"
+)
+
 // SettingsMenu represents a settings menu level.
 type SettingsMenu struct {
 	ID      string
@@ -71,12 +79,14 @@ func DefaultSettingsMenu() *SettingsMenu {
 				Label:     "System Prompt",
 				Kind:      SettingsEntryValue,
 				ValueType: SettingsValueText,
+				Source:    string(SettingsSourceDB),
 			},
 			{
 				ID:        settingsIDMemoryTokenLimit,
 				Label:     "Memory Token Budget",
 				Kind:      SettingsEntryValue,
 				ValueType: SettingsValueNumber,
+				Source:    string(SettingsSourceProfile),
 			},
 			{
 				ID:        settingsIDProviders,

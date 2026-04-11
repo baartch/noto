@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"noto/internal/store"
 )
 
 // Scope defines whether a command operates on a specific profile or globally.
@@ -51,6 +53,9 @@ type ExecContext struct {
 
 	// Output is the writer where command output should be sent.
 	Output interface{ Write([]byte) (int, error) }
+
+	// DB is the active profile database, if available.
+	DB *store.DB
 
 	// Confirm is a function that prompts the user for explicit confirmation.
 	// It returns true if the user confirmed, false otherwise.

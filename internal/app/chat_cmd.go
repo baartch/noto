@@ -93,6 +93,8 @@ func runChat(_ *cobra.Command, _ []string) error {
 		ProfileID:   activeProfile.ID,
 		ProfileSlug: activeProfile.Slug,
 		Output:      os.Stdout,
+		DB:          profileDB,
+		DB:          profileDB,
 		Confirm: func(prompt string) bool {
 			fmt.Fprintf(os.Stderr, "%s [yes/no]: ", prompt)
 			var ans string
@@ -238,6 +240,8 @@ func runChat(_ *cobra.Command, _ []string) error {
 			activeProfile = p
 			execCtx.ProfileID = p.ID
 			execCtx.ProfileSlug = p.Slug
+			execCtx.DB = profileDB
+			execCtx.DB = profileDB
 
 			if sess != nil {
 				sess.Close(context.Background())
@@ -351,7 +355,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 				}
 			}
 
-			return tui.ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, "tokens: n/a", extractorFallback, providerFn, listModelsFn, modelSelectedFn, extractorModelSelectedFn, inputHistory)
+			return tui.ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, "tokens: n/a", extractorFallback, providerFn, listModelsFn, modelSelectedFn, extractorModelSelectedFn, tui.DefaultSettingsMenu(), inputHistory)
 		}
 	}
 	listBackupsFn := func(ctx context.Context) ([]string, error) {
