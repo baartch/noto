@@ -46,6 +46,11 @@ func NewMemoryNoteRepo(db *DB) *MemoryNoteRepo {
 	return &MemoryNoteRepo{db: db}
 }
 
+// DB exposes the underlying database handle.
+func (r *MemoryNoteRepo) DB() *DB {
+	return r.db
+}
+
 // Create inserts a new memory note.
 func (r *MemoryNoteRepo) Create(ctx context.Context, n *MemoryNote) error {
 	var convID any

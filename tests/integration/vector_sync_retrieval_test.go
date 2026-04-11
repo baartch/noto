@@ -60,6 +60,26 @@ func TestVectorRetrieval_ContentHash_IsDeterministic(t *testing.T) {
 	}
 }
 
+func TestVectorSync_ManifestEntriesPersisted(t *testing.T) {
+	index := &stubIndexSync{}
+	manifest := &stubManifestRepo{}
+	profileID := "test-profile"
+	syncer := vector.NewSyncer(index, profileID, &stubEmbedder{}, "test-embed").WithManifest(manifest)
+
+	ctx := context.Background()
+	notes := []vector.MemoryNoteRecord{
+		{ID: "n1", Content: "First note content"},
+		{ID: "n2", Content: "Second note content"},
+	}
+
+	if err := syncer.SyncNotes(ctx, notes); err != nil {
+		t.Fatalf("SyncNotes: %v", err)
+	}
+	if len(manifest.entries) != 2 {
+		t.Fatalf("expected 2 manifest entries, got %d", len(manifest.entries))
+	}
+}
+
 // ---- stubs ------------------------------------------------------------------
 
 type stubNoteLister struct {
@@ -85,4 +105,13 @@ type stubEmbedder struct{}
 
 func (s *stubEmbedder) Embed(_ context.Context, _ provider.EmbeddingRequest) (*provider.EmbeddingResponse, error) {
 	return &provider.EmbeddingResponse{Embedding: []float32{0.1, 0.2}, Model: "stub"}, nil
+}
+
+type stubManifestRepo struct {
+	entries []*vector.ManifestEntry
+}
+
+func (s *stubManifestRepo) UpsertEntry(_ context.Context, e *vector.ManifestEntry) error {
+	s.entries = append(s.entries, e)
+	return nil
 }

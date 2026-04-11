@@ -27,6 +27,12 @@ vendor/
 # macOS
 .DS_Store
 
+# Windows
+Thumbs.db
+
+# Temp files
+*.tmp
+
 # Test artefacts
 /coverage/
 *.coverprofile

@@ -6,6 +6,7 @@ import (
 
 	"noto/internal/profile"
 	"noto/internal/store"
+	"noto/internal/vector"
 )
 
 // TestProfileIsolation_NotesBelongToCorrectProfile verifies that notes from one profile
@@ -133,10 +134,10 @@ func TestProfileIsolation_VectorManifestEntries(t *testing.T) {
 	p1, _ := svc.Create(ctx, "Vector Profile 1")
 	p2, _ := svc.Create(ctx, "Vector Profile 2")
 
-	entry := &store.VectorEntry{
+	entry := &vector.ManifestEntry{
 		ID:             "ve-1",
 		ProfileID:      p1.ID,
-		SourceType:     "memory_note",
+		SourceType:     vector.SourceMemoryNote,
 		SourceID:       "note-1",
 		ChunkHash:      "hash",
 		EmbeddingModel: "model",

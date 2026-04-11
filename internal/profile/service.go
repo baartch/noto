@@ -69,12 +69,13 @@ func (s *Service) Create(ctx context.Context, name string) (*store.Profile, erro
 	}
 
 	if err := WriteMetadata(&Metadata{
-		ID:               p.ID,
-		Name:             p.Name,
-		Slug:             p.Slug,
-		CreatedAt:        p.CreatedAt,
-		UpdatedAt:        p.UpdatedAt,
-		SystemPromptPath: DefaultSystemPromptRelPath(),
+		ID:                p.ID,
+		Name:              p.Name,
+		Slug:              p.Slug,
+		CreatedAt:         p.CreatedAt,
+		UpdatedAt:         p.UpdatedAt,
+		SystemPromptPath:  DefaultSystemPromptRelPath(),
+		MemoryTokenBudget: config.DefaultMemoryTokenBudget,
 	}); err != nil {
 		return nil, err
 	}
@@ -160,12 +161,13 @@ func (s *Service) Rename(ctx context.Context, oldName, newName string) (*store.P
 	}
 
 	if err := WriteMetadata(&Metadata{
-		ID:               p.ID,
-		Name:             p.Name,
-		Slug:             p.Slug,
-		CreatedAt:        p.CreatedAt,
-		UpdatedAt:        p.UpdatedAt,
-		SystemPromptPath: DefaultSystemPromptRelPath(),
+		ID:                p.ID,
+		Name:              p.Name,
+		Slug:              p.Slug,
+		CreatedAt:         p.CreatedAt,
+		UpdatedAt:         p.UpdatedAt,
+		SystemPromptPath:  DefaultSystemPromptRelPath(),
+		MemoryTokenBudget: config.DefaultMemoryTokenBudget,
 	}); err != nil {
 		return nil, err
 	}

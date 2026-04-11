@@ -12,6 +12,7 @@ import (
 	"noto/internal/config"
 	"noto/internal/memory"
 	"noto/internal/observe"
+	"noto/internal/profile"
 	"noto/internal/provider"
 	"noto/internal/store"
 	"noto/internal/vector"
@@ -41,20 +42,22 @@ type Session struct {
 	systemPrompt   string
 	cacheHit       bool
 
-	convRepo         *store.ConversationRepo
-	msgRepo          *store.MessageRepo
-	noteRepo         *store.MemoryNoteRepo
-	cacheRepo        *store.ContextCacheRepo
-	summaryRepo      *store.SessionSummaryRepo
-	adapter          provider.Adapter
-	extractor        *memory.Extractor
-	extractorAdapter provider.Adapter
-	logger           observe.Logger
-	baseSystemPrompt string
-	sessionSummary   string
-	db               *store.DB
-	vectorIndexPath  string
-	vectorIndex      vector.Index
+	convRepo          *store.ConversationRepo
+	msgRepo           *store.MessageRepo
+	noteRepo          *store.MemoryNoteRepo
+	cacheRepo         *store.ContextCacheRepo
+	summaryRepo       *store.SessionSummaryRepo
+	adapter           provider.Adapter
+	extractor         *memory.Extractor
+	extractorAdapter  provider.Adapter
+	logger            observe.Logger
+	baseSystemPrompt  string
+	sessionSummary    string
+	db                *store.DB
+	vectorIndexPath   string
+	vectorIndex       vector.Index
+	memoryTokenBudget int
+	extractorFallback bool
 
 	backupStop   chan struct{}
 	pendingNotes int
@@ -92,6 +95,10 @@ func NewSession(
 	// Build system prompt with injected memory notes + session summary.
 	cacheRepo := store.NewContextCacheRepo(db)
 	vecPath, _ := config.ProfileVectorPath(profileSlug)
+	settings, err := profile.ReadSettings(profileSlug)
+	if err != nil {
+		return nil, fmt.Errorf("session: read settings: %w", err)
+	}
 	ret := memory.NewRetrieval(
 		noteRepo,
 		summaryRepo,
@@ -100,6 +107,8 @@ func NewSession(
 		memory.WithWarnFunc(func(err error) {
 			logger.Infof("vector index issue: %v", err)
 		}),
+		memory.WithTokenBudget(settings.MemoryTokenBudget),
+		memory.WithVectorRetrieval(vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)), profileID, adapter, ""),
 	)
 	rc, err := ret.Assemble(ctx, profileID, baseSystemPrompt)
 	if err != nil {
@@ -125,30 +134,32 @@ func NewSession(
 	}
 
 	s := &Session{
-		profileID:        profileID,
-		profileSlug:      profileSlug,
-		conversationID:   convID,
-		systemPrompt:     rc.AssembledPrompt,
-		cacheHit:         rc.CacheHit,
-		convRepo:         convRepo,
-		msgRepo:          msgRepo,
-		noteRepo:         noteRepo,
-		summaryRepo:      summaryRepo,
-		adapter:          adapter,
-		extractorAdapter: extractorAdapter,
-		cacheRepo:        store.NewContextCacheRepo(db),
-		extractor:        memory.NewExtractor(noteRepo, adapter, store.NewContextCacheRepo(db)),
-		logger:           logger,
-		history:          recentHistory,
-		onNotes:          onNotes,
-		onNotesSaving:    onNotesSaving,
-		backupStop:       make(chan struct{}),
-		pendingDone:      make(chan struct{}),
-		baseSystemPrompt: baseSystemPrompt,
-		sessionSummary:   rc.SessionSummary,
-		db:               db,
-		vectorIndexPath:  vecPath,
-		vectorIndex:      vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)),
+		profileID:         profileID,
+		profileSlug:       profileSlug,
+		conversationID:    convID,
+		systemPrompt:      rc.AssembledPrompt,
+		cacheHit:          rc.CacheHit,
+		convRepo:          convRepo,
+		msgRepo:           msgRepo,
+		noteRepo:          noteRepo,
+		summaryRepo:       summaryRepo,
+		adapter:           adapter,
+		extractorAdapter:  extractorAdapter,
+		cacheRepo:         store.NewContextCacheRepo(db),
+		extractor:         memory.NewExtractor(noteRepo, adapter, store.NewContextCacheRepo(db)),
+		logger:            logger,
+		history:           recentHistory,
+		onNotes:           onNotes,
+		onNotesSaving:     onNotesSaving,
+		backupStop:        make(chan struct{}),
+		pendingDone:       make(chan struct{}),
+		baseSystemPrompt:  baseSystemPrompt,
+		sessionSummary:    rc.SessionSummary,
+		db:                db,
+		vectorIndexPath:   vecPath,
+		vectorIndex:       vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)),
+		memoryTokenBudget: settings.MemoryTokenBudget,
+		extractorFallback: extractorAdapter == nil && adapter != nil,
 	}
 	if profileSlug != "" {
 		s.startBackupTicker()
@@ -279,17 +290,13 @@ func (s *Session) relevantNotes(ctx context.Context, userMsg string) ([]*store.M
 	if err != nil {
 		return nil, err
 	}
-	byID := make(map[string]*store.MemoryNote, len(noteList))
-	for _, note := range noteList {
-		byID[note.ID] = note
-	}
-	out := make([]*store.MemoryNote, 0, len(results))
+
+	rankedIDs := make([]string, 0, len(results))
 	for _, res := range results {
-		if note, ok := byID[res.Note.ID]; ok {
-			out = append(out, note)
-		}
+		rankedIDs = append(rankedIDs, res.Note.ID)
 	}
-	return out, nil
+	selected := memory.SelectNotesForContext(noteList, rankedIDs, s.memoryTokenBudget)
+	return selected, nil
 }
 
 type noteLister struct {
@@ -309,6 +316,84 @@ func (n noteLister) ListByProfile(ctx context.Context, profileID string) ([]vect
 }
 
 // extractAsync runs note extraction and calls onNotes when done.
+func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote) error {
+	if s.vectorIndex == nil || s.adapter == nil {
+		return nil
+	}
+	fileIndex, ok := s.vectorIndex.(*vector.FileIndex)
+	if ok {
+		fileIndex.WithProfile(s.profileID)
+		if err := fileIndex.Load(); err != nil {
+			if errors.Is(err, vector.ErrIndexNotFound) || errors.Is(err, vector.ErrIndexCorrupted) {
+				return nil
+			}
+			return err
+		}
+	}
+
+	manifestRepo := store.NewVectorManifestRepo(s.db)
+	if err := s.ensureVectorManifest(ctx, manifestRepo); err != nil {
+		return err
+	}
+	syncer := vector.NewSyncer(s.vectorIndex, s.profileID, s.adapter, "").WithManifest(manifestRepo)
+	records := make([]vector.MemoryNoteRecord, 0, len(notes))
+	for _, note := range notes {
+		records = append(records, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
+	}
+	if err := syncer.SyncNotes(ctx, records); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Session) ensureVectorManifest(ctx context.Context, repo *store.VectorManifestRepo) error {
+	_, err := repo.GetManifest(ctx, s.profileID)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, store.ErrManifestNotFound) {
+		return err
+	}
+	return repo.UpsertManifest(ctx, &store.VectorManifest{
+		ID:                 fmt.Sprintf("vm-%x", time.Now().UnixNano()),
+		ProfileID:          s.profileID,
+		IndexPath:          s.vectorIndexPath,
+		IndexFormatVersion: "1",
+		EmbeddingModel:     "",
+		EmbeddingDim:       0,
+		SourceStateVersion: "",
+		Status:             store.VectorManifestReady,
+	})
+}
+
+func (s *Session) ensureVectorCompaction(ctx context.Context) error {
+	if s.vectorIndex == nil || s.adapter == nil {
+		return nil
+	}
+	manifestRepo := store.NewVectorManifestRepo(s.db)
+	manifest, err := manifestRepo.GetManifest(ctx, s.profileID)
+	if err != nil {
+		return nil
+	}
+	if manifest.Status != store.VectorManifestStale && manifest.Status != store.VectorManifestFailed {
+		return nil
+	}
+
+	notes, err := s.noteRepo.ListByProfile(ctx, s.profileID)
+	if err != nil {
+		return err
+	}
+	records := make([]vector.MemoryNoteRecord, 0, len(notes))
+	for _, note := range notes {
+		records = append(records, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
+	}
+
+	rebuilder := vector.NewRebuilder(manifestRepo, s.vectorIndex, s.profileID).
+		WithManifest(manifestRepo).
+		WithEmbedder(s.adapter, "")
+	return rebuilder.Rebuild(ctx, records)
+}
+
 func (s *Session) extractAsync(userMsg, assistantMsg string) {
 	s.markNotesPending()
 	if s.onNotesSaving != nil {
@@ -320,6 +405,8 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 	extractor := s.extractor
 	if s.extractorAdapter != nil {
 		extractor = memory.NewExtractor(s.noteRepo, s.extractorAdapter, s.cacheRepo)
+	} else if s.adapter != nil {
+		extractor = memory.NewExtractor(s.noteRepo, s.adapter, s.cacheRepo)
 	}
 	result, err := extractor.ExtractTurn(ctx, s.profileID, s.conversationID, userMsg, assistantMsg)
 	if err != nil {
@@ -327,6 +414,17 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 		s.markNotesDone(0)
 		return
 	}
+
+	if len(result.Notes) > 0 && s.adapter != nil {
+		if err := s.syncVectorIndex(ctx, result.Notes); err != nil {
+			s.logger.Errorf("vector sync failed: %v", err)
+		}
+	}
+
+	if err := s.ensureVectorCompaction(ctx); err != nil {
+		s.logger.Errorf("vector compaction failed: %v", err)
+	}
+
 	if s.onNotes != nil {
 		s.onNotes(len(result.Notes), result.Updated)
 	}
@@ -343,11 +441,13 @@ func (s *Session) SetModel(model string) {
 // SetExtractorModel updates the model used for note extraction.
 func (s *Session) SetExtractorModel(model string) {
 	if s.extractorAdapter == nil {
+		s.extractorFallback = false
 		return
 	}
 	if a, ok := s.extractorAdapter.(interface{ SetModel(string) }); ok {
 		a.SetModel(model)
 	}
+	s.extractorFallback = false
 }
 
 // CacheStatus returns a short label for the footer showing whether the
@@ -357,6 +457,11 @@ func (s *Session) CacheStatus() string {
 		return "ctx:hit"
 	}
 	return "ctx:miss"
+}
+
+// ExtractorFallbackActive reports whether extraction is using the main model.
+func (s *Session) ExtractorFallbackActive() bool {
+	return s.extractorFallback
 }
 
 // Close archives the conversation, persists a session summary, and snapshots backups.

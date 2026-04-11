@@ -35,9 +35,9 @@ tests/
 Go 1.26+: Follow standard conventions
 
 ## Recent Changes
+- 005-memory-context: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 - 004-bubbletea-tui: Added Go 1.26+ + Bubble Tea + Bubbles + Lip Gloss (TUI), Cobra (CLI)
 - 004-bubbletea-tui: Added Go 1.26+ + Bubble Tea + Bubbles + Lip Gloss (TUI), Cobra (CLI)
-- 003-slash-command-navigation: Added Go 1.26+ + Bubble Tea + Bubbles + Lip Gloss (TUI), Cobra (command registry is shared by CLI and slash execution)
 
 
 <!-- MANUAL ADDITIONS START -->

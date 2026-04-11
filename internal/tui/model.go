@@ -61,13 +61,14 @@ func NotesSaving() tea.Msg { return notesSavingMsg{} }
 func StatsUpdated(formatted string) tea.Msg { return statsUpdatedMsg{formatted: formatted} }
 
 // ProfileSwitched updates the TUI state after switching profiles.
-func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, tokenStatus string, provider ProviderFunc, listModels ListModelsFunc, modelSelected ModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, history []string) profileSwitchedMsg {
+func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, tokenStatus string, extractorFallback bool, provider ProviderFunc, listModels ListModelsFunc, modelSelected ModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, history []string) profileSwitchedMsg {
 	return profileSwitchedMsg{
 		profileName:            profileName,
 		activeModel:            activeModel,
 		extractorModel:         extractorModel,
 		cacheStatus:            cacheStatus,
 		tokenStatus:            tokenStatus,
+		extractorFallback:      extractorFallback,
 		provider:               provider,
 		listModels:             listModels,
 		modelSelected:          modelSelected,
@@ -110,6 +111,7 @@ type profileSwitchedMsg struct {
 	extractorModel         string
 	cacheStatus            string
 	tokenStatus            string
+	extractorFallback      bool
 	provider               ProviderFunc
 	listModels             ListModelsFunc
 	modelSelected          ModelSelectedFunc
@@ -181,6 +183,7 @@ type Model struct {
 	backupSelected         BackupSelectedFunc
 	extractorModel         string
 	extractorModelSelected ExtractorModelSelectedFunc
+	extractorFallback      bool
 }
 
 type chatMessage struct {
@@ -233,6 +236,7 @@ func New(
 	extractorModel string,
 	cacheStatus string,
 	tokenStatus string,
+	extractorFallback bool,
 	dispatcher *chat.Dispatcher,
 	execCtx *commands.ExecContext,
 	providerFn ProviderFunc,
@@ -307,6 +311,7 @@ func New(
 		backupSelected:         backupSelected,
 		extractorModel:         extractorModel,
 		extractorModelSelected: extractorModelSelected,
+		extractorFallback:      extractorFallback,
 	}
 }
 
@@ -409,6 +414,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.profileName = msg.profileName
 		m.activeModel = msg.activeModel
 		m.extractorModel = msg.extractorModel
+		m.extractorFallback = msg.extractorFallback
 		m.cacheStatus = msg.cacheStatus
 		m.tokenStatus = msg.tokenStatus
 		m.provider = msg.provider
@@ -1015,7 +1021,7 @@ func (m *Model) renderFooter() string {
 	purple := lipgloss.NewStyle().Foreground(lipgloss.Color("135"))
 	white := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 
-	// Left: token stats + cache status + notes badge.
+	// Left: token stats + cache status + notes badge + extractor warning.
 	var leftParts []string
 
 	if m.tokenStatus != "" {
@@ -1034,6 +1040,9 @@ func (m *Model) renderFooter() string {
 
 	if m.notesIndicator != "" {
 		leftParts = append(leftParts, green.Render(m.notesIndicator))
+	}
+	if m.extractorFallback {
+		leftParts = append(leftParts, yellow.Render("Extractor model missing — using main model."))
 	}
 
 	left := strings.Join(leftParts, dim.Render("  "))

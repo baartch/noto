@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"noto/internal/cache"
+	"noto/internal/memory"
 	"noto/internal/profile"
 	"noto/internal/store"
 )
@@ -131,5 +132,66 @@ func TestContextCache_InvalidateAll_ClearsProfile(t *testing.T) {
 		if e != nil {
 			t.Errorf("expected nil for key %q after InvalidateAll", k)
 		}
+	}
+}
+
+func TestContextCache_RelevanceSelection_RespectsTokenBudget(t *testing.T) {
+	notes := []*store.MemoryNote{
+		{ID: "n1", Content: "alpha beta", Importance: 3, CreatedAt: time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)},
+		{ID: "n2", Content: "one two three", Importance: 7, CreatedAt: time.Date(2026, 4, 10, 10, 1, 0, 0, time.UTC)},
+		{ID: "n3", Content: "four five six", Importance: 5, CreatedAt: time.Date(2026, 4, 10, 10, 2, 0, 0, time.UTC)},
+	}
+	selected := memory.SelectNotesForContext(notes, []string{"n2", "n1", "n3"}, 5)
+	if len(selected) != 2 {
+		t.Fatalf("expected 2 notes within budget, got %d", len(selected))
+	}
+	if selected[0].ID != "n2" || selected[1].ID != "n1" {
+		t.Errorf("unexpected order: %s, %s", selected[0].ID, selected[1].ID)
+	}
+}
+
+func TestContextCache_RelevanceSelection_FallbackOrdering(t *testing.T) {
+	notes := []*store.MemoryNote{
+		{ID: "n1", Content: "low priority", Importance: 2, CreatedAt: time.Date(2026, 4, 10, 9, 0, 0, 0, time.UTC)},
+		{ID: "n2", Content: "high priority older", Importance: 9, CreatedAt: time.Date(2026, 4, 10, 9, 30, 0, 0, time.UTC)},
+		{ID: "n3", Content: "high priority newer", Importance: 9, CreatedAt: time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)},
+	}
+	selected := memory.SelectNotesForContext(notes, nil, 100)
+	if len(selected) != 3 {
+		t.Fatalf("expected all notes, got %d", len(selected))
+	}
+	if selected[0].ID != "n3" || selected[1].ID != "n2" || selected[2].ID != "n1" {
+		t.Errorf("unexpected fallback order: %s, %s, %s", selected[0].ID, selected[1].ID, selected[2].ID)
+	}
+}
+
+func TestContextCache_ReusesAcrossRestarts(t *testing.T) {
+	db, closeDB := tempDB(t)
+	defer closeDB()
+	ctx := context.Background()
+
+	p, _ := profile.NewService(store.NewProfileRepo(db)).Create(ctx, "Cache Reuse Test")
+	cacheRepo := store.NewContextCacheRepo(db)
+
+	expires := time.Now().Add(1 * time.Hour)
+	entry := &store.ContextCacheEntry{
+		ID:        "cc-reuse",
+		ProfileID: p.ID,
+		CacheKey:  "ctx-key",
+		Payload:   "payload-data",
+		CreatedAt: time.Now().UTC(),
+		ExpiresAt: &expires,
+	}
+	if err := cacheRepo.Upsert(ctx, entry); err != nil {
+		t.Fatalf("upsert cache: %v", err)
+	}
+
+	svc := cache.NewService(store.NewContextCacheRepo(db))
+	reused, err := svc.Get(ctx, p.ID, "ctx-key")
+	if err != nil {
+		t.Fatalf("get cache: %v", err)
+	}
+	if reused == nil || reused.Payload != "payload-data" {
+		t.Fatal("expected cached context to be reused")
 	}
 }

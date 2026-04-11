@@ -364,6 +364,16 @@ func (f *FileIndex) entryKeyByID(id string) string {
 	return ""
 }
 
+// VectorRefFor returns the stored vector_ref for a source entry if present.
+func (f *FileIndex) VectorRefFor(sourceType SourceType, sourceID string) (string, bool) {
+	key := entryKey(sourceType, sourceID)
+	entry, ok := f.entries[key]
+	if !ok || entry.VectorRef == "" {
+		return "", false
+	}
+	return entry.VectorRef, true
+}
+
 func entryKey(sourceType SourceType, sourceID string) string {
 	return string(sourceType) + ":" + sourceID
 }

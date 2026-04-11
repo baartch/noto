@@ -22,6 +22,7 @@ func TestTUIModel_UsesBubblesComponents(t *testing.T) {
 		"",
 		"cache: n/a",
 		"tokens: n/a",
+		false,
 		dispatcher,
 		execCtx,
 		nil,
