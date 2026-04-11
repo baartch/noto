@@ -13,7 +13,8 @@ type stubManifestStatusSetter struct {
 }
 
 type stubIndex struct {
-	err error
+	err       error
+	flushHook func() error
 }
 
 func (s *stubIndex) Upsert(_ vector.Entry) error                { return nil }
@@ -22,8 +23,13 @@ func (s *stubIndex) Search(_ []float32, _ int) ([]vector.SearchResult, error) {
 	return nil, s.err
 }
 func (s *stubIndex) Rebuild(_ []vector.Entry) error { return nil }
-func (s *stubIndex) Flush() error                   { return nil }
-func (s *stubIndex) Close() error                   { return nil }
+func (s *stubIndex) Flush() error {
+	if s.flushHook != nil {
+		return s.flushHook()
+	}
+	return nil
+}
+func (s *stubIndex) Close() error { return nil }
 
 func (s *stubManifestStatusSetter) SetManifestStatusStr(_ context.Context, _ string, status string) error {
 	s.lastStatus = status
@@ -114,5 +120,26 @@ func TestVectorInvalidation_OnPromptChange_MarksStale(t *testing.T) {
 	}
 	if setter.lastStatus != string(vector.ManifestStale) {
 		t.Errorf("expected stale, got %q", setter.lastStatus)
+	}
+}
+
+func TestVectorRebuild_IndexFlushCalled(t *testing.T) {
+	ctx := context.Background()
+	setter := &stubManifestStatusSetter{}
+	index := &stubIndex{}
+	profileID := "rebuild-flush"
+
+	called := false
+	index.flushHook = func() error {
+		called = true
+		return nil
+	}
+
+	rebuilder := vector.NewRebuilder(setter, index, profileID)
+	if err := rebuilder.Rebuild(ctx, nil); err != nil {
+		t.Fatalf("Rebuild: %v", err)
+	}
+	if !called {
+		t.Fatalf("expected Flush to be called")
 	}
 }

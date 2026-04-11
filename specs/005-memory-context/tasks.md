@@ -68,8 +68,8 @@
 
 ### Tests for User Story 3 (REQUIRED) ⚠️
 
-- [ ] T014 [P] [US3] Add integration coverage for incremental indexing in tests/integration/vector_sync_retrieval_test.go
-- [ ] T015 [P] [US3] Add integration coverage for compaction/rebuild in tests/integration/vector_rebuild_fallback_test.go
+- [X] T014 [P] [US3] Add integration coverage for incremental indexing in tests/integration/vector_sync_retrieval_test.go
+- [X] T015 [P] [US3] Add integration coverage for compaction/rebuild in tests/integration/vector_rebuild_fallback_test.go
 
 ### Implementation for User Story 3
 
