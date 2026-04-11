@@ -31,8 +31,8 @@
 
 ### Tests for User Story 1 (REQUIRED) ⚠️
 
-- [ ] T005 [P] [US1] Add integration test for Ctrl+, opening settings in tests/integration/tui_flow_regression_test.go
-- [ ] T006 [P] [US1] Add integration test for alphabetical ordering in tests/integration/tui_flow_regression_test.go
+- [X] T005 [P] [US1] Add integration test for Ctrl+, opening settings in tests/integration/tui_flow_regression_test.go
+- [X] T006 [P] [US1] Add integration test for alphabetical ordering in tests/integration/tui_flow_regression_test.go
 
 ### Implementation for User Story 1
 
