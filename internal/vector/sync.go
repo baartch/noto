@@ -21,9 +21,21 @@ type MemoryNoteRecord struct {
 	Content string
 }
 
-// ManifestEntryUpserter is the interface for persisting vector manifest entries.
-type ManifestEntryUpserter interface {
-	UpsertEntry(ctx context.Context, e *Entry) error
+// ManifestEntry describes a persisted vector entry.
+type ManifestEntry struct {
+	ID             string
+	ProfileID      string
+	SourceType     SourceType
+	SourceID       string
+	ChunkHash      string
+	EmbeddingModel string
+	EmbeddingDim   int
+	VectorRef      string
+}
+
+// ManifestEntryRepo persists manifest entries.
+type ManifestEntryRepo interface {
+	UpsertEntry(ctx context.Context, e *ManifestEntry) error
 }
 
 // Embedder generates embeddings for text.
@@ -37,11 +49,18 @@ type Syncer struct {
 	profileID      string
 	embeddingModel string
 	embedder       Embedder
+	manifest       ManifestEntryRepo
 }
 
 // NewSyncer creates a Syncer for the given profile.
 func NewSyncer(index Index, profileID string, embedder Embedder, embeddingModel string) *Syncer {
 	return &Syncer{index: index, profileID: profileID, embedder: embedder, embeddingModel: embeddingModel}
+}
+
+// WithManifest sets the manifest entry upserter.
+func (s *Syncer) WithManifest(manifest ManifestEntryRepo) *Syncer {
+	s.manifest = manifest
+	return s
 }
 
 // SyncNotes upserts the given notes into the vector index.
@@ -56,6 +75,11 @@ func (s *Syncer) SyncNotes(ctx context.Context, notes []MemoryNoteRecord) error 
 			ChunkHash:      chunkHash,
 			EmbeddingModel: s.embeddingModel,
 		}
+		if fileIndex, ok := s.index.(*FileIndex); ok {
+			if ref, ok := fileIndex.VectorRefFor(SourceMemoryNote, note.ID); ok {
+				entry.VectorRef = ref
+			}
+		}
 		if s.embedder == nil {
 			return errors.New("vector: embedder not configured")
 		}
@@ -67,6 +91,23 @@ func (s *Syncer) SyncNotes(ctx context.Context, notes []MemoryNoteRecord) error 
 		entry.EmbeddingDim = len(resp.Embedding)
 		if err := s.index.Upsert(entry); err != nil {
 			return fmt.Errorf("vector: upsert index entry %s: %w", note.ID, err)
+		}
+		if fileIndex, ok := s.index.(*FileIndex); ok {
+			if ref, ok := fileIndex.VectorRefFor(SourceMemoryNote, note.ID); ok {
+				entry.VectorRef = ref
+			}
+		}
+		if s.manifest != nil {
+			_ = s.manifest.UpsertEntry(ctx, &ManifestEntry{
+				ID:             entry.ID,
+				ProfileID:      entry.ProfileID,
+				SourceType:     entry.SourceType,
+				SourceID:       entry.SourceID,
+				ChunkHash:      entry.ChunkHash,
+				EmbeddingModel: entry.EmbeddingModel,
+				EmbeddingDim:   entry.EmbeddingDim,
+				VectorRef:      entry.VectorRef,
+			})
 		}
 	}
 	return s.index.Flush()

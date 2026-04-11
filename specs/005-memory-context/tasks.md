@@ -49,12 +49,12 @@
 
 ### Tests for User Story 2 (REQUIRED) ⚠️
 
-- [ ] T011 [P] [US2] Add integration coverage for cache reuse across restarts in tests/integration/context_cache_lifecycle_test.go
+- [X] T011 [P] [US2] Add integration coverage for cache reuse across restarts in tests/integration/context_cache_lifecycle_test.go
 
 ### Implementation for User Story 2
 
-- [ ] T012 [US2] Persist context cache metadata and reuse cache in internal/memory/retrieval.go
-- [ ] T013 [US2] Ensure vector index manifest reuse across restarts in internal/vector/sync.go
+- [X] T012 [US2] Persist context cache metadata and reuse cache in internal/memory/retrieval.go
+- [X] T013 [US2] Ensure vector index manifest reuse across restarts in internal/vector/sync.go
 
 **Checkpoint**: Cache and index reuse across restarts verified.
 

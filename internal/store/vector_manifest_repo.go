@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"noto/internal/vector"
 )
 
 // ErrManifestNotFound is returned when no manifest exists for a profile.
@@ -49,6 +51,11 @@ type VectorEntry struct {
 // VectorManifestRepo manages the vector_index_manifest and vector_index_entries tables.
 type VectorManifestRepo struct {
 	db *DB
+}
+
+// DB returns the underlying DB handle.
+func (r *VectorManifestRepo) DB() *DB {
+	return r.db
 }
 
 // NewVectorManifestRepo creates a new VectorManifestRepo.
@@ -133,8 +140,8 @@ func (r *VectorManifestRepo) SetManifestStatus(ctx context.Context, profileID st
 	return nil
 }
 
-// UpsertEntry inserts or updates a vector index entry.
-func (r *VectorManifestRepo) UpsertEntry(ctx context.Context, e *VectorEntry) error {
+// UpsertVectorEntry inserts or updates a vector index entry.
+func (r *VectorManifestRepo) UpsertVectorEntry(ctx context.Context, e *VectorEntry) error {
 	if e.ProfileID == "" {
 		return errors.New("store: vector entry missing profile_id")
 	}
@@ -162,6 +169,24 @@ func (r *VectorManifestRepo) UpsertEntry(ctx context.Context, e *VectorEntry) er
 		return fmt.Errorf("store: upsert vector entry: %w", err)
 	}
 	return nil
+}
+
+// UpsertEntry adapts vector.ManifestEntry to the store VectorEntry.
+// Satisfies vector.ManifestEntryRepo.
+func (r *VectorManifestRepo) UpsertEntry(ctx context.Context, e *vector.ManifestEntry) error {
+	if e == nil {
+		return errors.New("store: vector entry is nil")
+	}
+	return r.UpsertVectorEntry(ctx, &VectorEntry{
+		ID:             e.ID,
+		ProfileID:      e.ProfileID,
+		SourceType:     string(e.SourceType),
+		SourceID:       e.SourceID,
+		ChunkHash:      e.ChunkHash,
+		EmbeddingModel: e.EmbeddingModel,
+		EmbeddingDim:   e.EmbeddingDim,
+		VectorRef:      e.VectorRef,
+	})
 }
 
 // DeleteEntry removes the vector entry for a given source.

@@ -164,3 +164,34 @@ func TestContextCache_RelevanceSelection_FallbackOrdering(t *testing.T) {
 		t.Errorf("unexpected fallback order: %s, %s, %s", selected[0].ID, selected[1].ID, selected[2].ID)
 	}
 }
+
+func TestContextCache_ReusesAcrossRestarts(t *testing.T) {
+	db, closeDB := tempDB(t)
+	defer closeDB()
+	ctx := context.Background()
+
+	p, _ := profile.NewService(store.NewProfileRepo(db)).Create(ctx, "Cache Reuse Test")
+	cacheRepo := store.NewContextCacheRepo(db)
+
+	expires := time.Now().Add(1 * time.Hour)
+	entry := &store.ContextCacheEntry{
+		ID:        "cc-reuse",
+		ProfileID: p.ID,
+		CacheKey:  "ctx-key",
+		Payload:   "payload-data",
+		CreatedAt: time.Now().UTC(),
+		ExpiresAt: &expires,
+	}
+	if err := cacheRepo.Upsert(ctx, entry); err != nil {
+		t.Fatalf("upsert cache: %v", err)
+	}
+
+	svc := cache.NewService(store.NewContextCacheRepo(db))
+	reused, err := svc.Get(ctx, p.ID, "ctx-key")
+	if err != nil {
+		t.Fatalf("get cache: %v", err)
+	}
+	if reused == nil || reused.Payload != "payload-data" {
+		t.Fatal("expected cached context to be reused")
+	}
+}

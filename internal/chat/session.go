@@ -314,6 +314,33 @@ func (n noteLister) ListByProfile(ctx context.Context, profileID string) ([]vect
 }
 
 // extractAsync runs note extraction and calls onNotes when done.
+func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote) error {
+	if s.vectorIndex == nil || s.adapter == nil {
+		return nil
+	}
+	fileIndex, ok := s.vectorIndex.(*vector.FileIndex)
+	if ok {
+		fileIndex.WithProfile(s.profileID)
+		if err := fileIndex.Load(); err != nil {
+			if errors.Is(err, vector.ErrIndexNotFound) || errors.Is(err, vector.ErrIndexCorrupted) {
+				return nil
+			}
+			return err
+		}
+	}
+
+	manifestRepo := store.NewVectorManifestRepo(s.db)
+	syncer := vector.NewSyncer(s.vectorIndex, s.profileID, s.adapter, "").WithManifest(manifestRepo)
+	records := make([]vector.MemoryNoteRecord, 0, len(notes))
+	for _, note := range notes {
+		records = append(records, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
+	}
+	if err := syncer.SyncNotes(ctx, records); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *Session) extractAsync(userMsg, assistantMsg string) {
 	s.markNotesPending()
 	if s.onNotesSaving != nil {
@@ -332,6 +359,13 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 		s.markNotesDone(0)
 		return
 	}
+
+	if len(result.Notes) > 0 && s.adapter != nil {
+		if err := s.syncVectorIndex(ctx, result.Notes); err != nil {
+			s.logger.Errorf("vector sync failed: %v", err)
+		}
+	}
+
 	if s.onNotes != nil {
 		s.onNotes(len(result.Notes), result.Updated)
 	}

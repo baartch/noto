@@ -118,17 +118,21 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 		}
 	}
 
-	cacheKey := cacheKeyFor(profileID, systemPrompt, summaryID)
+	cacheKey := cacheKeyFor(profileID, systemPrompt, summaryID, r.tokenBudget)
 
 	if r.cacheRepo != nil {
 		cached, err := r.cacheRepo.Get(ctx, profileID, cacheKey)
 		if err == nil && cached != nil {
-			var cachedCtx RetrievalContext
-			if err := json.Unmarshal([]byte(cached.Payload), &cachedCtx); err == nil {
-				cachedCtx.CacheHit = true
-				return &cachedCtx, nil
+			if cached.ExpiresAt != nil && cached.ExpiresAt.Before(time.Now()) {
+				_ = r.cacheRepo.Invalidate(ctx, profileID, cacheKey)
+			} else {
+				var cachedCtx RetrievalContext
+				if err := json.Unmarshal([]byte(cached.Payload), &cachedCtx); err == nil {
+					cachedCtx.CacheHit = true
+					return &cachedCtx, nil
+				}
+				_ = r.cacheRepo.Invalidate(ctx, profileID, cacheKey)
 			}
-			_ = r.cacheRepo.Invalidate(ctx, profileID, cacheKey)
 		}
 	}
 
@@ -157,13 +161,18 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 	if r.cacheRepo != nil {
 		payload, _ := json.Marshal(ctxOut)
 		expires := time.Now().Add(24 * time.Hour)
+		sourceIDs, _ := json.Marshal(noteIDs(selectedNotes))
+		promptHash := sha256.Sum256([]byte(systemPrompt))
 		_ = r.cacheRepo.Upsert(ctx, &store.ContextCacheEntry{
-			ID:        fmt.Sprintf("cc-%x", time.Now().UnixNano()),
-			ProfileID: profileID,
-			CacheKey:  cacheKey,
-			Payload:   string(payload),
-			CreatedAt: time.Now().UTC(),
-			ExpiresAt: &expires,
+			ID:            fmt.Sprintf("cc-%x", time.Now().UnixNano()),
+			ProfileID:     profileID,
+			CacheKey:      cacheKey,
+			Payload:       string(payload),
+			SourceNoteIDs: string(sourceIDs),
+			PromptVersion: fmt.Sprintf("prompt:%x", promptHash),
+			StateVersion:  summaryID,
+			CreatedAt:     time.Now().UTC(),
+			ExpiresAt:     &expires,
 		})
 	}
 
@@ -249,9 +258,17 @@ func AssemblePrompt(systemPrompt, sessionSummary, memoryBlock string) string {
 	return strings.Join(parts, "\n")
 }
 
-func cacheKeyFor(profileID, systemPrompt, summaryID string) string {
-	hash := sha256.Sum256([]byte(profileID + "::" + systemPrompt + "::" + summaryID))
+func cacheKeyFor(profileID, systemPrompt, summaryID string, tokenBudget int) string {
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%s::%s::%s::%d", profileID, systemPrompt, summaryID, tokenBudget)))
 	return fmt.Sprintf("ctx:%x", hash)
+}
+
+func noteIDs(notes []*store.MemoryNote) []string {
+	ids := make([]string, 0, len(notes))
+	for _, note := range notes {
+		ids = append(ids, note.ID)
+	}
+	return ids
 }
 
 func (r *Retrieval) checkVectorIndex() error {
@@ -290,6 +307,9 @@ func (n noteLister) ListByProfile(ctx context.Context, profileID string) ([]vect
 func (r *Retrieval) rankNotes(ctx context.Context, systemPrompt, summaryText string) ([]string, error) {
 	if r.vectorIndex == nil || r.embedder == nil || r.profileID == "" {
 		return nil, nil
+	}
+	if err := r.checkVectorIndex(); err != nil {
+		return nil, err
 	}
 	queryText := strings.TrimSpace(systemPrompt)
 	if summaryText != "" {
@@ -330,7 +350,7 @@ func (r *Retrieval) rankNotes(ctx context.Context, systemPrompt, summaryText str
 		}
 	}
 
-	retrieval := vector.NewHybridRetrieval(r.vectorIndex, noteLister{repo: r.noteRepo}, r.profileID, vector.WithWarnFunc(r.warnFn))
+	retrieval := vector.NewHybridRetrieval(r.vectorIndex, noteLister{repo: r.noteRepo}, r.profileID)
 	results, err := retrieval.Retrieve(ctx, resp.Embedding, vectorTopK)
 	if err != nil {
 		return nil, err

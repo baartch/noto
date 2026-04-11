@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -47,6 +48,9 @@ func (r *ContextCacheRepo) Get(ctx context.Context, profileID, cacheKey string) 
 		&e.PromptVersion, &e.StateVersion, &e.CreatedAt, &e.ExpiresAt)
 	if errors.Is(err, nil) {
 		return e, nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrCacheNotFound
 	}
 	return nil, fmt.Errorf("store: get context cache: %w", err)
 }
