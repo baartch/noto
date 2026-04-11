@@ -187,6 +187,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 		defer sess.Close(context.Background())
 
 		cacheStatus = sess.CacheStatus()
+		extractorFallback = sess.ExtractorFallbackActive()
 		providerFn = func(callCtx context.Context, userMsg string) (string, error) {
 			sess.SetModel(activeModel)
 			result, err := sess.Send(callCtx, userMsg)
@@ -313,6 +314,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 				}
 
 				cacheStatus = sess.CacheStatus()
+				extractorFallback = sess.ExtractorFallbackActive()
 				providerFn = func(callCtx context.Context, userMsg string) (string, error) {
 					sess.SetModel(activeModel)
 					result, err := sess.Send(callCtx, userMsg)
@@ -349,7 +351,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 				}
 			}
 
-			return tui.ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, "tokens: n/a", providerFn, listModelsFn, modelSelectedFn, extractorModelSelectedFn, inputHistory)
+			return tui.ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, "tokens: n/a", extractorFallback, providerFn, listModelsFn, modelSelectedFn, extractorModelSelectedFn, inputHistory)
 		}
 	}
 	listBackupsFn := func(ctx context.Context) ([]string, error) {
@@ -361,7 +363,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 
 	m := tui.New(
 		activeProfile.Name, activeModel, extractorModel,
-		cacheStatus, "tokens: n/a",
+		cacheStatus, "tokens: n/a", extractorFallback,
 		dispatcher, execCtx,
 		providerFn, listModelsFn, modelSelectedFn,
 		listProfilesFn, profileSwitchCmd,

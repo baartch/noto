@@ -2,6 +2,7 @@ package vector
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"noto/internal/provider"
@@ -11,16 +12,6 @@ import (
 // It accepts a string to avoid type coupling with the store package.
 type ManifestStatusSetter interface {
 	SetManifestStatusStr(ctx context.Context, profileID string, status string) error
-}
-
-// ManifestEntryRepo persists manifest entries during rebuild.
-type ManifestEntryRepo interface {
-	UpsertEntry(ctx context.Context, e *ManifestEntry) error
-}
-
-// Embedder generates embeddings for text.
-type Embedder interface {
-	Embed(ctx context.Context, req provider.EmbeddingRequest) (*provider.EmbeddingResponse, error)
 }
 
 // Rebuilder rebuilds the vector index from a set of notes.
@@ -65,7 +56,7 @@ func (rb *Rebuilder) Rebuild(ctx context.Context, notes []MemoryNoteRecord) erro
 	_ = rb.manifestSetter.SetManifestStatusStr(ctx, rb.profileID, string(ManifestRebuilding))
 
 	if rb.embedder == nil {
-		return fmt.Errorf("vector: embedder not configured")
+		return errors.New("vector: embedder not configured")
 	}
 
 	entries := make([]Entry, 0, len(notes))

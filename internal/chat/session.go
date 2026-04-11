@@ -42,21 +42,22 @@ type Session struct {
 	systemPrompt   string
 	cacheHit       bool
 
-	convRepo         *store.ConversationRepo
-	msgRepo          *store.MessageRepo
-	noteRepo         *store.MemoryNoteRepo
-	cacheRepo        *store.ContextCacheRepo
-	summaryRepo      *store.SessionSummaryRepo
-	adapter          provider.Adapter
-	extractor        *memory.Extractor
-	extractorAdapter provider.Adapter
-	logger           observe.Logger
-	baseSystemPrompt string
-	sessionSummary   string
-	db               *store.DB
-	vectorIndexPath  string
-	vectorIndex      vector.Index
+	convRepo          *store.ConversationRepo
+	msgRepo           *store.MessageRepo
+	noteRepo          *store.MemoryNoteRepo
+	cacheRepo         *store.ContextCacheRepo
+	summaryRepo       *store.SessionSummaryRepo
+	adapter           provider.Adapter
+	extractor         *memory.Extractor
+	extractorAdapter  provider.Adapter
+	logger            observe.Logger
+	baseSystemPrompt  string
+	sessionSummary    string
+	db                *store.DB
+	vectorIndexPath   string
+	vectorIndex       vector.Index
 	memoryTokenBudget int
+	extractorFallback bool
 
 	backupStop   chan struct{}
 	pendingNotes int
@@ -133,31 +134,32 @@ func NewSession(
 	}
 
 	s := &Session{
-		profileID:        profileID,
-		profileSlug:      profileSlug,
-		conversationID:   convID,
-		systemPrompt:     rc.AssembledPrompt,
-		cacheHit:         rc.CacheHit,
-		convRepo:         convRepo,
-		msgRepo:          msgRepo,
-		noteRepo:         noteRepo,
-		summaryRepo:      summaryRepo,
-		adapter:          adapter,
-		extractorAdapter: extractorAdapter,
-		cacheRepo:        store.NewContextCacheRepo(db),
-		extractor:        memory.NewExtractor(noteRepo, adapter, store.NewContextCacheRepo(db)),
-		logger:           logger,
-		history:          recentHistory,
-		onNotes:          onNotes,
-		onNotesSaving:    onNotesSaving,
-		backupStop:       make(chan struct{}),
-		pendingDone:      make(chan struct{}),
-		baseSystemPrompt: baseSystemPrompt,
+		profileID:         profileID,
+		profileSlug:       profileSlug,
+		conversationID:    convID,
+		systemPrompt:      rc.AssembledPrompt,
+		cacheHit:          rc.CacheHit,
+		convRepo:          convRepo,
+		msgRepo:           msgRepo,
+		noteRepo:          noteRepo,
+		summaryRepo:       summaryRepo,
+		adapter:           adapter,
+		extractorAdapter:  extractorAdapter,
+		cacheRepo:         store.NewContextCacheRepo(db),
+		extractor:         memory.NewExtractor(noteRepo, adapter, store.NewContextCacheRepo(db)),
+		logger:            logger,
+		history:           recentHistory,
+		onNotes:           onNotes,
+		onNotesSaving:     onNotesSaving,
+		backupStop:        make(chan struct{}),
+		pendingDone:       make(chan struct{}),
+		baseSystemPrompt:  baseSystemPrompt,
 		sessionSummary:    rc.SessionSummary,
 		db:                db,
 		vectorIndexPath:   vecPath,
 		vectorIndex:       vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)),
 		memoryTokenBudget: settings.MemoryTokenBudget,
+		extractorFallback: extractorAdapter == nil && adapter != nil,
 	}
 	if profileSlug != "" {
 		s.startBackupTicker()
@@ -403,6 +405,8 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 	extractor := s.extractor
 	if s.extractorAdapter != nil {
 		extractor = memory.NewExtractor(s.noteRepo, s.extractorAdapter, s.cacheRepo)
+	} else if s.adapter != nil {
+		extractor = memory.NewExtractor(s.noteRepo, s.adapter, s.cacheRepo)
 	}
 	result, err := extractor.ExtractTurn(ctx, s.profileID, s.conversationID, userMsg, assistantMsg)
 	if err != nil {
@@ -437,11 +441,13 @@ func (s *Session) SetModel(model string) {
 // SetExtractorModel updates the model used for note extraction.
 func (s *Session) SetExtractorModel(model string) {
 	if s.extractorAdapter == nil {
+		s.extractorFallback = false
 		return
 	}
 	if a, ok := s.extractorAdapter.(interface{ SetModel(string) }); ok {
 		a.SetModel(model)
 	}
+	s.extractorFallback = false
 }
 
 // CacheStatus returns a short label for the footer showing whether the
@@ -451,6 +457,11 @@ func (s *Session) CacheStatus() string {
 		return "ctx:hit"
 	}
 	return "ctx:miss"
+}
+
+// ExtractorFallbackActive reports whether extraction is using the main model.
+func (s *Session) ExtractorFallbackActive() bool {
+	return s.extractorFallback
 }
 
 // Close archives the conversation, persists a session summary, and snapshots backups.

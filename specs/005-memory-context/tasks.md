@@ -88,12 +88,12 @@
 
 ### Tests for User Story 4 (REQUIRED) ⚠️
 
-- [ ] T018 [P] [US4] Add integration coverage for extractor fallback warning in tests/integration/tui_flow_regression_test.go
+- [X] T018 [P] [US4] Add integration coverage for extractor fallback warning in tests/integration/tui_flow_regression_test.go
 
 ### Implementation for User Story 4
 
-- [ ] T019 [US4] Use main model for extraction when extractor model missing in internal/memory/extractor.go
-- [ ] T020 [US4] Surface footer warning state in internal/tui/model.go
+- [X] T019 [US4] Use main model for extraction when extractor model missing in internal/memory/extractor.go
+- [X] T020 [US4] Surface footer warning state in internal/tui/model.go
 
 **Checkpoint**: Fallback and warning active when extractor model absent.
 

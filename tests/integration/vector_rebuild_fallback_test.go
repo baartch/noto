@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"noto/internal/provider"
 	"noto/internal/vector"
 )
 
@@ -42,7 +43,7 @@ func TestVectorRebuild_SetsStatusReady(t *testing.T) {
 	index := &stubIndex{}
 	profileID := "rebuild-profile"
 
-	rebuilder := vector.NewRebuilder(setter, index, profileID)
+	rebuilder := vector.NewRebuilder(setter, index, profileID).WithEmbedder(&stubRebuildEmbedder{}, "model")
 	notes := []vector.MemoryNoteRecord{
 		{ID: "n1", Content: "Note one"},
 		{ID: "n2", Content: "Note two"},
@@ -61,7 +62,7 @@ func TestVectorRebuild_EmptyNotes_StillSucceeds(t *testing.T) {
 	setter := &stubManifestStatusSetter{}
 	index := &stubIndex{}
 
-	rebuilder := vector.NewRebuilder(setter, index, "profile-empty")
+	rebuilder := vector.NewRebuilder(setter, index, "profile-empty").WithEmbedder(&stubRebuildEmbedder{}, "model")
 	if err := rebuilder.Rebuild(ctx, nil); err != nil {
 		t.Fatalf("Rebuild with no notes: %v", err)
 	}
@@ -123,6 +124,12 @@ func TestVectorInvalidation_OnPromptChange_MarksStale(t *testing.T) {
 	}
 }
 
+type stubRebuildEmbedder struct{}
+
+func (s *stubRebuildEmbedder) Embed(_ context.Context, _ provider.EmbeddingRequest) (*provider.EmbeddingResponse, error) {
+	return &provider.EmbeddingResponse{Embedding: []float32{0.1, 0.2}, Model: "stub"}, nil
+}
+
 func TestVectorRebuild_IndexFlushCalled(t *testing.T) {
 	ctx := context.Background()
 	setter := &stubManifestStatusSetter{}
@@ -135,7 +142,7 @@ func TestVectorRebuild_IndexFlushCalled(t *testing.T) {
 		return nil
 	}
 
-	rebuilder := vector.NewRebuilder(setter, index, profileID)
+	rebuilder := vector.NewRebuilder(setter, index, profileID).WithEmbedder(&stubRebuildEmbedder{}, "model")
 	if err := rebuilder.Rebuild(ctx, nil); err != nil {
 		t.Fatalf("Rebuild: %v", err)
 	}

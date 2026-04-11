@@ -259,7 +259,8 @@ func AssemblePrompt(systemPrompt, sessionSummary, memoryBlock string) string {
 }
 
 func cacheKeyFor(profileID, systemPrompt, summaryID string, tokenBudget int) string {
-	hash := sha256.Sum256([]byte(fmt.Sprintf("%s::%s::%s::%d", profileID, systemPrompt, summaryID, tokenBudget)))
+	buf := fmt.Appendf(nil, "%s::%s::%s::%d", profileID, systemPrompt, summaryID, tokenBudget)
+	hash := sha256.Sum256(buf)
 	return fmt.Sprintf("ctx:%x", hash)
 }
 
