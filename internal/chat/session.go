@@ -330,6 +330,9 @@ func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote
 	}
 
 	manifestRepo := store.NewVectorManifestRepo(s.db)
+	if err := s.ensureVectorManifest(ctx, manifestRepo); err != nil {
+		return err
+	}
 	syncer := vector.NewSyncer(s.vectorIndex, s.profileID, s.adapter, "").WithManifest(manifestRepo)
 	records := make([]vector.MemoryNoteRecord, 0, len(notes))
 	for _, note := range notes {
@@ -339,6 +342,54 @@ func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote
 		return err
 	}
 	return nil
+}
+
+func (s *Session) ensureVectorManifest(ctx context.Context, repo *store.VectorManifestRepo) error {
+	_, err := repo.GetManifest(ctx, s.profileID)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, store.ErrManifestNotFound) {
+		return err
+	}
+	return repo.UpsertManifest(ctx, &store.VectorManifest{
+		ID:                 fmt.Sprintf("vm-%x", time.Now().UnixNano()),
+		ProfileID:          s.profileID,
+		IndexPath:          s.vectorIndexPath,
+		IndexFormatVersion: "1",
+		EmbeddingModel:     "",
+		EmbeddingDim:       0,
+		SourceStateVersion: "",
+		Status:             store.VectorManifestReady,
+	})
+}
+
+func (s *Session) ensureVectorCompaction(ctx context.Context) error {
+	if s.vectorIndex == nil || s.adapter == nil {
+		return nil
+	}
+	manifestRepo := store.NewVectorManifestRepo(s.db)
+	manifest, err := manifestRepo.GetManifest(ctx, s.profileID)
+	if err != nil {
+		return nil
+	}
+	if manifest.Status != store.VectorManifestStale && manifest.Status != store.VectorManifestFailed {
+		return nil
+	}
+
+	notes, err := s.noteRepo.ListByProfile(ctx, s.profileID)
+	if err != nil {
+		return err
+	}
+	records := make([]vector.MemoryNoteRecord, 0, len(notes))
+	for _, note := range notes {
+		records = append(records, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
+	}
+
+	rebuilder := vector.NewRebuilder(manifestRepo, s.vectorIndex, s.profileID).
+		WithManifest(manifestRepo).
+		WithEmbedder(s.adapter, "")
+	return rebuilder.Rebuild(ctx, records)
 }
 
 func (s *Session) extractAsync(userMsg, assistantMsg string) {
@@ -364,6 +415,10 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 		if err := s.syncVectorIndex(ctx, result.Notes); err != nil {
 			s.logger.Errorf("vector sync failed: %v", err)
 		}
+	}
+
+	if err := s.ensureVectorCompaction(ctx); err != nil {
+		s.logger.Errorf("vector compaction failed: %v", err)
 	}
 
 	if s.onNotes != nil {

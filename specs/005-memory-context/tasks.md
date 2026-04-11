@@ -73,8 +73,8 @@
 
 ### Implementation for User Story 3
 
-- [ ] T016 [US3] Implement incremental index updates on note changes in internal/vector/sync.go
-- [ ] T017 [US3] Implement periodic compaction/rebuild triggers in internal/vector/rebuild.go
+- [X] T016 [US3] Implement incremental index updates on note changes in internal/vector/sync.go
+- [X] T017 [US3] Implement periodic compaction/rebuild triggers in internal/vector/rebuild.go
 
 **Checkpoint**: Index updates/compaction run without manual commands.
 
