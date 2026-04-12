@@ -1653,13 +1653,29 @@ func (m *Model) renderSettingsEditor(height int) string {
 	m.settingsEditor.SetWidth(max(m.width-8, 40))
 
 	header := lipgloss.NewStyle().Bold(true).Render(m.settingsEditEntry.Label)
+	description := settingsEditorDescription(m.settingsEditEntry.ID)
+	var descBlock string
+	if description != "" {
+		descBlock = "\n" + helpShortStyle.Render("  "+description)
+	}
 	hint := helpShortStyle.Render("  Enter save · Esc cancel · Alt+Enter newline · Ctrl+←/→ word jump")
 	body := m.settingsEditor.View()
 	var errBlock string
 	if m.settingsErr != "" {
 		errBlock = "\n" + errStyle.Render("  "+m.settingsErr)
 	}
-	return pickerBorderStyle.Render(header + "\n" + hint + "\n" + body + errBlock)
+	return pickerBorderStyle.Render(header + descBlock + "\n" + hint + "\n" + body + errBlock)
+}
+
+func settingsEditorDescription(entryID string) string {
+	switch entryID {
+	case settingsIDMemoryTokenLimit:
+		return "Limits how much memory context is injected into replies. Higher values use more tokens."
+	case settingsIDSystemPrompt:
+		return "Sets the system role prompt that guides every reply."
+	default:
+		return ""
+	}
 }
 
 func suggestionWindow(total, cursor, maxRows int) (start, end int) {
