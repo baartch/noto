@@ -55,9 +55,6 @@ func runChat(_ *cobra.Command, _ []string) error {
 
 	// Build command registry + slash dispatcher.
 	registry := commands.NewRegistry()
-	if err := commands.RegisterProfileCommands(registry, profSvc); err != nil {
-		return err
-	}
 	if err := commands.RegisterPromptCommands(registry); err != nil {
 		return err
 	}
@@ -226,137 +223,6 @@ func runChat(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	listProfilesFn := func(ctx context.Context) ([]*store.Profile, error) {
-		return profSvc.List(ctx)
-	}
-	// profileSwitchCmd returns a tea.Cmd that switches profiles asynchronously.
-	profileSwitchCmd := func(profileName string) tea.Cmd {
-		return func() tea.Msg {
-			p, err := profSvc.Select(ctx, profileName)
-			if err != nil {
-				return tui.ProfileSwitchFailed(err)
-			}
-			activeProfile = p
-			execCtx.ProfileID = p.ID
-			execCtx.ProfileSlug = p.Slug
-			execCtx.DB = profileDB
-			execCtx.DB = profileDB
-
-			if sess != nil {
-				sess.Close(context.Background())
-			}
-			if profileDB != nil {
-				if err := profileDB.Close(); err != nil {
-					fmt.Fprintf(os.Stderr, "chat: close profile db: %v\n", err)
-				}
-			}
-
-			profileDB, err = openProfileDB(p.Slug)
-			if err != nil {
-				return tui.ProfileSwitchFailed(err)
-			}
-
-			providerCfg, decryptedKey := loadProviderConfig(ctx, profileDB, p.ID)
-			activeModel = ""
-			cacheStatus = "cache: n/a"
-			providerFn = nil
-			listModelsFn = nil
-			modelSelectedFn = func(modelID string) error { return nil }
-			extractorModelSelectedFn = func(modelID string) error { return nil }
-			extractorFallback = false
-			inputHistory = loadInputHistory(ctx, profileDB, p.ID)
-
-			if providerCfg != nil && decryptedKey != "" {
-				activeModel = providerCfg.EffectiveModel()
-				extractorModel = providerCfg.EffectiveExtractorModel()
-				adapterCfg := provider.Config{
-					ProviderType: "openai_compatible",
-					Endpoint:     providerCfg.Endpoint,
-					APIKey:       decryptedKey,
-				}
-				systemPrompt := loadSystemPrompt(ctx, profileDB, p)
-				convRepo := store.NewConversationRepo(profileDB)
-				msgRepo := store.NewMessageRepo(profileDB)
-				noteRepo := store.NewMemoryNoteRepo(profileDB)
-				summaryRepo := store.NewSessionSummaryRepo(profileDB)
-				logger := observe.NewNoopLogger()
-
-				sess, err = chatpkg.NewSession(
-					ctx,
-					p.ID,
-					p.Slug,
-					systemPrompt,
-					profileDB,
-					convRepo, msgRepo, noteRepo, summaryRepo,
-					provider.NewOpenAICompatible(provider.Config{
-						ProviderType: "openai_compatible",
-						Endpoint:     adapterCfg.Endpoint,
-						Model:        activeModel,
-						APIKey:       adapterCfg.APIKey,
-					}),
-					provider.NewOpenAICompatible(provider.Config{
-						ProviderType: "openai_compatible",
-						Endpoint:     adapterCfg.Endpoint,
-						Model:        extractorModel,
-						APIKey:       adapterCfg.APIKey,
-					}),
-					logger,
-					func(saved, updated int) {
-						if prog != nil {
-							prog.Send(tui.NotesSaved(saved, updated))
-						}
-					},
-					func() {
-						if prog != nil {
-							prog.Send(tui.NotesSaving())
-						}
-					},
-				)
-				if err != nil {
-					return tui.ProfileSwitchFailed(fmt.Errorf("chat: start session: %w", err))
-				}
-
-				cacheStatus = sess.CacheStatus()
-				extractorFallback = sess.ExtractorFallbackActive()
-				providerFn = func(callCtx context.Context, userMsg string) (string, error) {
-					sess.SetModel(activeModel)
-					result, err := sess.Send(callCtx, userMsg)
-					if err != nil {
-						return "", err
-					}
-					if prog != nil {
-						prog.Send(tui.StatsUpdated(sess.Stats().Format()))
-					}
-					return result.Reply, nil
-				}
-
-				listModelsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
-					return provider.ListModels(callCtx, adapterCfg)
-				}
-
-				cfgRepo := store.NewProviderConfigRepo(profileDB)
-				modelSelectedFn = func(modelID string) error {
-					if err := cfgRepo.SetModel(ctx, p.ID, modelID); err != nil {
-						return err
-					}
-					activeModel = modelID
-					return nil
-				}
-				extractorModelSelectedFn = func(modelID string) error {
-					if err := cfgRepo.SetExtractorModel(ctx, p.ID, modelID); err != nil {
-						return err
-					}
-					extractorModel = modelID
-					if sess != nil {
-						sess.SetExtractorModel(modelID)
-					}
-					return nil
-				}
-			}
-
-			return tui.ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, "tokens: n/a", extractorFallback, providerFn, listModelsFn, modelSelectedFn, extractorModelSelectedFn, tui.DefaultSettingsMenu(), inputHistory)
-		}
-	}
 	listBackupsFn := func(ctx context.Context) ([]string, error) {
 		return backup.ListBackups(activeProfile.Slug)
 	}
@@ -369,8 +235,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 		cacheStatus, "tokens: n/a", extractorFallback,
 		dispatcher, execCtx,
 		providerFn, listModelsFn, modelSelectedFn,
-		listProfilesFn, profileSwitchCmd,
-		listBackupsFn, backupSelectedFn,
+			listBackupsFn, backupSelectedFn,
 		extractorModelSelectedFn,
 		inputHistory,
 	)

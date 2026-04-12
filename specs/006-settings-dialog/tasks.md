@@ -5,13 +5,13 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Review existing profile slash commands and settings menu/profile list code paths (internal/commands/profile_commands.go, internal/tui/model.go, internal/tui/settings_menu.go)
+- [X] T001 Review existing profile slash commands and settings menu/profile list code paths (internal/commands/profile_commands.go, internal/tui/model.go, internal/tui/settings_menu.go)
 
 ## Phase 2: Foundational
 
-- [ ] T002 Remove profile command registration from command registry and slash dispatch pathways (internal/commands/registry.go, internal/chat/slash_dispatch.go)
-- [ ] T003 Remove profile slash command handlers and related tests (internal/commands/profile_commands.go, tests/integration/tui_profile_management_test.go)
-- [ ] T004 Ensure profile service CRUD can be invoked directly from settings model (internal/profile/service.go, internal/store/profile_repo.go)
+- [X] T002 Remove profile command registration from command registry and slash dispatch pathways (internal/commands/registry.go, internal/chat/slash_dispatch.go)
+- [X] T003 Remove profile slash command handlers and related tests (internal/commands/profile_commands.go, tests/integration/tui_profile_management_test.go)
+- [X] T004 Ensure profile service CRUD can be invoked directly from settings model (internal/profile/service.go, internal/store/profile_repo.go)
 
 ## Phase 3: User Story 1 - Open Settings (P1)
 

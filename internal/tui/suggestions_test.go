@@ -77,7 +77,7 @@ func TestSuggestionWindowingClampsEnd(t *testing.T) {
 }
 
 func TestRefreshSuggestionsShowsOnSlash(t *testing.T) {
-	m := newTestModelWithCommands("profile list")
+	m := newTestModelWithCommands("prompt show")
 	m.input.SetValue("/")
 	m.refreshSuggestions()
 	if len(m.suggestions) == 0 {
@@ -86,7 +86,7 @@ func TestRefreshSuggestionsShowsOnSlash(t *testing.T) {
 }
 
 func TestRefreshSuggestionsClearsOnNonSlash(t *testing.T) {
-	m := newTestModelWithCommands("profile list")
+	m := newTestModelWithCommands("prompt show")
 	m.suggestions = makeSuggestions(2)
 	m.input.SetValue("hello")
 	m.refreshSuggestions()
@@ -96,13 +96,13 @@ func TestRefreshSuggestionsClearsOnNonSlash(t *testing.T) {
 }
 
 func TestRefreshSuggestionsFiltersByPrefix(t *testing.T) {
-	m := newTestModelWithCommands("profile list", "prompt show")
-	m.input.SetValue("/profile")
+	m := newTestModelWithCommands("prompt show", "prompt edit")
+	m.input.SetValue("/prompt")
 	m.refreshSuggestions()
 	if len(m.suggestions) != 1 {
 		t.Fatalf("expected 1 suggestion, got %d", len(m.suggestions))
 	}
-	if m.suggestions[0].CommandPath != "profile list" {
+	if m.suggestions[0].CommandPath != "prompt edit" {
 		t.Fatalf("unexpected suggestion %q", m.suggestions[0].CommandPath)
 	}
 }

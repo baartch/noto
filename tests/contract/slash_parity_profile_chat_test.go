@@ -12,7 +12,7 @@ import (
 	"noto/internal/store"
 )
 
-// buildRegistry creates a registry with real profile commands backed by a temp DB.
+// buildRegistry creates a registry with real commands backed by a temp DB.
 func buildRegistry(t *testing.T) *commands.Registry {
 	t.Helper()
 	dir := t.TempDir()
@@ -24,50 +24,12 @@ func buildRegistry(t *testing.T) *commands.Registry {
 	t.Cleanup(func() { db.Close() })
 
 	svc := profile.NewService(store.NewProfileRepo(db))
+	_ = svc
 	r := commands.NewRegistry()
-	if err := commands.RegisterProfileCommands(r, svc); err != nil {
-		t.Fatalf("register profile commands: %v", err)
-	}
 	if err := commands.RegisterPromptCommands(r); err != nil {
 		t.Fatalf("register prompt commands: %v", err)
 	}
 	return r
-}
-
-func TestSlashParity_ProfileSelect_NoArgs_OpensPicker(t *testing.T) {
-	r := buildRegistry(t)
-	dispatcher := chat.NewDispatcher(r)
-
-	var out strings.Builder
-	ctx := &commands.ExecContext{Output: &out}
-
-	// /profile select with no args returns ErrOpenProfilePicker (not a hard error).
-	result := dispatcher.Dispatch("/profile select", ctx)
-	if !result.IsSlash {
-		t.Error("expected IsSlash=true")
-	}
-	if result.Err == nil {
-		t.Fatal("expected ErrOpenProfilePicker sentinel error")
-	}
-	if !commands.AsErrOpenProfilePicker(result.Err) {
-		t.Errorf("expected ErrOpenProfilePicker, got: %v", result.Err)
-	}
-}
-
-func TestSlashParity_ProfileCreate(t *testing.T) {
-	r := buildRegistry(t)
-	dispatcher := chat.NewDispatcher(r)
-
-	var out strings.Builder
-	ctx := &commands.ExecContext{Output: &out, ProfileSlug: "test"}
-
-	result := dispatcher.Dispatch("/profile create myprofile", ctx)
-	if result.Err != nil {
-		t.Fatalf("dispatch error: %v", result.Err)
-	}
-	if !result.Executed {
-		t.Error("expected Executed=true")
-	}
 }
 
 func TestSlashParity_PartialInput_ReturnsSuggestions(t *testing.T) {
@@ -86,13 +48,13 @@ func TestSlashParity_PartialInput_ReturnsSuggestions(t *testing.T) {
 	}
 	found := false
 	for _, s := range result.Suggestions {
-		if strings.HasPrefix(s.CommandPath, "profile") {
+		if strings.HasPrefix(s.CommandPath, "prompt") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("expected profile suggestions for /pro")
+		t.Error("expected prompt suggestions for /pro")
 	}
 }
 
@@ -103,7 +65,7 @@ func TestSlashParity_UnknownCommand_ReturnsErrorAndSuggestions(t *testing.T) {
 	var out strings.Builder
 	ctx := &commands.ExecContext{Output: &out}
 
-	result := dispatcher.Dispatch("/profile frobnicate", ctx)
+	result := dispatcher.Dispatch("/prompt frobnicate", ctx)
 	if result.Err == nil {
 		t.Error("expected error for unknown command")
 	}
@@ -131,10 +93,8 @@ func TestSlashParser_CanonicalPath(t *testing.T) {
 		wantPath string
 		wantArgs []string
 	}{
-		{"/profile list", "profile list", nil},
-		{"/profile create \"My Profile\"", "profile create", []string{"My Profile"}},
-		{"/profile select alpha", "profile select", []string{"alpha"}},
 		{"/prompt show", "prompt show", nil},
+		{"/prompt edit", "prompt edit", nil},
 	}
 
 	for _, tc := range cases {

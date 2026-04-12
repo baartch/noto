@@ -39,11 +39,6 @@ type ListModelsFunc func(ctx context.Context) ([]provider.ModelInfo, error)
 // ModelSelectedFunc is called when the user picks a model in the picker.
 type ModelSelectedFunc func(modelID string) error
 
-// ListProfilesFunc returns all profiles for the profile picker.
-type ListProfilesFunc func(ctx context.Context) ([]*store.Profile, error)
-
-// ProfileSwitchCmd returns a command to switch profiles.
-type ProfileSwitchCmd func(profileName string) tea.Cmd
 
 // ListBackupsFunc returns backup timestamps for the active profile.
 type ListBackupsFunc func(ctx context.Context) ([]string, error)
@@ -98,10 +93,6 @@ type modelsLoadedMsg struct {
 	items []pickerItem
 	err   error
 }
-type profilesLoadedMsg struct {
-	items []pickerItem
-	err   error
-}
 type backupsLoadedMsg struct {
 	items []pickerItem
 	err   error
@@ -137,7 +128,6 @@ type pickerKind int
 
 const (
 	pickerKindModel          pickerKind = iota
-	pickerKindProfile        pickerKind = iota
 	pickerKindBackup         pickerKind = iota
 	pickerKindExtractorModel pickerKind = iota
 )
@@ -209,8 +199,6 @@ type Model struct {
 	provider               ProviderFunc
 	listModels             ListModelsFunc
 	modelSelected          ModelSelectedFunc
-	listProfiles           ListProfilesFunc
-	profileSwitch          ProfileSwitchCmd
 	listBackups            ListBackupsFunc
 	backupSelected         BackupSelectedFunc
 	extractorModel         string
@@ -275,8 +263,6 @@ func New(
 	providerFn ProviderFunc,
 	listModels ListModelsFunc,
 	modelSelected ModelSelectedFunc,
-	listProfiles ListProfilesFunc,
-	profileSwitch ProfileSwitchCmd,
 	listBackups ListBackupsFunc,
 	backupSelected BackupSelectedFunc,
 	extractorModelSelected ExtractorModelSelectedFunc,
@@ -345,8 +331,6 @@ func New(
 		helpKeys:               helpKeys,
 		listModels:             listModels,
 		modelSelected:          modelSelected,
-		listProfiles:           listProfiles,
-		profileSwitch:          profileSwitch,
 		listBackups:            listBackups,
 		backupSelected:         backupSelected,
 		extractorModel:         extractorModel,
@@ -387,16 +371,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// ---- picker items loaded ------------------------------------------------
 	case modelsLoadedMsg:
 		if m.picker != nil && (m.pickerKind == pickerKindModel || m.pickerKind == pickerKindExtractorModel) {
-			m.picker.loading = false
-			if msg.err != nil {
-				m.picker.err = msg.err
-			} else {
-				m.picker.setItems(msg.items)
-			}
-		}
-
-	case profilesLoadedMsg:
-		if m.picker != nil && m.pickerKind == pickerKindProfile {
 			m.picker.loading = false
 			if msg.err != nil {
 				m.picker.err = msg.err
@@ -588,6 +562,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.openModel):
 			return m.openPicker(pickerKindModel, cmds)
+
+		case msg.Key().Code == tea.KeyCtrlP:
+			return m.openProfilesList()
 
 		case key.Matches(msg, m.keys.toggleHelp):
 			m.help.ShowAll = !m.help.ShowAll
@@ -785,9 +762,6 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 			if openErr, ok := commands.AsErrOpenEditor(result.Err); ok {
 				return m, m.openEditor(openErr.Path, openErr.OnSave, cmds)
 			}
-			if commands.AsErrOpenProfilePicker(result.Err) {
-				return m.openPicker(pickerKindProfile, cmds)
-			}
 			if commands.AsErrOpenBackupPicker(result.Err) {
 				return m.openPicker(pickerKindBackup, cmds)
 			}
@@ -857,30 +831,6 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 		} else {
 			m.picker.loading = false
 			m.picker.err = errors.New("no provider configured")
-		}
-
-	case pickerKindProfile:
-		m.picker = newPickerState("Select profile", m.width-4)
-		m.picker.loading = true
-		if m.listProfiles != nil {
-			current := m.profileName
-			cmds = append(cmds, func() tea.Msg {
-				profiles, err := m.listProfiles(context.Background())
-				if err != nil {
-					return profilesLoadedMsg{err: err}
-				}
-				items := make([]pickerItem, len(profiles))
-				for i, p := range profiles {
-					items[i] = pickerItem{
-						Value:  p.Name,
-						Active: p.Name == current,
-					}
-				}
-				return profilesLoadedMsg{items: items}
-			})
-		} else {
-			m.picker.loading = false
-			m.picker.err = errors.New("no profile service available")
 		}
 
 	case pickerKindBackup:
@@ -970,10 +920,6 @@ func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea
 					m.messages = append(m.messages, chatMessage{role: "command", content: "Model set to: " + chosen, timestamp: time.Now()})
 					m.syncViewport()
 				}
-			}
-		case pickerKindProfile:
-			if m.profileSwitch != nil {
-				cmds = append(cmds, m.profileSwitch(chosen))
 			}
 		case pickerKindBackup:
 			if m.backupSelected != nil {
@@ -1430,15 +1376,6 @@ func (m Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
 		case settingsIDExtractorModel:
 			m.settingsOpen = false
 			return m.openPicker(pickerKindExtractorModel, nil)
-		case "profile_select":
-			m.settingsOpen = false
-			return m.openPicker(pickerKindProfile, nil)
-		case "profile_create":
-			return m.startProfilePrompt("profile create")
-		case "profile_rename":
-			return m.startProfilePrompt("profile rename")
-		case "profile_delete":
-			return m.startProfilePrompt("profile delete")
 		}
 		return m, nil
 	}
@@ -1640,16 +1577,6 @@ func (m *Model) saveProviderAPIKey(key string) error {
 	}
 	repo := store.NewProviderConfigRepo(m.execCtx.DB)
 	return repo.SetCredentialRef(context.Background(), m.execCtx.ProfileID, encrypted)
-}
-
-func (m *Model) startProfilePrompt(command string) (tea.Model, tea.Cmd) {
-	m.settingsOpen = false
-	m.settingsErr = ""
-	m.settingsEditing = false
-	m.settingsEditEntry = nil
-	m.input.SetValue("/" + command + " ")
-	m.input.CursorEnd()
-	return m, m.input.Focus()
 }
 
 func (m *Model) saveSystemPrompt(prompt string) error {

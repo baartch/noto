@@ -150,32 +150,6 @@ func DefaultSettingsMenu() *SettingsMenu {
 				Submenu: &SettingsMenu{
 					ID:    settingsIDProfiles,
 					Title: "Profiles",
-					Entries: []SettingsEntry{
-						{
-							ID:        "profile_select",
-							Label:     "Select",
-							Kind:      SettingsEntryAction,
-							ValueType: SettingsValueAction,
-						},
-						{
-							ID:        "profile_create",
-							Label:     "Create",
-							Kind:      SettingsEntryAction,
-							ValueType: SettingsValueAction,
-						},
-						{
-							ID:        "profile_rename",
-							Label:     "Rename",
-							Kind:      SettingsEntryAction,
-							ValueType: SettingsValueAction,
-						},
-						{
-							ID:        "profile_delete",
-							Label:     "Delete",
-							Kind:      SettingsEntryAction,
-							ValueType: SettingsValueAction,
-						},
-					},
 				},
 			},
 			{

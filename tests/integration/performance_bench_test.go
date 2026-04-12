@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"noto/internal/commands"
-	"noto/internal/parser"
 	"noto/internal/profile"
 	"noto/internal/store"
 	"noto/internal/suggest"
@@ -46,29 +45,12 @@ func BenchmarkStartup_ProfileList(b *testing.B) {
 // BenchmarkSlashSuggestion measures suggestion refresh latency per keystroke.
 func BenchmarkSlashSuggestion_Refresh(b *testing.B) {
 	r := commands.NewRegistry()
-	commands.RegisterProfileCommands(r, commands.NoopProfileService{})
 	commands.RegisterPromptCommands(r)
 	engine := suggest.New(r)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = engine.Suggest("profile")
-	}
-}
-
-// BenchmarkSlashParser measures parsing latency per input.
-func BenchmarkSlashParser_Parse(b *testing.B) {
-	inputs := []string{
-		"/profile list",
-		"/profile select \"My Profile\"",
-		"/prompt show",
-		"/pro",
-		"/",
-	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		input := inputs[i%len(inputs)]
-		_ = parser.Parse(input)
+		_ = engine.Suggest("prompt")
 	}
 }
 

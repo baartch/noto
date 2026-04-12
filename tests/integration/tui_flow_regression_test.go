@@ -130,9 +130,6 @@ func newSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext) {
 	}
 
 	registry := commands.NewRegistry()
-	if err := commands.RegisterProfileCommands(registry, profile.NewService(store.NewProfileRepo(db))); err != nil {
-		t.Fatalf("register profile commands: %v", err)
-	}
 	if err := commands.RegisterPromptCommands(registry); err != nil {
 		t.Fatalf("register prompt commands: %v", err)
 	}

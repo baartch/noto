@@ -19,11 +19,14 @@ const (
 )
 
 // Command represents a single canonical command definition shared by the CLI and slash dispatcher.
+// HandlerFunc is the function signature for command handlers.
+type HandlerFunc = func(ctx *ExecContext, args []string) error
+
 type Command struct {
-	// Path is the canonical hierarchical path, e.g. "profile list" or "prompt show".
+	// Path is the canonical hierarchical path, e.g. "prompt show".
 	Path string
 
-	// Usage is the short usage string, e.g. "profile list".
+	// Usage is the short usage string, e.g. "prompt show".
 	Usage string
 
 	// Description is the human-readable description shown in suggestions and help.
@@ -40,7 +43,7 @@ type Command struct {
 
 	// Handler is the function invoked when the command is executed.
 	// args contains positional arguments after the command path.
-	Handler func(ctx *ExecContext, args []string) error
+	Handler HandlerFunc
 }
 
 // ExecContext carries the runtime context for command execution.
