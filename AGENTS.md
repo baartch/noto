@@ -11,6 +11,7 @@ Auto-generated from all feature plans. Last updated: 2026-04-12
 - Profile metadata (profile.json) + per-profile SQLite for existing provider/system prompt data (006-settings-dialog)
 - Go 1.26+ + Bubble Tea v2, Bubbles v2, Lip Gloss v2, Cobra (006-settings-dialog)
 - profile.json + per-profile SQLite (`~/.noto/profiles/<slug>/memory.db`) (006-settings-dialog)
+- profile.json + per-profile SQLite (modernc.org/sqlite) (006-settings-dialog)
 
 - Go 1.26+ + Cobra (CLI command surface), Bubble Tea + Bubbles + Lip Gloss (TUI), (001-build-profile-memory-cli)
 - Local SQLite per profile (`~/.noto/profiles/<profile>/memory.db`) + profile-local (001-build-profile-memory-cli)
@@ -39,8 +40,8 @@ tests/
 Go 1.26+: Follow standard conventions
 
 ## Recent Changes
+- 006-settings-dialog: Added Go 1.26+ + charm.land/bubbletea/v2, charm.land/bubbles/v2, charm.land/lipgloss/v2, Cobra
 - 006-settings-dialog: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
-- 006-settings-dialog: Added Go 1.26+ + Bubble Tea v2, Bubbles v2, Lip Gloss v2, Cobra
 - 006-settings-dialog: Added Go 1.26+ + Bubble Tea v2, Bubbles v2, Lip Gloss v2, Cobra
 
 

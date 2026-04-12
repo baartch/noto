@@ -1336,7 +1336,7 @@ func (m *Model) refreshProfilesList() {
 	for _, p := range profiles {
 		label := p.Name
 		if p.IsDefault {
-			label = label + " (active)"
+			label += " (active)"
 		}
 		items = append(items, SettingsEntry{
 			ID:    p.Name,

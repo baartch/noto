@@ -26,6 +26,6 @@ cd /home/andy/gitrepos/noto
 ## Build & Test Status
 
 ```
-go test ./...  → (pending)
-make lint      → (pending)
+go test ./...  → passed
+make lint      → passed
 ```

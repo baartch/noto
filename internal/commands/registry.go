@@ -19,9 +19,11 @@ const (
 )
 
 // Command represents a single canonical command definition shared by the CLI and slash dispatcher.
+
 // HandlerFunc is the function signature for command handlers.
 type HandlerFunc = func(ctx *ExecContext, args []string) error
 
+// Command defines a single canonical command shared by the CLI and slash dispatcher.
 type Command struct {
 	// Path is the canonical hierarchical path, e.g. "prompt show".
 	Path string

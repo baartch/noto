@@ -54,10 +54,10 @@
 
 ## Phase 7: Polish & Cross-Cutting
 
-- [ ] T016 [P] Run gofmt on modified files (internal/tui/model.go, internal/tui/settings_menu.go, internal/commands/profile_commands.go, internal/commands/registry.go)
-- [ ] T017 Run go test ./... and update quickstart build status (specs/006-settings-dialog/quickstart.md)
-- [ ] T018 Run make lint and update quickstart build status (specs/006-settings-dialog/quickstart.md)
-- [ ] T019 Update AGENTS.md if new tech/context added (./.specify/scripts/bash/update-agent-context.sh pi)
+- [X] T016 [P] Run gofmt on modified files (internal/tui/model.go, internal/tui/settings_menu.go, internal/commands/profile_commands.go, internal/commands/registry.go)
+- [X] T017 Run go test ./... and update quickstart build status (specs/006-settings-dialog/quickstart.md)
+- [X] T018 Run make lint and update quickstart build status (specs/006-settings-dialog/quickstart.md)
+- [X] T019 Update AGENTS.md if new tech/context added (./.specify/scripts/bash/update-agent-context.sh pi)
 
 ## Dependencies
 
