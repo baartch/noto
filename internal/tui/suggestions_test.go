@@ -99,8 +99,8 @@ func TestRefreshSuggestionsFiltersByPrefix(t *testing.T) {
 	m := newTestModelWithCommands("prompt show", "prompt edit")
 	m.input.SetValue("/prompt")
 	m.refreshSuggestions()
-	if len(m.suggestions) != 1 {
-		t.Fatalf("expected 1 suggestion, got %d", len(m.suggestions))
+	if len(m.suggestions) != 2 {
+		t.Fatalf("expected 2 suggestions, got %d", len(m.suggestions))
 	}
 	if m.suggestions[0].CommandPath != "prompt edit" {
 		t.Fatalf("unexpected suggestion %q", m.suggestions[0].CommandPath)

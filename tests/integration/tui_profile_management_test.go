@@ -38,17 +38,30 @@ func openProfilesSubmenu(t *testing.T, m tui.Model) tui.Model {
 	return asModel(t, updated)
 }
 
-func newProfileSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext) {
-	_, execCtx := newSettingsModel(t)
+func newProfileSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext, *profile.Service) {
+	t.Helper()
+	db, closeDB := tempDB(t)
+	t.Cleanup(closeDB)
 
-	execCtx = &commands.ExecContext{ProfileID: execCtx.ProfileID, ProfileSlug: execCtx.ProfileSlug, DB: execCtx.DB}
+	repo := store.NewProfileRepo(db)
+	svc := profile.NewService(repo)
+	ctx := context.Background()
+	p, err := svc.Create(ctx, "Profile")
+	if err != nil {
+		t.Fatalf("create profile: %v", err)
+	}
+	if _, err := svc.Select(ctx, p.Name); err != nil {
+		t.Fatalf("select profile: %v", err)
+	}
+
+	execCtx := &commands.ExecContext{ProfileID: p.ID, ProfileSlug: p.Slug, DB: db}
 	m := tui.New(
-		"Profile", "", "", "cache: n/a", "tokens: n/a", false,
+		p.Name, "", "", "cache: n/a", "tokens: n/a", false,
 		chat.NewDispatcher(commands.NewRegistry()),
 		execCtx,
 		nil, nil,
 		func(string) error { return nil },
-		nil,
+		svc,
 		func(string) tea.Cmd { return nil },
 		nil,
 		func(string) error { return nil },
@@ -57,24 +70,24 @@ func newProfileSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext) {
 	)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = asModel(t, updated)
-	return m, execCtx
+	return m, execCtx, svc
 }
 
 func TestSettingsProfiles_ListView(t *testing.T) {
-	m, execCtx := newProfileSettingsModel(t)
+	m, execCtx, svc := newProfileSettingsModel(t)
 	if execCtx == nil {
 		t.Fatalf("missing exec context")
 	}
 
-	svc := profile.NewService(store.NewProfileRepo(execCtx.DB))
 	if _, err := svc.Create(context.Background(), "Alt Profile"); err != nil {
 		t.Fatalf("create profile: %v", err)
 	}
 
 	m = openProfilesSubmenu(t, m)
 	view := m.View().Content
+	t.Logf("profiles view: %s", view)
 
-	if !strings.Contains(view, "Profiles") {
+	if !strings.Contains(view, "Profile") {
 		t.Fatalf("expected profiles list view")
 	}
 	if !strings.Contains(view, "Alt Profile") {
@@ -83,7 +96,7 @@ func TestSettingsProfiles_ListView(t *testing.T) {
 }
 
 func TestSettingsProfiles_KeyHints(t *testing.T) {
-	m, _ := newProfileSettingsModel(t)
+	m, _, _ := newProfileSettingsModel(t)
 	m = openProfilesSubmenu(t, m)
 	view := m.View().Content
 

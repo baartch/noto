@@ -22,6 +22,7 @@ const (
 	SettingsEntryValue   SettingsEntryKind = "value"
 	SettingsEntrySubmenu SettingsEntryKind = "submenu"
 	SettingsEntryAction  SettingsEntryKind = "action"
+	SettingsEntryProfile SettingsEntryKind = "profile"
 )
 
 // SettingsValueType indicates how a value should be edited.

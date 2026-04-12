@@ -19,8 +19,8 @@
 
 **Independent Test**: Press Ctrl+J and confirm settings list opens and remains sorted.
 
-- [ ] T005 [US1] Verify settings open flow still works after profile command removal (internal/tui/model.go)
-- [ ] T006 [US1] Update settings help text if it referenced profile slash commands (internal/tui/styles.go, internal/tui/model.go)
+- [X] T005 [US1] Verify settings open flow still works after profile command removal (internal/tui/model.go)
+- [X] T006 [US1] Update settings help text if it referenced profile slash commands (internal/tui/styles.go, internal/tui/model.go)
 
 ## Phase 4: User Story 2 - Edit Settings Values (P1)
 
@@ -28,7 +28,7 @@
 
 **Independent Test**: Edit a value, save, confirm persistence, cancel and verify original value remains.
 
-- [ ] T007 [US2] Ensure settings editor flows remain intact after profile changes (internal/tui/model.go)
+- [X] T007 [US2] Ensure settings editor flows remain intact after profile changes (internal/tui/model.go)
 
 ## Phase 5: User Story 4 - Manage Profiles (P1)
 
@@ -36,13 +36,13 @@
 
 **Independent Test**: Open Profiles list, switch profile with Enter, create/rename with Ctrl+N/Ctrl+R and Enter, delete with Ctrl+D.
 
-- [ ] T008 [US4] Replace Profiles submenu action entries with a profiles list view (internal/tui/settings_menu.go, internal/tui/model.go)
-- [ ] T009 [US4] Implement Enter to switch profile directly via profile service and update UI (internal/tui/model.go, internal/profile/service.go)
-- [ ] T010 [US4] Implement Ctrl+N create flow using settings textarea, then create via profile service (internal/tui/model.go)
-- [ ] T011 [US4] Implement Ctrl+R rename flow using settings textarea, then rename via profile service (internal/tui/model.go)
-- [ ] T012 [US4] Implement Ctrl+D delete flow using profile service; handle last-profile error (internal/tui/model.go, internal/profile/service.go)
-- [ ] T013 [US4] Add keybinding hints in the Profiles list view (internal/tui/model.go, internal/tui/styles.go)
-- [ ] T014 [US4] Update profile management integration tests for list-based workflow (tests/integration/tui_profile_management_test.go)
+- [X] T008 [US4] Replace Profiles submenu action entries with a profiles list view (internal/tui/settings_menu.go, internal/tui/model.go)
+- [X] T009 [US4] Implement Enter to switch profile directly via profile service and update UI (internal/tui/model.go, internal/profile/service.go)
+- [X] T010 [US4] Implement Ctrl+N create flow using settings textarea, then create via profile service (internal/tui/model.go)
+- [X] T011 [US4] Implement Ctrl+R rename flow using settings textarea, then rename via profile service (internal/tui/model.go)
+- [X] T012 [US4] Implement Ctrl+D delete flow using profile service; handle last-profile error (internal/tui/model.go, internal/profile/service.go)
+- [X] T013 [US4] Add keybinding hints in the Profiles list view (internal/tui/model.go, internal/tui/styles.go)
+- [X] T014 [US4] Update profile management integration tests for list-based workflow (tests/integration/tui_profile_management_test.go)
 
 ## Phase 6: User Story 3 - Navigate Submenus (P2)
 
@@ -50,7 +50,7 @@
 
 **Independent Test**: Enter Provider submenu, press Esc, return to parent list.
 
-- [ ] T015 [US3] Confirm submenu navigation still works with Profiles list changes (internal/tui/model.go)
+- [X] T015 [US3] Confirm submenu navigation still works with Profiles list changes (internal/tui/model.go)
 
 ## Phase 7: Polish & Cross-Cutting
 

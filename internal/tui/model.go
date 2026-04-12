@@ -39,6 +39,8 @@ type ListModelsFunc func(ctx context.Context) ([]provider.ModelInfo, error)
 // ModelSelectedFunc is called when the user picks a model in the picker.
 type ModelSelectedFunc func(modelID string) error
 
+// ProfileSwitchCmd switches the active profile and refreshes the TUI.
+type ProfileSwitchCmd func(profileName string) tea.Cmd
 
 // ListBackupsFunc returns backup timestamps for the active profile.
 type ListBackupsFunc func(ctx context.Context) ([]string, error)
@@ -105,6 +107,38 @@ type editorFinishedMsg struct {
 	onSave func() error
 }
 type statsUpdatedMsg struct{ formatted string }
+
+type profilesAction interface {
+	Label() string
+	Apply(ctx context.Context, svc *profile.Service, selected string) (*store.Profile, error)
+}
+
+type profilesCreateAction struct{}
+
+type profilesRenameAction struct {
+	current string
+}
+
+func (profilesCreateAction) Label() string { return "New Profile" }
+
+func (profilesCreateAction) Apply(ctx context.Context, svc *profile.Service, value string) (*store.Profile, error) {
+	if svc == nil {
+		return nil, errors.New("settings: no profile service")
+	}
+	return svc.Create(ctx, value)
+}
+
+func (a profilesRenameAction) Label() string {
+	return "Rename Profile"
+}
+
+func (a profilesRenameAction) Apply(ctx context.Context, svc *profile.Service, value string) (*store.Profile, error) {
+	if svc == nil {
+		return nil, errors.New("settings: no profile service")
+	}
+	return svc.Rename(ctx, a.current, value)
+}
+
 type profileSwitchedMsg struct {
 	profileName            string
 	activeModel            string
@@ -199,8 +233,11 @@ type Model struct {
 	provider               ProviderFunc
 	listModels             ListModelsFunc
 	modelSelected          ModelSelectedFunc
+	profileService         *profile.Service
+	profileSwitch          ProfileSwitchCmd
 	listBackups            ListBackupsFunc
 	backupSelected         BackupSelectedFunc
+	profilesAction         profilesAction
 	extractorModel         string
 	extractorModelSelected ExtractorModelSelectedFunc
 	extractorFallback      bool
@@ -213,11 +250,14 @@ type chatMessage struct {
 }
 
 type keyMap struct {
-	quit         key.Binding
-	openModel    key.Binding
-	clearInput   key.Binding
-	toggleHelp   key.Binding
-	openSettings key.Binding
+	quit          key.Binding
+	openModel     key.Binding
+	clearInput    key.Binding
+	toggleHelp    key.Binding
+	openSettings  key.Binding
+	profileNew    key.Binding
+	profileRename key.Binding
+	profileDelete key.Binding
 }
 
 type helpKeyMap struct {
@@ -263,6 +303,8 @@ func New(
 	providerFn ProviderFunc,
 	listModels ListModelsFunc,
 	modelSelected ModelSelectedFunc,
+	profileService *profile.Service,
+	profileSwitch ProfileSwitchCmd,
 	listBackups ListBackupsFunc,
 	backupSelected BackupSelectedFunc,
 	extractorModelSelected ExtractorModelSelectedFunc,
@@ -289,11 +331,14 @@ func New(
 		key.WithHelp("alt+enter", "insert newline"),
 	)
 	keys := keyMap{
-		quit:         key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "quit")),
-		openModel:    key.NewBinding(key.WithKeys("ctrl+l"), key.WithHelp("ctrl+l", "model picker")),
-		clearInput:   key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "clear")),
-		toggleHelp:   key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "help")),
-		openSettings: key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j", "settings")),
+		quit:          key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "quit")),
+		openModel:     key.NewBinding(key.WithKeys("ctrl+l"), key.WithHelp("ctrl+l", "model picker")),
+		clearInput:    key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "clear")),
+		toggleHelp:    key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "help")),
+		openSettings:  key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j", "settings")),
+		profileNew:    key.NewBinding(key.WithKeys("ctrl+n"), key.WithHelp("ctrl+n", "new profile")),
+		profileRename: key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "rename profile")),
+		profileDelete: key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "delete profile")),
 	}
 	helpModel := help.New()
 	helpModel.Styles.ShortKey = helpShortStyle
@@ -331,6 +376,8 @@ func New(
 		helpKeys:               helpKeys,
 		listModels:             listModels,
 		modelSelected:          modelSelected,
+		profileService:         profileService,
+		profileSwitch:          profileSwitch,
 		listBackups:            listBackups,
 		backupSelected:         backupSelected,
 		extractorModel:         extractorModel,
@@ -456,6 +503,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = nil
 		m.clearSuggestions()
 		m.input.SetValue("")
+		m.refreshSettingsValues()
+		m.syncSettingsList()
 		m.syncViewport()
 
 	case profileSwitchFailedMsg:
@@ -505,6 +554,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.settingsEditing = false
 				m.settingsEditEntry = nil
 				m.settingsErr = ""
+				m.profilesAction = nil
 				return m, nil
 			// Enter saves; alt+enter falls through to the textarea for newline
 			case msg.Key().Code == tea.KeyEnter && msg.Key().Mod == 0:
@@ -524,6 +574,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.settingsOpen = false
 				m.settingsErr = ""
 				return m, m.input.Focus()
+			}
+			if m.settingsMenu != nil && m.settingsMenu.ID == settingsIDProfiles {
+				switch {
+				case key.Matches(msg, m.keys.profileNew):
+					return m.startProfileEditor("New Profile", profilesCreateAction{})
+				case key.Matches(msg, m.keys.profileRename):
+					return m.startProfileEditor("Rename Profile", profilesRenameAction{current: m.selectedProfileName()})
+				case key.Matches(msg, m.keys.profileDelete):
+					return m.deleteSelectedProfile()
+				}
 			}
 			switch msg.Key().Code {
 			case tea.KeyEsc:
@@ -563,9 +623,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.openModel):
 			return m.openPicker(pickerKindModel, cmds)
 
-		case msg.Key().Code == tea.KeyCtrlP:
-			return m.openProfilesList()
-
 		case key.Matches(msg, m.keys.toggleHelp):
 			m.help.ShowAll = !m.help.ShowAll
 			return m, nil
@@ -577,6 +634,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.settingsOpen {
 				m.settingsEditing = false
 				m.settingsErr = ""
+				m.profilesAction = nil
 				if m.settingsMenu == nil {
 					m.settingsMenu = DefaultSettingsMenu()
 				}
@@ -599,6 +657,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.settingsOpen = false
 				m.settingsEditing = false
 				m.settingsErr = ""
+				m.profilesAction = nil
 				return m, nil
 			}
 			if len(m.suggestions) > 0 {
@@ -1220,7 +1279,12 @@ func (m *Model) renderSettingsList(height int) string {
 	m.settingsList.SetWidth(max(m.width-6, 20))
 	m.settingsList.Title = settingsHelpText
 
-	return pickerBorderStyle.Render(m.settingsList.View())
+	head := m.settingsList.Title
+	if m.settingsMenu != nil && m.settingsMenu.ID == settingsIDProfiles {
+		head = head + "\n" + helpShortStyle.Render("  Enter select · Ctrl+N new · Ctrl+R rename · Ctrl+D delete")
+	}
+
+	return pickerBorderStyle.Render(head + "\n" + m.settingsList.View())
 }
 
 func (m *Model) syncSettingsList() {
@@ -1245,6 +1309,112 @@ func (m *Model) syncSettingsList() {
 	if len(items) > 0 {
 		m.settingsList.Select(0)
 	}
+}
+
+func (m *Model) refreshProfilesList() {
+	if m.settingsMenu == nil {
+		return
+	}
+	var menu *SettingsMenu
+	if m.settingsMenu.ID == settingsIDProfiles {
+		menu = m.settingsMenu
+	} else if next, ok := NavigateToSubmenu(m.settingsMenu, settingsIDProfiles); ok {
+		menu = next
+	}
+	if menu == nil {
+		return
+	}
+	menu.Entries = nil
+	if m.profileService == nil {
+		return
+	}
+	profiles, err := m.profileService.List(context.Background())
+	if err != nil {
+		return
+	}
+	items := make([]SettingsEntry, 0, len(profiles))
+	for _, p := range profiles {
+		label := p.Name
+		if p.IsDefault {
+			label = label + " (active)"
+		}
+		items = append(items, SettingsEntry{
+			ID:    p.Name,
+			Label: label,
+			Kind:  SettingsEntryProfile,
+			Value: p.Slug,
+		})
+	}
+	menu.Entries = items
+}
+
+func (m *Model) selectedProfileName() string {
+	entry := m.selectedSettingsEntry()
+	if entry == nil {
+		return ""
+	}
+	return entry.ID
+}
+
+func (m *Model) selectProfileEntry(entry *SettingsEntry) (tea.Model, tea.Cmd) {
+	if entry == nil || m.profileService == nil {
+		return m, nil
+	}
+	if m.profileSwitch != nil {
+		return m, m.profileSwitch(entry.ID)
+	}
+	m.settingsMenu = DefaultSettingsMenu()
+	p, err := m.profileService.Select(context.Background(), entry.ID)
+	if err != nil {
+		m.settingsErr = err.Error()
+		return m, nil
+	}
+	m.profileName = p.Name
+	m.execCtx.ProfileID = p.ID
+	m.execCtx.ProfileSlug = p.Slug
+	m.settingsErr = ""
+	m.settingsMenu = DefaultSettingsMenu()
+	m.refreshSettingsValues()
+	m.syncSettingsList()
+	return m, nil
+}
+
+func (m *Model) startProfileEditor(label string, action profilesAction) (tea.Model, tea.Cmd) {
+	m.settingsEditing = true
+	m.settingsErr = ""
+	m.settingsEditEntry = &SettingsEntry{ID: settingsIDProfiles, Label: label, Kind: SettingsEntryValue, ValueType: SettingsValueText}
+	m.settingsEditor = newSettingsEditor()
+	if action != nil {
+		m.settingsEditor.SetValue("")
+		if renameAction, ok := action.(profilesRenameAction); ok {
+			m.settingsEditor.SetValue(renameAction.current)
+		}
+		m.profilesAction = action
+	}
+	return m, m.settingsEditor.Focus()
+}
+
+func (m *Model) deleteSelectedProfile() (tea.Model, tea.Cmd) {
+	if m.profileService == nil {
+		return m, nil
+	}
+	name := m.selectedProfileName()
+	if name == "" {
+		return m, nil
+	}
+	if err := m.profileService.Delete(context.Background(), name, func(string) bool { return true }); err != nil {
+		m.err = err
+		m.settingsErr = ""
+		return m, nil
+	}
+	m.err = nil
+	m.settingsErr = ""
+	if cmd := m.syncActiveProfile(); cmd != nil {
+		return m, cmd
+	}
+	m.refreshSettingsValues()
+	m.syncSettingsList()
+	return m, nil
 }
 
 type settingsItem struct {
@@ -1289,6 +1459,10 @@ func (d settingsDelegate) Render(w io.Writer, m list.Model, index int, item list
 	case SettingsEntryValue:
 		if it.entry.Value != "" {
 			label = label + ": " + formatSettingsValue(it.entry.Value, m.Width()-10)
+		}
+	case SettingsEntryProfile:
+		if it.entry.Value != "" {
+			label = label + " · " + it.entry.Value
 		}
 	}
 	line := "  " + indicator + " " + label
@@ -1379,9 +1553,13 @@ func (m Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if entry.Kind == SettingsEntryProfile {
+		return m.selectProfileEntry(entry)
+	}
 	if entry.Kind == SettingsEntrySubmenu {
 		if next, ok := NavigateToSubmenu(m.settingsMenu, entry.ID); ok {
 			m.settingsMenu = next
+			m.refreshProfilesList()
 			m.syncSettingsList()
 			return m, nil
 		}
@@ -1410,6 +1588,48 @@ func (m Model) handleSettingsSave() (tea.Model, tea.Cmd) {
 	}
 	val := strings.TrimSpace(m.settingsEditor.Value())
 	entry := *m.settingsEditEntry
+	if m.profilesAction != nil && entry.ID == settingsIDProfiles {
+		action := m.profilesAction
+		val = strings.TrimSpace(m.settingsEditor.Value())
+		if val == "" {
+			m.settingsErr = "value must not be empty"
+			return m, nil
+		}
+		p, err := action.Apply(context.Background(), m.profileService, val)
+		if err != nil {
+			m.settingsErr = err.Error()
+			return m, nil
+		}
+		m.profilesAction = nil
+		m.settingsEditing = false
+		m.settingsEditEntry = nil
+		m.settingsErr = ""
+
+		switch action := action.(type) {
+		case profilesCreateAction:
+			selected, err := m.profileService.Select(context.Background(), p.Name)
+			if err != nil {
+				m.settingsErr = err.Error()
+				return m, nil
+			}
+			if cmd := m.switchToProfile(selected); cmd != nil {
+				return m, cmd
+			}
+		case profilesRenameAction:
+			if strings.EqualFold(action.current, m.profileName) {
+				if cmd := m.switchToProfile(p); cmd != nil {
+					return m, cmd
+				}
+			} else {
+				if cmd := m.syncActiveProfile(); cmd != nil {
+					return m, cmd
+				}
+			}
+		}
+		m.refreshSettingsValues()
+		m.syncSettingsList()
+		return m, nil
+	}
 	if entry.ValueType == SettingsValueNumber {
 		parsed, err := parsePositiveInt(val)
 		if err != nil {
@@ -1513,6 +1733,7 @@ func (m *Model) refreshSettingsValues() {
 		}
 	}
 	m.applySettingsValues()
+	m.refreshProfilesList()
 }
 
 func (m *Model) applySettingsValues() {
@@ -1592,6 +1813,35 @@ func (m *Model) saveSystemPrompt(prompt string) error {
 		return m.execCtx.OnPromptChanged(m.execCtx.ProfileSlug)
 	}
 	return nil
+}
+
+func (m *Model) switchToProfile(p *store.Profile) tea.Cmd {
+	if p == nil {
+		return nil
+	}
+	m.profileName = p.Name
+	if m.execCtx != nil {
+		m.execCtx.ProfileID = p.ID
+		m.execCtx.ProfileSlug = p.Slug
+	}
+	m.settingsMenu = DefaultSettingsMenu()
+	if m.profileSwitch != nil {
+		return m.profileSwitch(p.Name)
+	}
+	return nil
+}
+
+func (m *Model) syncActiveProfile() tea.Cmd {
+	if m.profileService == nil {
+		return nil
+	}
+	active, err := m.profileService.GetActive(context.Background())
+	if err != nil {
+		m.err = err
+		return nil
+	}
+	m.err = nil
+	return m.switchToProfile(active)
 }
 
 func (m *Model) renderSettingsEditor(height int) string {
