@@ -144,7 +144,7 @@ const (
 
 const (
 	settingsHeaderText = "Settings"
-	settingsHelpText   = "  Settings (↑↓ navigate · Enter edit/select · Esc close)"
+	settingsHelpText   = "  Settings  ↑↓ navigate · Enter select · Esc back/close · Ctrl+H help"
 )
 
 // ---- TUI model --------------------------------------------------------------
@@ -521,13 +521,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// ---- keyboard -----------------------------------------------------------
 	case tea.KeyPressMsg:
 		if m.settingsOpen && m.settingsEditing {
-			switch msg.Key().Code {
-			case tea.KeyEsc:
+			// ctrl+h toggles help even while editing
+			if key.Matches(msg, m.keys.toggleHelp) {
+				m.help.ShowAll = !m.help.ShowAll
+				return m, nil
+			}
+			switch {
+			case msg.Key().Code == tea.KeyEsc:
 				m.settingsEditing = false
 				m.settingsEditEntry = nil
 				m.settingsErr = ""
 				return m, nil
-			case tea.KeyEnter:
+			// Enter saves; alt+enter falls through to the textarea for newline
+			case msg.Key().Code == tea.KeyEnter && msg.Key().Mod == 0:
 				return m.handleSettingsSave()
 			}
 			var cmd tea.Cmd
@@ -535,6 +541,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		if m.settingsOpen && !m.settingsEditing {
+			// ctrl+h toggles help; ctrl+j closes settings
+			if key.Matches(msg, m.keys.toggleHelp) {
+				m.help.ShowAll = !m.help.ShowAll
+				return m, nil
+			}
+			if key.Matches(msg, m.keys.openSettings) || msg.String() == "ctrl+j" || msg.Key().Keystroke() == "ctrl+j" {
+				m.settingsOpen = false
+				m.settingsErr = ""
+				return m, m.input.Focus()
+			}
 			switch msg.Key().Code {
 			case tea.KeyEsc:
 				if next, ok := NavigateUp(m.settingsMenu); ok {
@@ -1085,13 +1101,13 @@ func (m Model) View() tea.View {
 
 	// ---- middle: picker or suggestions ----
 	var mid strings.Builder
-	if m.picker != nil {
-		ph := m.height / 2
-		ph = max(ph, 10)
+	ph := max(m.height/2, 10)
+	switch {
+	case m.picker != nil:
 		mid.WriteString(m.picker.render(ph) + "\n")
-	} else if m.settingsOpen {
-		mid.WriteString(m.renderSettingsDialog(max(m.height/2, 10)) + "\n")
-	} else if len(m.suggestions) > 0 {
+	case m.settingsOpen:
+		mid.WriteString(m.renderSettingsDialog(ph) + "\n")
+	case len(m.suggestions) > 0:
 		mid.WriteString(m.renderSuggestions(m.suggestionMaxHeight()))
 	}
 
@@ -1317,16 +1333,37 @@ func (d settingsDelegate) Render(w io.Writer, m list.Model, index int, item list
 	label := it.entry.Label
 	switch it.entry.Kind {
 	case SettingsEntrySubmenu:
-		label = label + " ›"
+		label += " ›"
 	case SettingsEntryAction:
-		label = label + " →"
+		label += " →"
 	case SettingsEntryValue:
 		if it.entry.Value != "" {
-			label = label + ": " + it.entry.Value
+			label = label + ": " + formatSettingsValue(it.entry.Value, m.Width()-10)
 		}
 	}
 	line := "  " + indicator + " " + label
 	_, _ = fmt.Fprint(w, style.Render(fitLine(line, m.Width())))
+}
+
+func formatSettingsValue(value string, maxWidth int) string {
+	trimmed := strings.TrimSpace(value)
+	trimmed = strings.ReplaceAll(trimmed, "\n", " ")
+	trimmed = strings.Join(strings.Fields(trimmed), " ")
+	if maxWidth <= 0 {
+		return trimmed
+	}
+	if lipgloss.Width(trimmed) <= maxWidth {
+		return trimmed
+	}
+	if maxWidth <= 3 {
+		return "..."
+	}
+	runes := []rune(trimmed)
+	maxRunes := maxWidth - 3
+	if len(runes) <= maxRunes {
+		return trimmed
+	}
+	return string(runes[:maxRunes]) + "..."
 }
 
 func newSettingsList(width int) list.Model {
@@ -1351,6 +1388,14 @@ func newSettingsEditor() textarea.Model {
 		key.WithKeys("alt+enter"),
 		key.WithHelp("alt+enter", "insert newline"),
 	)
+	editor.KeyMap.WordForward = key.NewBinding(
+		key.WithKeys("alt+right", "alt+f", "ctrl+right"),
+		key.WithHelp("ctrl+right", "word forward"),
+	)
+	editor.KeyMap.WordBackward = key.NewBinding(
+		key.WithKeys("alt+left", "alt+b", "ctrl+left"),
+		key.WithHelp("ctrl+left", "word backward"),
+	)
 	return editor
 }
 
@@ -1365,7 +1410,7 @@ func parsePositiveInt(val string) (int, error) {
 	return parsed, nil
 }
 
-func (m *Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
+func (m Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
 	if m.settingsMenu == nil {
 		return m, nil
 	}
@@ -1408,7 +1453,7 @@ func (m *Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleSettingsSave() (tea.Model, tea.Cmd) {
+func (m Model) handleSettingsSave() (tea.Model, tea.Cmd) {
 	if m.settingsEditEntry == nil {
 		m.settingsEditing = false
 		return m, nil
@@ -1422,7 +1467,7 @@ func (m *Model) handleSettingsSave() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.memoryTokenBudget = parsed
-		entry.Value = fmt.Sprintf("%d", parsed)
+		entry.Value = strconv.Itoa(parsed)
 		if err := profile.WriteSettings(m.execCtx.ProfileSlug, &profile.Settings{MemoryTokenBudget: parsed}); err != nil {
 			m.settingsErr = err.Error()
 			return m, nil
@@ -1534,7 +1579,7 @@ func applyToMenu(menu *SettingsMenu, m *Model) {
 		switch entries[i].ID {
 		case settingsIDMemoryTokenLimit:
 			if m.memoryTokenBudget > 0 {
-				entries[i].Value = fmt.Sprintf("%d", m.memoryTokenBudget)
+				entries[i].Value = strconv.Itoa(m.memoryTokenBudget)
 			}
 		case settingsIDSystemPrompt:
 			entries[i].Value = m.systemPrompt
@@ -1606,17 +1651,15 @@ func (m *Model) renderSettingsEditor(height int) string {
 	height = max(height-4, 6)
 	m.settingsEditor.SetHeight(height)
 	m.settingsEditor.SetWidth(max(m.width-8, 40))
-	m.settingsEditor.Focus()
-	m.settingsEditor.Prompt = "  "
-	m.settingsEditor.SetValue(m.settingsEditor.Value())
 
 	header := lipgloss.NewStyle().Bold(true).Render(m.settingsEditEntry.Label)
+	hint := helpShortStyle.Render("  Enter save · Esc cancel · Alt+Enter newline · Ctrl+←/→ word jump")
 	body := m.settingsEditor.View()
 	var errBlock string
 	if m.settingsErr != "" {
 		errBlock = "\n" + errStyle.Render("  "+m.settingsErr)
 	}
-	return pickerBorderStyle.Render(header + "\n" + body + errBlock)
+	return pickerBorderStyle.Render(header + "\n" + hint + "\n" + body + errBlock)
 }
 
 func suggestionWindow(total, cursor, maxRows int) (start, end int) {

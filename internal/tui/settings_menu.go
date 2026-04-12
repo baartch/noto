@@ -14,9 +14,10 @@ const (
 	settingsIDProviderAPIKey   = "provider_api_key"
 )
 
-// SettingsEntryKind describes whether an entry is a value or submenu.
+// SettingsEntryKind describes whether an entry is a value, submenu, or action.
 type SettingsEntryKind string
 
+// SettingsEntryKind values.
 const (
 	SettingsEntryValue   SettingsEntryKind = "value"
 	SettingsEntrySubmenu SettingsEntryKind = "submenu"
@@ -26,6 +27,7 @@ const (
 // SettingsValueType indicates how a value should be edited.
 type SettingsValueType string
 
+// SettingsValueType values.
 const (
 	SettingsValueText   SettingsValueType = "text"
 	SettingsValueNumber SettingsValueType = "number"
@@ -46,6 +48,7 @@ type SettingsEntry struct {
 // SettingsSource indicates the origin of a setting value.
 type SettingsSource string
 
+// SettingsSource values.
 const (
 	SettingsSourceProfile SettingsSource = "profile"
 	SettingsSourceDB      SettingsSource = "db"

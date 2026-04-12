@@ -19,7 +19,7 @@ As a user, I want a dedicated settings dialog so I can find and adjust app setti
 
 **Why this priority**: Settings access is foundational for configuring the app across profiles.
 
-**Independent Test**: Press Ctrl+J, and verify the settings dialog opens with entries ordered alphabetically.
+**Independent Test**: Press Ctrl+J, and verify the settings dialog opens with entries ordered alphabetically. Values are truncated with `...` when long or multi-line.
 
 **Acceptance Scenarios**:
 
@@ -42,6 +42,7 @@ As a user, I want to select a setting and edit its value so I can customize the 
 1. **Given** a settings entry represents a value, **When** the user selects it and presses Enter, **Then** a textarea editor opens to update the value.
 2. **Given** the editor is open for a text or numeric value, **When** the user presses Enter, **Then** the updated value is stored and visible in the list.
 2a. **Given** the user saves a new system prompt, **When** the value is persisted, **Then** the conversation context cache is invalidated so the new prompt takes effect immediately.
+2b. **Given** a multi-line or long value is shown in the list, **Then** it is flattened and truncated with `...` to avoid wrapping.
 3. **Given** the editor is open for a numeric value, **When** the user enters a non-numeric value, **Then** the system rejects it and keeps the editor open with an error.
 4. **Given** the editor is open for a text or numeric value, **When** the user presses Esc, **Then** the edit is canceled and the original value remains.
 
@@ -77,13 +78,16 @@ As a user, I want to navigate into and out of submenus so I can manage grouped s
 - **FR-003**: Users MUST be able to select a value entry and press Enter to edit it.
 - **FR-004**: The system MUST allow editing of text and numeric values through a dedicated textarea editor flow.
 - **FR-004a**: The system MUST validate numeric values and reject invalid entries with an error state.
+- **FR-004b**: The editor MUST support word-jump navigation via Ctrl+←/→ and multi-line input via Alt+Enter.
 - **FR-005**: Users MUST be able to enter submenus by selecting them and pressing Enter.
 - **FR-006**: When inside a submenu, pressing Esc MUST return to the previous menu level.
 - **FR-007**: When at the top-level settings menu, pressing Esc MUST close the settings dialog.
-- **FR-008**: The settings dialog MUST cover all app settings, including model selection, extractor model selection, provider configuration (submenu), token budget, and system prompt editing.
+- **FR-008**: The settings dialog MUST cover all app settings, including model selection, model extractor selection, provider configuration (submenu), token budget, and system prompt editing.
 - **FR-008a**: The system MUST store the system prompt in the profile database, not a standalone file, defaulting to "You are Noto. A buddy who takes notes." when missing.
 - **FR-008b**: The system MUST invalidate the conversation context cache whenever the system prompt is saved via the settings dialog.
+- **FR-008c**: Provider settings MUST include Endpoint and Key fields; Key values MUST be obfuscated in the list view.
 - **FR-009**: After a value is edited, the updated value MUST be persisted and displayed in the list.
+- **FR-009a**: Long or multi-line values MUST be flattened and truncated with `...` in the list view.
 - **FR-010**: The editor MUST save changes on Enter and cancel changes on Esc.
 
 ### Non-Functional Requirements *(mandatory)*
@@ -111,7 +115,7 @@ As a user, I want to navigate into and out of submenus so I can manage grouped s
 - **SC-002**: Users can open the settings dialog with Ctrl+, in under 1 second.
 - **SC-003**: Users can edit a value entry and see the updated value reflected immediately.
 - **SC-004**: Esc returns to the previous menu level in submenus and closes the dialog at the top level.
-- **SC-005**: All listed settings (model, extractor model, provider config, token budget, system prompt) are reachable within the dialog.
+- **SC-005**: All listed settings (model, model extractor, provider config, token budget, system prompt) are reachable within the dialog.
 - **SC-006**: 0 lint/format violations in CI for the feature scope.
 - **SC-007**: All new/changed behavior is covered by automated tests.
 

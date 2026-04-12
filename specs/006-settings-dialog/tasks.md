@@ -90,8 +90,8 @@
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T020 [P] Run go test ./... and make lint; capture results in specs/006-settings-dialog/quickstart.md
-- [ ] T021 Validate quickstart steps and update specs/006-settings-dialog/quickstart.md (manual performance measurement acceptable)
+- [X] T020 [P] Run go test ./... and make lint; capture results in specs/006-settings-dialog/quickstart.md
+- [X] T021 Validate quickstart steps and update specs/006-settings-dialog/quickstart.md (manual performance measurement acceptable)
 
 ---
 
