@@ -64,14 +64,14 @@ As a user, I want to manage profiles from the settings dialog so I can create, r
 
 **Why this priority**: Profile management is a core configuration workflow and should be accessible alongside other settings.
 
-**Independent Test**: Open the Profiles submenu and execute list/select/create/rename/delete actions with appropriate prompts and confirmation.
+**Independent Test**: Open the Profiles list and use Enter/Ctrl+N/Ctrl+R/Ctrl+D to manage profiles.
 
 **Acceptance Scenarios**:
 
-1. **Given** the settings dialog is open, **When** the user selects Profiles and presses Enter, **Then** the Profiles submenu opens.
-2. **Given** the Profiles submenu is open, **When** the user selects Select, **Then** the active profile switches and the UI updates.
-3. **Given** the Profiles submenu is open, **When** the user selects Create or Rename, **Then** the user is prompted for the new name and validation rules apply.
-4. **Given** the Profiles submenu is open, **When** the user selects Delete, **Then** explicit confirmation is required before removal.
+1. **Given** the settings dialog is open, **When** the user selects Profiles and presses Enter, **Then** the Profiles list opens.
+2. **Given** the Profiles list is open, **When** the user selects a profile and presses Enter, **Then** the active profile switches and the UI updates.
+3. **Given** the Profiles list is open, **When** the user presses Ctrl+N or Ctrl+R, **Then** a text editor opens and pressing Enter saves the name.
+4. **Given** the Profiles list is open, **When** the user presses Ctrl+D, **Then** the selected profile is deleted.
 
 **Acceptance Scenarios**:
 
@@ -99,7 +99,9 @@ As a user, I want to manage profiles from the settings dialog so I can create, r
 - **FR-005**: Users MUST be able to enter submenus by selecting them and pressing Enter.
 - **FR-006**: When inside a submenu, pressing Esc MUST return to the previous menu level.
 - **FR-007**: When at the top-level settings menu, pressing Esc MUST close the settings dialog.
-- **FR-008**: The settings dialog MUST cover all app settings, including model selection, model extractor selection, provider configuration (submenu), profile management (submenu), token budget, and system prompt editing.
+- **FR-008**: The settings dialog MUST cover all app settings, including model selection, model extractor selection, provider configuration (submenu), profile management (list), token budget, and system prompt editing.
+- **FR-008d**: The Profiles list MUST support Enter to select, Ctrl+N to create, Ctrl+R to rename, and Ctrl+D to delete profiles using the settings text editor.
+- **FR-008e**: Profile management MUST not rely on slash commands.
 - **FR-008a**: The system MUST store the system prompt in the profile database, not a standalone file, defaulting to "You are Noto. A buddy who takes notes." when missing.
 - **FR-008b**: The system MUST invalidate the conversation context cache whenever the system prompt is saved via the settings dialog.
 - **FR-008c**: Provider settings MUST include Endpoint and Key fields; Key values MUST be obfuscated in the list view.
@@ -129,7 +131,7 @@ As a user, I want to manage profiles from the settings dialog so I can create, r
 ### Measurable Outcomes
 
 - **SC-001**: 100% of settings entries appear in alphabetical order in the dialog.
-- **SC-002**: Users can open the settings dialog with Ctrl+, in under 1 second.
+- **SC-002**: Users can open the settings dialog with Ctrl+J in under 1 second.
 - **SC-003**: Users can edit a value entry and see the updated value reflected immediately.
 - **SC-004**: Esc returns to the previous menu level in submenus and closes the dialog at the top level.
 - **SC-005**: All listed settings (model, model extractor, provider config, profile management, token budget, system prompt) are reachable within the dialog.

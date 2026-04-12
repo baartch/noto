@@ -1,23 +1,31 @@
-# Quickstart: Settings Profile Management
+# Quickstart
+
+## Preconditions
+- Go 1.26+
+- Local profile database available (created on first run)
+
+## Run
+
+```bash
+cd /home/andy/gitrepos/noto
+```
+
+## Manual Test Checklist
+1. Launch `noto`.
+2. Press Ctrl+J to open settings.
+3. Navigate to Profiles.
+4. Confirm profiles list shows entries (active profile indicated).
+5. Press Enter on a profile to switch.
+6. Press Ctrl+N, enter a new profile name, press Enter to create.
+7. Press Ctrl+R on a profile, rename, press Enter.
+8. Press Ctrl+D to delete a profile (ensure not last).
+
+## Performance Check
+- Settings dialog opens in <1s with no visible lag.
 
 ## Build & Test Status
 
 ```
-go test ./...  → all packages pass
-make lint      → 0 issues
+go test ./...  → (pending)
+make lint      → (pending)
 ```
-
-## Profile Management Flow (Settings)
-
-1. Press **Ctrl+J** to open Settings.
-2. Navigate to **Profiles** and press **Enter**.
-3. Choose an action:
-   - **Select**: pick a profile; active profile switches.
-   - **Create**: enter a new profile name.
-   - **Rename**: enter old + new name.
-   - **Delete**: confirm deletion.
-4. **Esc** returns to parent menu; **Esc** at root closes Settings.
-
-## Performance
-
-Profile submenu opens in <1s (manual check).

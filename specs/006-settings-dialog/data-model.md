@@ -1,22 +1,25 @@
-# Data Model: Profile Management in Settings
+# Data Model
 
-## Settings Entry (Profiles)
+## Entities
 
-Add a Profiles submenu with action entries:
+### Profiles List Entry
+- **Description**: A selectable entry representing a profile within the settings Profiles list.
+- **Fields**:
+  - `ID` (string): Profile ID (UUID or slug key from storage).
+  - `Name` (string): Display name for the profile.
+  - `Slug` (string): Unique profile slug used for persistence and switching.
+  - `Active` (bool): Whether this profile is currently active.
 
-- `profile_select` (action)
-- `profile_create` (action)
-- `profile_rename` (action)
-- `profile_delete` (action)
+### Profiles Editor State
+- **Description**: Tracks the current Profiles list interaction state in settings.
+- **Fields**:
+  - `Mode` (enum: `view`, `create`, `rename`): Current edit mode.
+  - `SelectedProfileSlug` (string): Slug for currently selected profile.
+  - `InputValue` (string): Current text entered in the settings textarea.
 
-## Validation
+## Validation Rules
+- Profile names are required and must satisfy existing profile service validation.
+- Delete cannot remove the last remaining profile (existing profile service guard).
 
-- Reuse existing profile validation in `internal/profile`.
-- Delete requires explicit confirmation (`profile.ConfirmDeletion`).
-
-## State Transitions
-
-- **Select** → active profile changes, settings reload.
-- **Create** → new profile directory + metadata + sqlite.
-- **Rename** → slug and paths updated.
-- **Delete** → profile directory removed after confirmation.
+## Relationships
+- Profiles List Entry corresponds to existing profile metadata stored in profile.json and SQLite files in the profile directory.

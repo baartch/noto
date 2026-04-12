@@ -1,123 +1,78 @@
-# Tasks: Settings Dialog Navigation – Profile Management
+# Tasks: Settings Dialog Navigation (Profiles List)
 
-**Input**: Design documents from `/specs/006-settings-dialog/`
-**Prerequisites**: plan.md (required), spec.md (required), research.md, data-model.md, contracts/, quickstart.md
+**Generated**: 2026-04-12
+**Source**: /home/andy/gitrepos/noto/specs/006-settings-dialog/spec.md
 
-**Tests**: Test tasks are REQUIRED for every user story and must be created before implementation tasks.
+## Phase 1: Setup
 
-**Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
+- [ ] T001 Review existing profile slash commands and settings menu/profile list code paths (internal/commands/profile_commands.go, internal/tui/model.go, internal/tui/settings_menu.go)
 
-## Phase 1: Setup (Shared Infrastructure)
+## Phase 2: Foundational
 
-- [ ] T001 Review existing settings dialog and profile command registry to confirm available handlers (internal/tui/model.go, internal/commands, internal/profile)
+- [ ] T002 Remove profile command registration from command registry and slash dispatch pathways (internal/commands/registry.go, internal/chat/slash_dispatch.go)
+- [ ] T003 Remove profile slash command handlers and related tests (internal/commands/profile_commands.go, tests/integration/tui_profile_management_test.go)
+- [ ] T004 Ensure profile service CRUD can be invoked directly from settings model (internal/profile/service.go, internal/store/profile_repo.go)
 
----
+## Phase 3: User Story 1 - Open Settings (P1)
 
-## Phase 2: Foundational (Blocking Prerequisites)
+**Goal**: Users can open settings with Ctrl+J and see entries sorted alphabetically.
 
-- [ ] T002 Add Profiles submenu entries in internal/tui/settings_menu.go (profile_select, profile_create, profile_rename, profile_delete)
-- [ ] T003 Add settings action mapping for profile commands in internal/tui/model.go (wire Enter to profile actions)
-- [ ] T004 Add prompt/confirmation plumbing for settings-driven profile actions in internal/tui/model.go (reuse existing confirmation patterns)
+**Independent Test**: Press Ctrl+J and confirm settings list opens and remains sorted.
 
-**Checkpoint**: Profile submenu entries and command wiring ready.
+- [ ] T005 [US1] Verify settings open flow still works after profile command removal (internal/tui/model.go)
+- [ ] T006 [US1] Update settings help text if it referenced profile slash commands (internal/tui/styles.go, internal/tui/model.go)
 
----
+## Phase 4: User Story 2 - Edit Settings Values (P1)
 
-## Phase 3: User Story 1 - Open Settings (Priority: P1) 🎯 MVP
+**Goal**: Users can edit settings values via the textarea editor and save or cancel.
 
-**Goal**: Open settings dialog with Ctrl+J and show sorted entries (including profiles submenu).
+**Independent Test**: Edit a value, save, confirm persistence, cancel and verify original value remains.
 
-**Independent Test**: Press Ctrl+J; verify settings dialog opens and entries are sorted alphabetically.
+- [ ] T007 [US2] Ensure settings editor flows remain intact after profile changes (internal/tui/model.go)
 
-### Tests for User Story 1 (REQUIRED) ⚠️
+## Phase 5: User Story 4 - Manage Profiles (P1)
 
-- [ ] T005 [P] [US1] Update integration test for settings open/sorted list in tests/integration/tui_flow_regression_test.go
+**Goal**: Users can manage profiles from a single list with Enter/Ctrl+N/Ctrl+R/Ctrl+D, no slash commands.
 
-### Implementation for User Story 1
+**Independent Test**: Open Profiles list, switch profile with Enter, create/rename with Ctrl+N/Ctrl+R and Enter, delete with Ctrl+D.
 
-- [ ] T006 [US1] Ensure profiles submenu renders in settings list in internal/tui/model.go (sorted order with new entries)
+- [ ] T008 [US4] Replace Profiles submenu action entries with a profiles list view (internal/tui/settings_menu.go, internal/tui/model.go)
+- [ ] T009 [US4] Implement Enter to switch profile directly via profile service and update UI (internal/tui/model.go, internal/profile/service.go)
+- [ ] T010 [US4] Implement Ctrl+N create flow using settings textarea, then create via profile service (internal/tui/model.go)
+- [ ] T011 [US4] Implement Ctrl+R rename flow using settings textarea, then rename via profile service (internal/tui/model.go)
+- [ ] T012 [US4] Implement Ctrl+D delete flow using profile service; handle last-profile error (internal/tui/model.go, internal/profile/service.go)
+- [ ] T013 [US4] Add keybinding hints in the Profiles list view (internal/tui/model.go, internal/tui/styles.go)
+- [ ] T014 [US4] Update profile management integration tests for list-based workflow (tests/integration/tui_profile_management_test.go)
 
-**Checkpoint**: Settings dialog opens with profiles submenu visible and sorted.
+## Phase 6: User Story 3 - Navigate Submenus (P2)
 
----
+**Goal**: Users can enter submenus and return with Esc.
 
-## Phase 4: User Story 2 - Edit Settings Values (Priority: P1)
+**Independent Test**: Enter Provider submenu, press Esc, return to parent list.
 
-**Goal**: Keep value editing flow intact while profiles submenu exists.
+- [ ] T015 [US3] Confirm submenu navigation still works with Profiles list changes (internal/tui/model.go)
 
-**Independent Test**: Edit a value entry and save; ensure it persists and list updates immediately.
+## Phase 7: Polish & Cross-Cutting
 
-### Tests for User Story 2 (REQUIRED) ⚠️
+- [ ] T016 [P] Run gofmt on modified files (internal/tui/model.go, internal/tui/settings_menu.go, internal/commands/profile_commands.go, internal/commands/registry.go)
+- [ ] T017 Run go test ./... and update quickstart build status (specs/006-settings-dialog/quickstart.md)
+- [ ] T018 Run make lint and update quickstart build status (specs/006-settings-dialog/quickstart.md)
+- [ ] T019 Update AGENTS.md if new tech/context added (./.specify/scripts/bash/update-agent-context.sh pi)
 
-- [ ] T007 [P] [US2] Update integration test coverage to include value edit flow after profile submenu is added (tests/integration/tui_flow_regression_test.go)
+## Dependencies
 
-### Implementation for User Story 2
-
-- [ ] T008 [US2] Ensure settings editor flow ignores profile actions and continues to work with new submenu entries (internal/tui/model.go)
-
-**Checkpoint**: Value editing still works with profile submenu present.
-
----
-
-## Phase 5: User Story 3 - Navigate Submenus (Priority: P2)
-
-**Goal**: Navigate into Profiles submenu and back via Esc.
-
-**Independent Test**: Enter Profiles submenu, press Esc to return, Esc again to close.
-
-### Tests for User Story 3 (REQUIRED) ⚠️
-
-- [ ] T009 [P] [US3] Add integration test for Profiles submenu navigation and Esc behavior in tests/integration/tui_flow_regression_test.go
-
-### Implementation for User Story 3
-
-- [ ] T010 [US3] Ensure submenu navigation works for Profiles in internal/tui/model.go (Esc to parent/root)
-
-**Checkpoint**: Profiles submenu navigates correctly.
-
----
-
-## Phase 6: User Story 4 - Manage Profiles (Priority: P1)
-
-**Goal**: Allow select/create/rename/delete actions from settings.
-
-**Independent Test**: Execute each profile action from settings and verify UI + storage updates.
-
-### Tests for User Story 4 (REQUIRED) ⚠️
-
-- [ ] T011 [P] [US4] Integration test for profile select/create/rename/delete flows from settings in tests/integration/tui_profile_management_test.go
-- [ ] T012 [P] [US4] Integration test for delete confirmation flow in tests/integration/tui_profile_management_test.go
-
-### Implementation for User Story 4
-
-- [ ] T013 [US4] Wire Profile Select action to existing profile picker command in internal/tui/model.go
-- [ ] T014 [US4] Wire Profile Create/Rename prompts to profile service in internal/tui/model.go
-- [ ] T015 [US4] Wire Profile Delete action to confirmation flow and service in internal/tui/model.go
-- [ ] T016 [US4] Ensure profile switch refreshes settings values and closes submenu after action (internal/tui/model.go)
-
-**Checkpoint**: Profile actions work end-to-end from settings.
-
----
-
-## Phase 7: Polish & Cross-Cutting Concerns
-
-- [ ] T017 Run go test ./... and make lint; record results in specs/006-settings-dialog/quickstart.md
-- [ ] T018 Validate quickstart steps and manual performance check (<1s open) in specs/006-settings-dialog/quickstart.md
-
----
-
-## Dependencies & Execution Order
-
-- Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6 → Phase 7
-- US1 (open settings) before US2/US3/US4 due to shared UI.
-- US4 depends on Profile submenu entries from Phase 2.
+- US1 → US2 → US4 → US3
 
 ## Parallel Execution Examples
 
-- US1: T005 can run in parallel with T006.
-- US3: T009 (test) can run in parallel with T010 (implementation) after Phase 2.
-- US4: T011/T012 tests can run in parallel; T013–T016 sequential due to shared handler logic.
+- T002 (remove registry wiring) can run in parallel with T004 (ensure service direct use).
+- T008 (profiles list view) can run in parallel with T014 (update tests) once list structure is defined.
+- T016 (gofmt) can run after implementation tasks complete.
 
 ## Implementation Strategy
 
-Deliver MVP by completing US1 (open settings + profiles submenu visible). Then add US3 submenu navigation, and finally US4 profile management actions.
+- Start by removing profile slash command registration and handlers to avoid relying on the command registry.
+- Replace Profiles submenu action entries with a dedicated profiles list view and hook Enter/Ctrl+N/Ctrl+R/Ctrl+D to profile service operations.
+- Add keybinding hints in the Profiles view to keep UX clear.
+- Update integration tests to match the new list-based workflow.
+- Finish with formatting, tests, linting, and quickstart updates.

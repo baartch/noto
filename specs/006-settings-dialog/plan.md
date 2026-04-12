@@ -1,32 +1,32 @@
-# Implementation Plan: Settings Dialog Navigation – Profile Management
+# Implementation Plan: Settings Dialog Navigation (Profiles List)
 
 **Branch**: `006-settings-dialog` | **Date**: 2026-04-12 | **Spec**: /home/andy/gitrepos/noto/specs/006-settings-dialog/spec.md
 **Input**: Feature specification from `/specs/006-settings-dialog/spec.md`
 
 ## Summary
 
-Add profile management user stories and tests to the settings dialog. Extend the settings menu with a Profiles submenu that dispatches to existing profile services/commands (select/create/rename/delete). Add integration tests to validate submenu navigation, action selection, prompts, confirmation, and UI updates.
+Implement profile management as a single settings list with Enter/Ctrl+N/Ctrl+R/Ctrl+D actions and remove profile slash commands, while keeping existing settings editor flows intact and using profile services for persistence.
 
 ## Technical Context
 
 **Language/Version**: Go 1.26+  
-**Primary Dependencies**: Bubble Tea v2, Bubbles v2, Lip Gloss v2, Cobra  
-**Storage**: profile.json + per-profile SQLite (`~/.noto/profiles/<slug>/memory.db`)  
-**Testing**: `go test ./...`, integration tests under `tests/integration`  
-**Target Platform**: Local CLI/TUI (terminal)  
-**Project Type**: CLI/TUI application  
-**Performance Goals**: Settings dialog opens in <1s; profile actions feel instantaneous  
-**Constraints**: Offline/local-only; no backward compatibility required  
-**Scale/Scope**: Single-user profile management, small local datasets
+**Primary Dependencies**: charm.land/bubbletea/v2, charm.land/bubbles/v2, charm.land/lipgloss/v2, Cobra  
+**Storage**: profile.json + per-profile SQLite (modernc.org/sqlite)  
+**Testing**: `go test ./...`, integration tests under tests/integration  
+**Target Platform**: Terminal UI (Linux/macOS/Windows terminals)  
+**Project Type**: TUI + CLI application  
+**Performance Goals**: Settings dialog opens in <1s  
+**Constraints**: No slash commands for profiles; must use existing profile service validation  
+**Scale/Scope**: Single TUI settings flow
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Code Quality Gate**: All changes must pass `gofmt`, `go test ./...`, and `make lint`. Use explicit error handling and existing TUI patterns.
-- **Testing Standards Gate**: Add integration tests for profile-management actions (select/create/rename/delete) and failure paths/confirmation behavior.
-- **UX Consistency Gate**: Reuse settings dialog list + Enter/Esc interaction and existing profile prompt/confirmation patterns.
-- **Performance Gate**: Verify settings and profile submenu open in <1s; record manual check in quickstart.
+- **Code Quality Gate**: Use gofmt, golangci-lint (make lint), and standard Go conventions. Plan includes formatting + lint validation step.
+- **Testing Standards Gate**: Add/adjust integration tests for profiles list actions and failure paths (delete last profile, rename validation).
+- **UX Consistency Gate**: Use existing settings list/editor patterns; Ctrl+N/Ctrl+R/Ctrl+D in Profiles list; Enter selects and switches profile; Profiles list shows keybinding hints.
+- **Performance Gate**: Manual check that settings opens in <1s with no lag (quickstart checklist).
 
 ## Project Structure
 
@@ -45,13 +45,8 @@ specs/006-settings-dialog/
 ### Source Code (repository root)
 
 ```text
-cmd/
-└── noto/
 internal/
-├── app/
-├── chat/
 ├── commands/
-├── config/
 ├── profile/
 ├── store/
 └── tui/
@@ -61,59 +56,8 @@ tests/
 └── integration/
 ```
 
-**Structure Decision**: Use existing CLI/TUI structure with settings work in `internal/tui`, profile services in `internal/profile`, and integration tests in `tests/integration`.
+**Structure Decision**: Single Go module with internal packages and integration tests under tests/integration.
 
 ## Complexity Tracking
 
-None.
-
----
-
-## Phase 0: Outline & Research
-
-### Unknowns
-
-None. Existing profile service and command patterns are already in the codebase.
-
-### Research Tasks
-
-- Confirm existing profile commands (select/create/rename/delete) and expected TUI entry points.
-- Review profile metadata shape and validation rules for menu prompts and confirmation flows.
-
-### Output
-
-- `research.md`
-
----
-
-## Phase 1: Design & Contracts
-
-### Data Model
-
-- Document profile action entries and mapping to existing profile services.
-
-### Contracts
-
-- No external contracts; note in `contracts/README.md`.
-
-### Quickstart
-
-- Document profile submenu navigation and action flows.
-- Add manual performance check (<1s open).
-
-### Agent Context Update
-
-- Run `.specify/scripts/bash/update-agent-context.sh pi`.
-
-### Output
-
-- `data-model.md`
-- `contracts/README.md`
-- `quickstart.md`
-
----
-
-## Phase 2: Planning (stop after this phase)
-
-- Add user stories + tests for profile management settings flow.
-- Generate tasks in `tasks.md` after design is complete.
+No constitution violations.
