@@ -1,32 +1,32 @@
-# Implementation Plan: Settings Dialog Navigation
+# Implementation Plan: Settings Dialog Navigation – Profile Management
 
-**Branch**: `006-settings-dialog` | **Date**: 2026-04-11 | **Spec**: [spec.md](./spec.md)
+**Branch**: `006-settings-dialog` | **Date**: 2026-04-12 | **Spec**: /home/andy/gitrepos/noto/specs/006-settings-dialog/spec.md
 **Input**: Feature specification from `/specs/006-settings-dialog/spec.md`
 
 ## Summary
 
-Add a Ctrl+, settings dialog built with Bubble Tea + Bubbles list, showing alphabetically sorted key/value entries and submenus. Support editing values via a textarea editor (Enter saves, Esc cancels) with numeric validation, submenu navigation with Esc to go up, and top-level Esc to close. Cover all app settings (model/extractor model, provider configuration submenu, token budget, system prompt edit) while keeping UX consistent with existing TUI patterns and storing system prompt in the profile database.
+Add profile management user stories and tests to the settings dialog. Extend the settings menu with a Profiles submenu that dispatches to existing profile services/commands (select/create/rename/delete). Add integration tests to validate submenu navigation, action selection, prompts, confirmation, and UI updates.
 
 ## Technical Context
 
-**Language/Version**: Go 1.26+
-**Primary Dependencies**: charm.land/bubbletea/v2, charm.land/bubbles/v2, charm.land/lipgloss/v2, Cobra
-**Storage**: Profile metadata (profile.json) + per-profile SQLite for existing provider data/system prompt data (default prompt "You are Noto. A buddy who takes notes." when missing)
-**Testing**: `go test ./...`, integration tests under `tests/integration`
-**Target Platform**: Terminal (Linux/macOS/Windows)
-**Project Type**: CLI/TUI application
-**Performance Goals**: Settings dialog opens in under 1 second; edits apply immediately
-**Constraints**: Ctrl+, opens settings; Esc navigates up or closes; alphabetical ordering; Enter saves, Esc cancels
-**Scale/Scope**: Single-profile settings dialog covering all current app settings
+**Language/Version**: Go 1.26+  
+**Primary Dependencies**: Bubble Tea v2, Bubbles v2, Lip Gloss v2, Cobra  
+**Storage**: profile.json + per-profile SQLite (`~/.noto/profiles/<slug>/memory.db`)  
+**Testing**: `go test ./...`, integration tests under `tests/integration`  
+**Target Platform**: Local CLI/TUI (terminal)  
+**Project Type**: CLI/TUI application  
+**Performance Goals**: Settings dialog opens in <1s; profile actions feel instantaneous  
+**Constraints**: Offline/local-only; no backward compatibility required  
+**Scale/Scope**: Single-user profile management, small local datasets
 
 ## Constitution Check
 
-_GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
+*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Code Quality Gate**: Run `golangci-lint run` (via `make lint`) and `go test ./...` before merge.
-- **Testing Standards Gate**: Add integration coverage for Ctrl+, dialog navigation, value editing, and Esc behavior.
-- **UX Consistency Gate**: Match existing footer/help patterns and picker overlay layout; document deviations if needed.
-- **Performance Gate**: Confirm settings dialog opens in under 1 second for typical profiles (manual measurement acceptable).
+- **Code Quality Gate**: All changes must pass `gofmt`, `go test ./...`, and `make lint`. Use explicit error handling and existing TUI patterns.
+- **Testing Standards Gate**: Add integration tests for profile-management actions (select/create/rename/delete) and failure paths/confirmation behavior.
+- **UX Consistency Gate**: Reuse settings dialog list + Enter/Esc interaction and existing profile prompt/confirmation patterns.
+- **Performance Gate**: Verify settings and profile submenu open in <1s; record manual check in quickstart.
 
 ## Project Structure
 
@@ -45,60 +45,75 @@ specs/006-settings-dialog/
 ### Source Code (repository root)
 
 ```text
+cmd/
+└── noto/
 internal/
-├── tui/
-│   ├── model.go
-│   └── ...
+├── app/
+├── chat/
 ├── commands/
+├── config/
 ├── profile/
 ├── store/
-└── app/
+└── tui/
 
 tests/
-├── integration/
-└── contract/
+├── contract/
+└── integration/
 ```
 
-**Structure Decision**: Single Go CLI/TUI project; settings dialog lives under `internal/tui` with command/state wiring in `internal/app` and persistence in `internal/profile`/`internal/store`.
+**Structure Decision**: Use existing CLI/TUI structure with settings work in `internal/tui`, profile services in `internal/profile`, and integration tests in `tests/integration`.
 
-## Phase 0: Research
+## Complexity Tracking
+
+None.
+
+---
+
+## Phase 0: Outline & Research
+
+### Unknowns
+
+None. Existing profile service and command patterns are already in the codebase.
 
 ### Research Tasks
 
-- Confirm best-practice UX for nested settings dialogs in Bubble Tea.
-- Confirm Bubbles list + textarea usage for editable settings and navigation keys.
+- Confirm existing profile commands (select/create/rename/delete) and expected TUI entry points.
+- Review profile metadata shape and validation rules for menu prompts and confirmation flows.
 
 ### Output
 
-- `research.md` with decisions and rationale.
+- `research.md`
+
+---
 
 ## Phase 1: Design & Contracts
 
 ### Data Model
 
-Define logical settings entities (menu, entry, value) and how they map to existing profile/provider data, including system prompt stored in SQLite.
+- Document profile action entries and mapping to existing profile services.
 
 ### Contracts
 
-No external API contracts required (internal UI flow only).
+- No external contracts; note in `contracts/README.md`.
 
 ### Quickstart
 
-Document manual validation steps for opening settings, navigating submenus, editing values, and ensuring ordering.
+- Document profile submenu navigation and action flows.
+- Add manual performance check (<1s open).
 
 ### Agent Context Update
 
-Run: `.specify/scripts/bash/update-agent-context.sh pi`
+- Run `.specify/scripts/bash/update-agent-context.sh pi`.
 
-## Phase 2: Implementation Plan
+### Output
 
-1. Add Ctrl+, keybinding to open settings dialog and surface in footer help.
-2. Build settings dialog list with alphabetical ordering, value entries, and submenu entries.
-3. Implement submenu navigation (Enter to enter, Esc to go back) and top-level Esc to close.
-4. Implement value editor using Bubbles textarea; Enter saves, Esc cancels; validate numeric entries with inline error feedback.
-5. Wire settings entries to current settings sources: model/extractor model, provider configuration submenu, token budget, system prompt stored in SQLite with default prompt "You are Noto. A buddy who takes notes." when missing.
-6. Add integration tests for open/close, submenu navigation, edit/save/cancel flows, and numeric validation errors.
+- `data-model.md`
+- `contracts/README.md`
+- `quickstart.md`
 
-## Complexity Tracking
+---
 
-> No constitution violations.
+## Phase 2: Planning (stop after this phase)
+
+- Add user stories + tests for profile management settings flow.
+- Generate tasks in `tasks.md` after design is complete.

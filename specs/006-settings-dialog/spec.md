@@ -3,7 +3,7 @@
 **Feature Branch**: `006-settings-dialog`
 **Created**: 2026-04-11
 **Status**: Draft
-**Input**: User description: "I want ctrl+j opening a Settings dialog (Bubbles list). It shows key/value pairs or submenues ordered alphabetically. value pairs can be edited by selecting and pressing Enter. text or numbers editing should open a Bubbles Textarea. Being in a submenu Esc should go a level up, otherwise close the settings dialog. The settings should cover all possible App settings. Model/Extractor model selection, provider configuration (Submenu), token budget, System prompt edit"
+**Input**: User description: "I want ctrl+j opening a Settings dialog (Bubbles list). It shows key/value pairs or submenues ordered alphabetically. value pairs can be edited by selecting and pressing Enter. text or numbers editing should open a Bubbles Textarea. Being in a submenu Esc should go a level up, otherwise close the settings dialog. The settings should cover all possible App settings. Model/Extractor model selection, provider configuration (Submenu), token budget, System prompt edit, and profile management."
 
 ## Clarifications
 
@@ -52,9 +52,26 @@ As a user, I want to select a setting and edit its value so I can customize the 
 
 As a user, I want to navigate into and out of submenus so I can manage grouped settings cleanly.
 
-**Why this priority**: Some settings (like provider configuration) require grouped options.
+**Why this priority**: Some settings (like provider configuration and profiles) require grouped options.
 
 **Independent Test**: Enter a submenu, verify the list updates, then press Esc to return to the parent list.
+
+---
+
+### User Story 4 - Manage Profiles (Priority: P1)
+
+As a user, I want to manage profiles from the settings dialog so I can create, rename, select, or delete profiles without leaving the TUI.
+
+**Why this priority**: Profile management is a core configuration workflow and should be accessible alongside other settings.
+
+**Independent Test**: Open the Profiles submenu and execute list/select/create/rename/delete actions with appropriate prompts and confirmation.
+
+**Acceptance Scenarios**:
+
+1. **Given** the settings dialog is open, **When** the user selects Profiles and presses Enter, **Then** the Profiles submenu opens.
+2. **Given** the Profiles submenu is open, **When** the user selects Select, **Then** the active profile switches and the UI updates.
+3. **Given** the Profiles submenu is open, **When** the user selects Create or Rename, **Then** the user is prompted for the new name and validation rules apply.
+4. **Given** the Profiles submenu is open, **When** the user selects Delete, **Then** explicit confirmation is required before removal.
 
 **Acceptance Scenarios**:
 
@@ -82,7 +99,7 @@ As a user, I want to navigate into and out of submenus so I can manage grouped s
 - **FR-005**: Users MUST be able to enter submenus by selecting them and pressing Enter.
 - **FR-006**: When inside a submenu, pressing Esc MUST return to the previous menu level.
 - **FR-007**: When at the top-level settings menu, pressing Esc MUST close the settings dialog.
-- **FR-008**: The settings dialog MUST cover all app settings, including model selection, model extractor selection, provider configuration (submenu), token budget, and system prompt editing.
+- **FR-008**: The settings dialog MUST cover all app settings, including model selection, model extractor selection, provider configuration (submenu), profile management (submenu), token budget, and system prompt editing.
 - **FR-008a**: The system MUST store the system prompt in the profile database, not a standalone file, defaulting to "You are Noto. A buddy who takes notes." when missing.
 - **FR-008b**: The system MUST invalidate the conversation context cache whenever the system prompt is saved via the settings dialog.
 - **FR-008c**: Provider settings MUST include Endpoint and Key fields; Key values MUST be obfuscated in the list view.
@@ -115,7 +132,7 @@ As a user, I want to navigate into and out of submenus so I can manage grouped s
 - **SC-002**: Users can open the settings dialog with Ctrl+, in under 1 second.
 - **SC-003**: Users can edit a value entry and see the updated value reflected immediately.
 - **SC-004**: Esc returns to the previous menu level in submenus and closes the dialog at the top level.
-- **SC-005**: All listed settings (model, model extractor, provider config, token budget, system prompt) are reachable within the dialog.
+- **SC-005**: All listed settings (model, model extractor, provider config, profile management, token budget, system prompt) are reachable within the dialog.
 - **SC-006**: 0 lint/format violations in CI for the feature scope.
 - **SC-007**: All new/changed behavior is covered by automated tests.
 

@@ -1,39 +1,22 @@
-# Data Model: Settings Dialog Navigation
+# Data Model: Profile Management in Settings
 
-## Entities
+## Settings Entry (Profiles)
 
-### Settings Menu
+Add a Profiles submenu with action entries:
 
-- **id**: string
-- **title**: string
-- **entries**: list of Settings Entry
-- **parent_id**: string (nullable)
+- `profile_select` (action)
+- `profile_create` (action)
+- `profile_rename` (action)
+- `profile_delete` (action)
 
-### Settings Entry
+## Validation
 
-- **id**: string
-- **label**: string
-- **kind**: value | submenu
-- **value_type**: text | number | action (nullable)
-- **value**: string (nullable)
-- **submenu_id**: string (nullable)
-- **source**: model | extractor_model | provider_config | token_budget | system_prompt
-- **validation**: numeric-only for number entries
+- Reuse existing profile validation in `internal/profile`.
+- Delete requires explicit confirmation (`profile.ConfirmDeletion`).
 
-### System Prompt Record
+## State Transitions
 
-- **profile_id**: string
-- **prompt**: string
-- **updated_at**: timestamp
-
-### Settings Editor State
-
-- **entry_id**: string
-- **draft_value**: string
-- **status**: editing | saved | canceled
-
-## Relationships
-
-- Settings Menu 1→N Settings Entry
-- Settings Entry 0→1 Settings Menu (submenu)
-- Settings Entry 1→1 Settings Editor State (during editing)
+- **Select** → active profile changes, settings reload.
+- **Create** → new profile directory + metadata + sqlite.
+- **Rename** → slug and paths updated.
+- **Delete** → profile directory removed after confirmation.
