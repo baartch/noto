@@ -163,15 +163,19 @@ func profileRenameHandler(svc ProfileService) HandlerFunc {
 func profileDeleteHandler(svc ProfileService) HandlerFunc {
 	return func(ctx *ExecContext, args []string) error {
 		if len(args) == 0 {
-			return errors.New("usage: profile delete <name>")
+			return errors.New("usage: profile delete <name> [yes]")
 		}
 		name := args[0]
-		err := svc.Delete(context.Background(), name, func(prompt string) bool {
+		confirm := func(prompt string) bool {
 			if ctx.Confirm != nil {
 				return ctx.Confirm(prompt)
 			}
 			return false
-		})
+		}
+		if len(args) > 1 && strings.EqualFold(args[1], "yes") {
+			confirm = func(string) bool { return true }
+		}
+		err := svc.Delete(context.Background(), name, confirm)
 		if err != nil {
 			return err
 		}

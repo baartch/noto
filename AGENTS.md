@@ -39,9 +39,9 @@ tests/
 Go 1.26+: Follow standard conventions
 
 ## Recent Changes
+- 006-settings-dialog: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 - 006-settings-dialog: Added Go 1.26+ + Bubble Tea v2, Bubbles v2, Lip Gloss v2, Cobra
 - 006-settings-dialog: Added Go 1.26+ + Bubble Tea v2, Bubbles v2, Lip Gloss v2, Cobra
-- 006-settings-dialog: Added Go 1.26+ + charm.land/bubbletea/v2, charm.land/bubbles/v2, charm.land/lipgloss/v2, Cobra
 
 
 <!-- MANUAL ADDITIONS START -->

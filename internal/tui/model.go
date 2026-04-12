@@ -1290,7 +1290,11 @@ func (m *Model) syncSettingsList() {
 		items[i] = settingsItem{entry: entry}
 	}
 	m.settingsList.SetItems(items)
-	m.settingsList.Title = settingsHelpText
+	header := settingsHelpText
+	if m.settingsMenu.Title != "" {
+		header = "  " + m.settingsMenu.Title + "  " + strings.TrimSpace(strings.TrimPrefix(settingsHelpText, "  Settings"))
+	}
+	m.settingsList.Title = header
 	m.settingsList.SetSize(max(m.width-6, 20), max(m.height/2-2, 6))
 	if len(items) > 0 {
 		m.settingsList.Select(0)
@@ -1426,6 +1430,15 @@ func (m Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
 		case settingsIDExtractorModel:
 			m.settingsOpen = false
 			return m.openPicker(pickerKindExtractorModel, nil)
+		case "profile_select":
+			m.settingsOpen = false
+			return m.openPicker(pickerKindProfile, nil)
+		case "profile_create":
+			return m.startProfilePrompt("profile create")
+		case "profile_rename":
+			return m.startProfilePrompt("profile rename")
+		case "profile_delete":
+			return m.startProfilePrompt("profile delete")
 		}
 		return m, nil
 	}
@@ -1627,6 +1640,16 @@ func (m *Model) saveProviderAPIKey(key string) error {
 	}
 	repo := store.NewProviderConfigRepo(m.execCtx.DB)
 	return repo.SetCredentialRef(context.Background(), m.execCtx.ProfileID, encrypted)
+}
+
+func (m *Model) startProfilePrompt(command string) (tea.Model, tea.Cmd) {
+	m.settingsOpen = false
+	m.settingsErr = ""
+	m.settingsEditing = false
+	m.settingsEditEntry = nil
+	m.input.SetValue("/" + command + " ")
+	m.input.CursorEnd()
+	return m, m.input.Focus()
 }
 
 func (m *Model) saveSystemPrompt(prompt string) error {

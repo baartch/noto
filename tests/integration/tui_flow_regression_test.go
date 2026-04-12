@@ -129,10 +129,33 @@ func newSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext) {
 		t.Fatalf("create profile: %v", err)
 	}
 
+	registry := commands.NewRegistry()
+	if err := commands.RegisterProfileCommands(registry, profile.NewService(store.NewProfileRepo(db))); err != nil {
+		t.Fatalf("register profile commands: %v", err)
+	}
+	if err := commands.RegisterPromptCommands(registry); err != nil {
+		t.Fatalf("register prompt commands: %v", err)
+	}
+	if err := commands.RegisterMemoryCommands(registry); err != nil {
+		t.Fatalf("register memory commands: %v", err)
+	}
+	if err := commands.RegisterModelCommand(registry); err != nil {
+		t.Fatalf("register model commands: %v", err)
+	}
+	if err := commands.RegisterProviderCommands(registry); err != nil {
+		t.Fatalf("register provider commands: %v", err)
+	}
+	if err := commands.RegisterModelExtractorCommand(registry); err != nil {
+		t.Fatalf("register extractor commands: %v", err)
+	}
+	if err := commands.RegisterBackupCommands(registry); err != nil {
+		t.Fatalf("register backup commands: %v", err)
+	}
+
 	execCtx := &commands.ExecContext{ProfileID: p.ID, ProfileSlug: p.Slug, DB: db}
 	model := tui.New(
 		"Profile", "", "", "cache: n/a", "tokens: n/a", false,
-		chat.NewDispatcher(commands.NewRegistry()),
+		chat.NewDispatcher(registry),
 		execCtx,
 		nil, nil,
 		func(string) error { return nil },
