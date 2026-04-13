@@ -201,8 +201,9 @@ type Model struct {
 	historyDraft string
 
 	// picker overlay
-	picker     *pickerState
-	pickerKind pickerKind
+	picker             *pickerState
+	pickerKind         pickerKind
+	pickerFromSettings bool
 
 	// settings dialog
 	settingsOpen bool
@@ -545,6 +546,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ---- keyboard -----------------------------------------------------------
 	case tea.KeyPressMsg:
+		if m.picker != nil {
+			return m.updatePicker(msg, cmds)
+		}
 		if m.settingsOpen && m.settingsEditing {
 			// ctrl+h toggles help even while editing
 			if key.Matches(msg, m.keys.toggleHelp) {
@@ -620,9 +624,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.settingsList, cmd = m.settingsList.Update(msg)
 				return m, cmd
 			}
-		}
-		if m.picker != nil {
-			return m.updatePicker(msg, cmds)
 		}
 		if m.suggActive && len(m.suggestions) > 0 {
 			return m.updateSuggNav(msg, cmds)
@@ -963,6 +964,10 @@ func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea
 	switch {
 	case msg.Key().Code == tea.KeyEsc:
 		m.picker = nil
+		if m.pickerFromSettings {
+			m.pickerFromSettings = false
+			return m, nil
+		}
 		cmds = append(cmds, m.input.Focus())
 	case key.Matches(msg, m.keys.quit):
 		return m, tea.Quit
@@ -986,7 +991,11 @@ func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea
 		m.picker = nil
 		m.input.SetValue("")
 		m.clearSuggestions()
-		cmds = append(cmds, m.input.Focus())
+		if m.pickerFromSettings {
+			m.pickerFromSettings = false
+		} else {
+			cmds = append(cmds, m.input.Focus())
+		}
 		if chosen == "" {
 			return m, tea.Batch(cmds...)
 		}
@@ -1550,10 +1559,10 @@ func (m Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
 	if entry.Kind == SettingsEntryAction {
 		switch entry.ID {
 		case settingsIDModel:
-			m.settingsOpen = false
+			m.pickerFromSettings = true
 			return m.openPicker(pickerKindModel, nil)
 		case settingsIDExtractorModel:
-			m.settingsOpen = false
+			m.pickerFromSettings = true
 			return m.openPicker(pickerKindExtractorModel, nil)
 		}
 		return m, nil
