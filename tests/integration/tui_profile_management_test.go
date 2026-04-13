@@ -100,7 +100,7 @@ func TestSettingsProfiles_KeyHints(t *testing.T) {
 	m = openProfilesSubmenu(t, m)
 	view := m.View().Content
 
-	if !strings.Contains(view, "Ctrl+N") || !strings.Contains(view, "Ctrl+R") || !strings.Contains(view, "Ctrl+D") || !strings.Contains(view, "Enter") {
+	if !strings.Contains(view, "ctrl+n") || !strings.Contains(view, "ctrl+r") || !strings.Contains(view, "ctrl+d") || !strings.Contains(view, "enter") {
 		t.Fatalf("expected keybinding hints in profile list")
 	}
 }

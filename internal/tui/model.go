@@ -168,7 +168,7 @@ const (
 
 const (
 	settingsHeaderText = "Settings"
-	settingsHelpText   = "  Settings  ↑↓ navigate · Enter select · Esc back/close · Ctrl+H help"
+	settingsHelpText   = "  Settings  ↑↓ navigate · enter select · esc back/close · ctrl+h help"
 )
 
 // ---- TUI model --------------------------------------------------------------
@@ -214,6 +214,8 @@ type Model struct {
 	settingsEditor    textarea.Model
 	settingsEditEntry *SettingsEntry
 	settingsErr       string
+
+	profileDeleteCandidate string
 
 	// profile settings
 	memoryTokenBudget int
@@ -554,9 +556,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.settingsEditing = false
 				m.settingsEditEntry = nil
 				m.settingsErr = ""
+				m.profileDeleteCandidate = ""
 				m.profilesAction = nil
 				return m, nil
-			// Enter saves; alt+enter falls through to the textarea for newline
+			// enter saves; alt+enter falls through to the textarea for newline
 			case msg.Key().Code == tea.KeyEnter && msg.Key().Mod == 0:
 				return m.handleSettingsSave()
 			}
@@ -565,6 +568,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		if m.settingsOpen && !m.settingsEditing {
+			if m.profileDeleteCandidate != "" {
+				switch msg.Key().Code {
+				case tea.KeyEnter:
+					return m.confirmProfileDelete()
+				case tea.KeyEsc:
+					m.profileDeleteCandidate = ""
+					m.settingsErr = ""
+					return m, nil
+				default:
+					m.profileDeleteCandidate = ""
+					m.settingsErr = ""
+					return m, nil
+				}
+			}
 			// ctrl+h toggles help; ctrl+j closes settings
 			if key.Matches(msg, m.keys.toggleHelp) {
 				m.help.ShowAll = !m.help.ShowAll
@@ -582,7 +599,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case key.Matches(msg, m.keys.profileRename):
 					return m.startProfileEditor("Rename Profile", profilesRenameAction{current: m.selectedProfileName()})
 				case key.Matches(msg, m.keys.profileDelete):
-					return m.deleteSelectedProfile()
+					return m.handleProfileDeleteRequest()
 				}
 			}
 			switch msg.Key().Code {
@@ -594,6 +611,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.settingsOpen = false
 				m.settingsErr = ""
+				m.profileDeleteCandidate = ""
 				return m, m.input.Focus()
 			case tea.KeyEnter:
 				return m.handleSettingsEnter()
@@ -634,6 +652,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.settingsOpen {
 				m.settingsEditing = false
 				m.settingsErr = ""
+				m.profileDeleteCandidate = ""
 				m.profilesAction = nil
 				if m.settingsMenu == nil {
 					m.settingsMenu = DefaultSettingsMenu()
@@ -657,6 +676,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.settingsOpen = false
 				m.settingsEditing = false
 				m.settingsErr = ""
+				m.profileDeleteCandidate = ""
 				m.profilesAction = nil
 				return m, nil
 			}
@@ -1281,7 +1301,10 @@ func (m *Model) renderSettingsList(height int) string {
 
 	head := m.settingsList.Title
 	if m.settingsMenu != nil && m.settingsMenu.ID == settingsIDProfiles {
-		head = head + "\n" + helpShortStyle.Render("  Enter select · Ctrl+N new · Ctrl+R rename · Ctrl+D delete")
+		head = head + "\n" + helpShortStyle.Render("  enter select · ctrl+n new · ctrl+r rename · ctrl+d delete")
+	}
+	if m.settingsErr != "" {
+		head = head + "\n" + errStyle.Render("  "+m.settingsErr)
 	}
 
 	return pickerBorderStyle.Render(head + "\n" + m.settingsList.View())
@@ -1392,29 +1415,6 @@ func (m *Model) startProfileEditor(label string, action profilesAction) (tea.Mod
 		m.profilesAction = action
 	}
 	return m, m.settingsEditor.Focus()
-}
-
-func (m *Model) deleteSelectedProfile() (tea.Model, tea.Cmd) {
-	if m.profileService == nil {
-		return m, nil
-	}
-	name := m.selectedProfileName()
-	if name == "" {
-		return m, nil
-	}
-	if err := m.profileService.Delete(context.Background(), name, func(string) bool { return true }); err != nil {
-		m.err = err
-		m.settingsErr = ""
-		return m, nil
-	}
-	m.err = nil
-	m.settingsErr = ""
-	if cmd := m.syncActiveProfile(); cmd != nil {
-		return m, cmd
-	}
-	m.refreshSettingsValues()
-	m.syncSettingsList()
-	return m, nil
 }
 
 type settingsItem struct {
@@ -1844,6 +1844,57 @@ func (m *Model) syncActiveProfile() tea.Cmd {
 	return m.switchToProfile(active)
 }
 
+func (m *Model) handleProfileDeleteRequest() (tea.Model, tea.Cmd) {
+	name := m.selectedProfileName()
+	if name == "" {
+		return m, nil
+	}
+	m.profileDeleteCandidate = name
+	m.settingsErr = "press enter to confirm deleting \"" + name + "\" or esc to cancel"
+	return m, nil
+}
+
+func (m *Model) confirmProfileDelete() (tea.Model, tea.Cmd) {
+	if m.profileDeleteCandidate == "" {
+		return m, nil
+	}
+	name := m.profileDeleteCandidate
+	m.profileDeleteCandidate = ""
+	m.settingsErr = ""
+	return m.deleteSelectedProfileByName(name)
+}
+
+func (m *Model) deleteSelectedProfileByName(name string) (tea.Model, tea.Cmd) {
+	if m.profileService == nil {
+		return m, nil
+	}
+	if name == "" {
+		return m, nil
+	}
+	confirm := func(string) bool { return true }
+	if m.execCtx != nil && m.execCtx.Confirm != nil {
+		confirm = m.execCtx.Confirm
+	}
+	if err := m.profileService.Delete(context.Background(), name, confirm); err != nil {
+		if errors.Is(err, profile.ErrConfirmationRequired) {
+			m.settingsErr = "delete cancelled"
+			m.err = nil
+			return m, nil
+		}
+		m.err = err
+		m.settingsErr = ""
+		return m, nil
+	}
+	m.err = nil
+	m.settingsErr = ""
+	if cmd := m.syncActiveProfile(); cmd != nil {
+		return m, cmd
+	}
+	m.refreshSettingsValues()
+	m.syncSettingsList()
+	return m, nil
+}
+
 func (m *Model) renderSettingsEditor(height int) string {
 	if m.settingsEditEntry == nil {
 		return ""
@@ -1858,7 +1909,7 @@ func (m *Model) renderSettingsEditor(height int) string {
 	if description != "" {
 		descBlock = "\n" + helpShortStyle.Render("  "+description)
 	}
-	hint := helpShortStyle.Render("  Enter save · Esc cancel · Alt+Enter newline · Ctrl+←/→ word jump")
+	hint := helpShortStyle.Render("  enter save · esc cancel · alt+enter newline · ctrl+←/→ word jump")
 	body := m.settingsEditor.View()
 	var errBlock string
 	if m.settingsErr != "" {
