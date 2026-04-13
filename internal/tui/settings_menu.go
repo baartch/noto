@@ -44,6 +44,7 @@ type SettingsEntry struct {
 	Value     string
 	Submenu   *SettingsMenu
 	Source    string
+	Active    bool
 }
 
 // SettingsSource indicates the origin of a setting value.

@@ -42,6 +42,7 @@
 - [X] T011 [US4] Implement Ctrl+R rename flow using settings textarea, then rename via profile service (internal/tui/model.go)
 - [X] T012 [US4] Implement Ctrl+D delete flow using profile service; handle last-profile error (internal/tui/model.go, internal/profile/service.go)
 - [X] T013 [US4] Add keybinding hints in the Profiles list view (internal/tui/model.go, internal/tui/styles.go)
+- [X] T020 [US1] Highlight current list entries with dot indicator + color (internal/tui/model.go, internal/tui/settings_menu.go)
 - [X] T014 [US4] Update profile management integration tests for list-based workflow (tests/integration/tui_profile_management_test.go)
 
 ## Phase 6: User Story 3 - Navigate Submenus (P2)

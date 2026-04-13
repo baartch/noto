@@ -896,6 +896,7 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 		m.picker = newPickerState("Select model", m.width-4)
 		m.picker.loading = true
 		if m.listModels != nil {
+			current := m.activeModel
 			cmds = append(cmds, func() tea.Msg {
 				models, err := m.listModels(context.Background())
 				if err != nil {
@@ -903,7 +904,7 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 				}
 				items := make([]pickerItem, len(models))
 				for i, mi := range models {
-					items[i] = pickerItem{Value: mi.ID}
+					items[i] = pickerItem{Value: mi.ID, Active: mi.ID == current}
 				}
 				return modelsLoadedMsg{items: items}
 			})
@@ -1357,15 +1358,12 @@ func (m *Model) refreshProfilesList() {
 	}
 	items := make([]SettingsEntry, 0, len(profiles))
 	for _, p := range profiles {
-		label := p.Name
-		if p.IsDefault {
-			label += " (active)"
-		}
 		items = append(items, SettingsEntry{
-			ID:    p.Name,
-			Label: label,
-			Kind:  SettingsEntryProfile,
-			Value: p.Slug,
+			ID:     p.Name,
+			Label:  p.Name,
+			Kind:   SettingsEntryProfile,
+			Value:  p.Slug,
+			Active: p.IsDefault,
 		})
 	}
 	menu.Entries = items
@@ -1445,9 +1443,13 @@ func (d settingsDelegate) Render(w io.Writer, m list.Model, index int, item list
 	}
 	indicator := " "
 	style := pickerNormalStyle
-	if index == m.Index() {
+	switch {
+	case index == m.Index():
 		indicator = "›"
 		style = pickerCursorStyle
+	case it.entry.Active:
+		indicator = "●"
+		style = pickerActiveStyle
 	}
 
 	label := it.entry.Label
@@ -1456,6 +1458,9 @@ func (d settingsDelegate) Render(w io.Writer, m list.Model, index int, item list
 		label += " ›"
 	case SettingsEntryAction:
 		label += " →"
+		if it.entry.Value != "" {
+			label = label + " · " + it.entry.Value
+		}
 	case SettingsEntryValue:
 		if it.entry.Value != "" {
 			label = label + ": " + formatSettingsValue(it.entry.Value, m.Width()-10)
@@ -1758,6 +1763,14 @@ func applyToMenu(menu *SettingsMenu, m *Model) {
 			entries[i].Value = m.providerEndpoint
 		case settingsIDProviderAPIKey:
 			entries[i].Value = obfuscateKey(m.providerAPIKey)
+		}
+		if entries[i].ID == settingsIDModel {
+			entries[i].Value = ""
+			entries[i].Active = false
+		}
+		if entries[i].ID == settingsIDExtractorModel {
+			entries[i].Value = ""
+			entries[i].Active = false
 		}
 		if entries[i].Submenu != nil {
 			applyToMenu(entries[i].Submenu, m)

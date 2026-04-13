@@ -85,6 +85,7 @@ As a user, I want to manage profiles from the settings dialog so I can create, r
 - If a setting has no current value, the list shows it as blank but still editable.
 - If a user cancels out of an editor with esc, the original value remains unchanged.
 - If a submenu has no entries, it shows an empty state instead of crashing.
+- Active list entries are highlighted with color and a leading dot indicator instead of text labels.
 
 ## Requirements *(mandatory)*
 
@@ -109,6 +110,7 @@ As a user, I want to manage profiles from the settings dialog so I can create, r
 - **FR-009**: After a value is edited, the updated value MUST be persisted and displayed in the list.
 - **FR-009a**: Long or multi-line values MUST be flattened and truncated with `...` in the list view.
 - **FR-010**: The editor MUST save changes on enter and cancel changes on esc.
+- **FR-011**: Lists MUST indicate the current selection using a colored style and a leading dot indicator instead of text labels, but only within the submenu where the selection is made.
 
 ### Non-Functional Requirements *(mandatory)*
 
