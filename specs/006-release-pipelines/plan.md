@@ -60,6 +60,7 @@ internal/
 ├── provider/
 ├── store/
 ├── tui/
+├── update/
 └── vector/
 
 tests/

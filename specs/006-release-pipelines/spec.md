@@ -62,11 +62,13 @@ Team confirms versions follow a consistent, predictable scheme across releases.
 
 - **FR-001**: System MUST create a public release on the GitHub Releases page for each new version with artifacts for Linux, Windows, and macOS.
 - **FR-002**: System MUST include release notes and version metadata with each release.
-- **FR-003**: System MUST use semantic versioning (MAJOR.MINOR.PATCH) across all releases.
+- **FR-003**: System MUST use semantic versioning (MAJOR.MINOR.PATCH) across all releases, using tags in the format `v0.0.0`.
+- **FR-008**: Update checks MUST ignore pre-release tags (e.g., `-alpha`, `-beta`, `-rc`).
 - **FR-004**: App MUST check for newer available versions on startup.
 - **FR-005**: App MUST notify the user in a non-blocking way when a newer version is available in both CLI and TUI modes.
 - **FR-006**: App MUST continue to start normally if the update check fails or is unavailable.
 - **FR-007**: Users MUST be able to identify current installed version within the app or CLI output.
+- **FR-009**: Release publishing MUST fail if any platform build fails.
 
 ### Non-Functional Requirements *(mandatory)*
 
@@ -76,7 +78,6 @@ Team confirms versions follow a consistent, predictable scheme across releases.
   including negative/error paths where applicable.
 - **NFR-003 UX Consistency**: User-facing changes MUST follow established UX patterns
   (terminology, interaction flows, visual behavior) or document approved deviations.
-- **NFR-004 Performance**: Update checks MUST not delay app readiness by more than 1 second in 95% of startups.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -89,7 +90,6 @@ Team confirms versions follow a consistent, predictable scheme across releases.
 ### Measurable Outcomes
 
 - **SC-001**: Every published release includes three platform artifacts (Linux, Windows, macOS).
-- **SC-002**: 95% of update checks complete within 2 seconds without blocking startup.
 - **SC-003**: 90% of users with an outdated version see an update notice on first startup after release.
 - **SC-004**: Release notes present for 100% of new releases.
 - **SC-005**: 0 lint/format violations in CI for feature scope.
