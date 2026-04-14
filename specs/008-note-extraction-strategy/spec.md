@@ -1,6 +1,6 @@
 # Feature Specification: note-extraction-strategy
 
-**Feature Branch**: `[009-note-extraction-strategy]`  
+**Feature Branch**: `008-note-extraction-strategy`  
 **Created**: 2026-04-14  
 **Status**: Draft  
 **Input**: User description: "Lets refine the note taking implementation. Help me brainstorm the best solution for extracting notes, deciding if its worth to store it and the best way to find the important notes while chatting. Avoid duplicate note taking."
@@ -11,7 +11,7 @@
 
 - Q: When should the user see the footer message for newly captured notes? → A: Show the footer message only when a note is actually stored.
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Capture valuable notes without duplicates (Priority: P1)
 
@@ -63,7 +63,7 @@ As a user, I want to see a brief footer notification when a note is actually sto
 - How does the system handle partial duplicates where only some attributes overlap?
 - What happens when the conversation context changes and previously stored notes become irrelevant?
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
@@ -77,7 +77,7 @@ As a user, I want to see a brief footer notification when a note is actually sto
 - **FR-008**: System MUST show a footer notification when a note is stored, displaying the note content for roughly 3 seconds.
 - **FR-009**: System MUST expose a user-facing review that includes each note’s origin and storage rationale.
 
-### Non-Functional Requirements *(mandatory)*
+### Non-Functional Requirements _(mandatory)_
 
 - **NFR-001 Code Quality**: Changes MUST pass formatting, linting, and static analysis rules
   defined by the project.
@@ -88,13 +88,13 @@ As a user, I want to see a brief footer notification when a note is actually sto
 - **NFR-004 Performance**: Critical note extraction and retrieval MUST complete within 2 seconds for 95%
   of interactions, with verification steps documented.
 
-### Key Entities *(include if feature involves data)*
+### Key Entities _(include if feature involves data)_
 
 - **Note**: A stored memory item with content, metadata (source, timestamp), and a value score.
 - **Note Candidate**: A provisional extracted item with evidence, confidence, and duplicate match status.
 - **Note Retrieval Result**: A ranked list of notes selected for a specific prompt with relevance scores.
 
-## Success Criteria *(mandatory)*
+## Success Criteria _(mandatory)_
 
 ### Measurable Outcomes
 
