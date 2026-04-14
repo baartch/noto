@@ -46,13 +46,13 @@
 
 ### Implementation for User Story 1
 
-- [ ] T013 [P] [US1] Implement scoring logic in internal/memory/scoring.go
-- [ ] T014 [P] [US1] Implement candidate extraction in internal/memory/candidates.go
-- [ ] T015 [US1] Implement deduplication comparison in internal/vector/dedup.go
-- [ ] T016 [US1] Implement note storage + link-to-existing behavior in internal/memory/store.go
-- [ ] T017 [US1] Wire extraction → scoring → dedup → storage flow in internal/memory/processor.go
-- [ ] T018 [US1] Require embeddings model selection before vector sync in internal/chat/session.go
-- [ ] T019 [US1] Show footer warning when embeddings model is missing in internal/tui/footer_view.go
+- [X] T013 [P] [US1] Implement scoring logic in internal/memory/scoring.go
+- [X] T014 [P] [US1] Implement candidate extraction in internal/memory/candidates.go
+- [X] T015 [US1] Implement deduplication comparison in internal/vector/dedup.go
+- [X] T016 [US1] Implement note storage + link-to-existing behavior in internal/memory/store.go
+- [X] T017 [US1] Wire extraction → scoring → dedup → storage flow in internal/memory/processor.go
+- [X] T018 [US1] Require embeddings model selection before vector sync in internal/chat/session.go
+- [X] T019 [US1] Show footer warning when embeddings model is missing in internal/tui/footer_view.go
 
 **Checkpoint**: User Story 1 fully functional and testable independently
 

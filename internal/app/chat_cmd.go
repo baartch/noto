@@ -115,6 +115,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 	extractorFallback := false
 	cacheStatus := "cache: n/a"
 	inputHistory := loadInputHistory(ctx, profileDB, activeProfile.ID)
+	embeddingModelMissing := false
 
 	var providerFn tui.ProviderFunc
 	var listModelsFn tui.ListModelsFunc
@@ -186,6 +187,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 
 		cacheStatus = sess.CacheStatus()
 		extractorFallback = sess.ExtractorFallbackActive()
+		embeddingModelMissing = sess.EmbeddingModelMissingActive()
 		providerFn = func(callCtx context.Context, userMsg string) (string, error) {
 			sess.SetModel(activeModel)
 			result, err := sess.Send(callCtx, userMsg)
@@ -310,6 +312,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 
 				cacheStatus = sess.CacheStatus()
 				extractorFallback = sess.ExtractorFallbackActive()
+				embeddingModelMissing = sess.EmbeddingModelMissingActive()
 				providerFn = func(callCtx context.Context, userMsg string) (string, error) {
 					sess.SetModel(activeModel)
 					result, err := sess.Send(callCtx, userMsg)
@@ -346,7 +349,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 				}
 			}
 
-			return tui.ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, "tokens: n/a", extractorFallback, providerFn, listModelsFn, modelSelectedFn, extractorModelSelectedFn, tui.DefaultSettingsMenu(), inputHistory)
+			return tui.ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, "tokens: n/a", extractorFallback, embeddingModelMissing, providerFn, listModelsFn, modelSelectedFn, extractorModelSelectedFn, tui.DefaultSettingsMenu(), inputHistory)
 		}
 	}
 	listBackupsFn := func(ctx context.Context) ([]string, error) {
@@ -356,9 +359,12 @@ func runChat(_ *cobra.Command, _ []string) error {
 		return backup.RestoreAt(activeProfile.Slug, timestamp)
 	}
 
+	if sess != nil {
+		embeddingModelMissing = sess.EmbeddingModelMissingActive()
+	}
 	m := tui.New(
 		activeProfile.Name, activeModel, extractorModel,
-		cacheStatus, "tokens: n/a", extractorFallback,
+		cacheStatus, "tokens: n/a", extractorFallback, embeddingModelMissing,
 		dispatcher, execCtx,
 		providerFn, listModelsFn, modelSelectedFn,
 		profSvc,

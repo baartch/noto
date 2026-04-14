@@ -61,7 +61,7 @@ func NotesSaving() tea.Msg { return notesSavingMsg{} }
 func StatsUpdated(formatted string) tea.Msg { return statsUpdatedMsg{formatted: formatted} }
 
 // ProfileSwitched updates the TUI state after switching profiles.
-func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, tokenStatus string, extractorFallback bool, provider ProviderFunc, listModels ListModelsFunc, modelSelected ModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, settings *SettingsMenu, history []string) profileSwitchedMsg {
+func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, tokenStatus string, extractorFallback, embeddingModelMissing bool, provider ProviderFunc, listModels ListModelsFunc, modelSelected ModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, settings *SettingsMenu, history []string) profileSwitchedMsg {
 	return profileSwitchedMsg{
 		profileName:            profileName,
 		activeModel:            activeModel,
@@ -69,6 +69,7 @@ func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, toke
 		cacheStatus:            cacheStatus,
 		tokenStatus:            tokenStatus,
 		extractorFallback:      extractorFallback,
+		embeddingModelMissing:  embeddingModelMissing,
 		provider:               provider,
 		listModels:             listModels,
 		modelSelected:          modelSelected,
@@ -144,6 +145,7 @@ type profileSwitchedMsg struct {
 	cacheStatus            string
 	tokenStatus            string
 	extractorFallback      bool
+	embeddingModelMissing  bool
 	provider               ProviderFunc
 	listModels             ListModelsFunc
 	modelSelected          ModelSelectedFunc
@@ -242,6 +244,7 @@ type Model struct {
 	extractorModel         string
 	extractorModelSelected ExtractorModelSelectedFunc
 	extractorFallback      bool
+	embeddingModelMissing  bool
 }
 
 type chatMessage struct {
@@ -299,6 +302,7 @@ func New(
 	cacheStatus string,
 	tokenStatus string,
 	extractorFallback bool,
+	embeddingModelMissing bool,
 	dispatcher *chat.Dispatcher,
 	execCtx *commands.ExecContext,
 	providerFn ProviderFunc,
@@ -372,6 +376,7 @@ func New(
 		dispatcher:             dispatcher,
 		execCtx:                execCtx,
 		provider:               providerFn,
+		embeddingModelMissing:  embeddingModelMissing,
 		keys:                   keys,
 		help:                   helpModel,
 		helpKeys:               helpKeys,
@@ -485,6 +490,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.activeModel = msg.activeModel
 		m.extractorModel = msg.extractorModel
 		m.extractorFallback = msg.extractorFallback
+		m.embeddingModelMissing = msg.embeddingModelMissing
 		m.cacheStatus = msg.cacheStatus
 		m.tokenStatus = msg.tokenStatus
 		m.provider = msg.provider

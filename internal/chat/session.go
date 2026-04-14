@@ -58,6 +58,8 @@ type Session struct {
 	vectorIndex       vector.Index
 	memoryTokenBudget int
 	extractorFallback bool
+	embeddingModel    string
+	missingEmbedding  bool
 
 	backupStop   chan struct{}
 	pendingNotes int
@@ -99,6 +101,10 @@ func NewSession(
 	if err != nil {
 		return nil, fmt.Errorf("session: read settings: %w", err)
 	}
+	var retrievalEmbedder vector.Embedder
+	if settings.EmbeddingModel != "" {
+		retrievalEmbedder = adapter
+	}
 	ret := memory.NewRetrieval(
 		noteRepo,
 		summaryRepo,
@@ -108,7 +114,7 @@ func NewSession(
 			logger.Infof("vector index issue: %v", err)
 		}),
 		memory.WithTokenBudget(settings.MemoryTokenBudget),
-		memory.WithVectorRetrieval(vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)), profileID, adapter, ""),
+		memory.WithVectorRetrieval(vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)), profileID, retrievalEmbedder, settings.EmbeddingModel),
 	)
 	rc, err := ret.Assemble(ctx, profileID, baseSystemPrompt)
 	if err != nil {
@@ -160,6 +166,8 @@ func NewSession(
 		vectorIndex:       vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)),
 		memoryTokenBudget: settings.MemoryTokenBudget,
 		extractorFallback: extractorAdapter == nil && adapter != nil,
+		embeddingModel:    settings.EmbeddingModel,
+		missingEmbedding:  settings.EmbeddingModel == "",
 	}
 	if profileSlug != "" {
 		s.startBackupTicker()
@@ -244,7 +252,11 @@ func (s *Session) relevantNotes(ctx context.Context, userMsg string) ([]*store.M
 	if s.adapter == nil || s.noteRepo == nil || s.vectorIndex == nil {
 		return nil, nil
 	}
-	embedResp, err := s.adapter.Embed(ctx, provider.EmbeddingRequest{Input: userMsg})
+	if s.embeddingModel == "" {
+		s.missingEmbedding = true
+		return nil, nil
+	}
+	embedResp, err := s.adapter.Embed(ctx, provider.EmbeddingRequest{Input: userMsg, Model: s.embeddingModel})
 	if err != nil {
 		return nil, fmt.Errorf("session: embed query: %w", err)
 	}
@@ -320,6 +332,10 @@ func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote
 	if s.vectorIndex == nil || s.adapter == nil {
 		return nil
 	}
+	if s.embeddingModel == "" {
+		s.missingEmbedding = true
+		return nil
+	}
 	fileIndex, ok := s.vectorIndex.(*vector.FileIndex)
 	if ok {
 		fileIndex.WithProfile(s.profileID)
@@ -335,7 +351,7 @@ func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote
 	if err := s.ensureVectorManifest(ctx, manifestRepo); err != nil {
 		return err
 	}
-	syncer := vector.NewSyncer(s.vectorIndex, s.profileID, s.adapter, "").WithManifest(manifestRepo)
+	syncer := vector.NewSyncer(s.vectorIndex, s.profileID, s.adapter, s.embeddingModel).WithManifest(manifestRepo)
 	records := make([]vector.MemoryNoteRecord, 0, len(notes))
 	for _, note := range notes {
 		records = append(records, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
@@ -359,7 +375,7 @@ func (s *Session) ensureVectorManifest(ctx context.Context, repo *store.VectorMa
 		ProfileID:          s.profileID,
 		IndexPath:          s.vectorIndexPath,
 		IndexFormatVersion: "1",
-		EmbeddingModel:     "",
+		EmbeddingModel:     s.embeddingModel,
 		EmbeddingDim:       0,
 		SourceStateVersion: "",
 		Status:             store.VectorManifestReady,
@@ -390,7 +406,7 @@ func (s *Session) ensureVectorCompaction(ctx context.Context) error {
 
 	rebuilder := vector.NewRebuilder(manifestRepo, s.vectorIndex, s.profileID).
 		WithManifest(manifestRepo).
-		WithEmbedder(s.adapter, "")
+		WithEmbedder(s.adapter, s.embeddingModel)
 	return rebuilder.Rebuild(ctx, records)
 }
 
@@ -403,12 +419,21 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 	defer cancel()
 
 	extractor := s.extractor
+	embedder := s.adapter
 	if s.extractorAdapter != nil {
 		extractor = memory.NewExtractor(s.noteRepo, s.extractorAdapter, s.cacheRepo)
+		embedder = s.extractorAdapter
 	} else if s.adapter != nil {
 		extractor = memory.NewExtractor(s.noteRepo, s.adapter, s.cacheRepo)
 	}
-	result, err := extractor.ExtractTurn(ctx, s.profileID, s.conversationID, userMsg, assistantMsg)
+	if embedder != nil && s.vectorIndex != nil && s.embeddingModel != "" {
+		deduper := vector.NewVectorDeduper(s.vectorIndex, s.profileID, embedder, s.embeddingModel).WithWarnFunc(func(err error) {
+			s.logger.Infof("vector dedup issue: %v", err)
+		})
+		extractor.WithDeduper(deduper)
+	}
+	sourceIDs := []string{s.history[len(s.history)-2].ID, s.history[len(s.history)-1].ID}
+	result, err := extractor.ExtractTurn(ctx, s.profileID, s.conversationID, sourceIDs, userMsg, assistantMsg)
 	if err != nil {
 		s.logger.Errorf("memory extraction failed: %v", err)
 		s.markNotesDone(0)
@@ -462,6 +487,11 @@ func (s *Session) CacheStatus() string {
 // ExtractorFallbackActive reports whether extraction is using the main model.
 func (s *Session) ExtractorFallbackActive() bool {
 	return s.extractorFallback
+}
+
+// EmbeddingModelMissingActive reports whether embeddings are missing.
+func (s *Session) EmbeddingModelMissingActive() bool {
+	return s.missingEmbedding
 }
 
 // Close archives the conversation, persists a session summary, and snapshots backups.

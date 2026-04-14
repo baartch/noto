@@ -1,5 +1,7 @@
 package memory
 
+import "strings"
+
 // ValueScore captures the scoring output for a note candidate.
 type ValueScore struct {
 	// Total is the aggregate score used for storage decisions.
@@ -27,7 +29,36 @@ const (
 )
 
 // ScoreCandidate computes the score for a candidate note.
-// Implementation is added in the user story phase.
-func ScoreCandidate(_ ScoringInputs) ValueScore {
-	return ValueScore{Total: DefaultValueScore}
+func ScoreCandidate(inputs ScoringInputs) ValueScore {
+	content := strings.TrimSpace(inputs.Content)
+	if content == "" {
+		return ValueScore{Total: DefaultValueScore}
+	}
+
+	importance := inputs.Importance
+	if importance <= 0 {
+		importance = DefaultValueScore
+	}
+
+	specificity := 1
+	if len(strings.Fields(content)) >= 4 {
+		specificity = 2
+	}
+
+	usefulness := 1
+	if len(inputs.Evidence) > 0 {
+		usefulness = 2
+	}
+
+	total := importance
+	if total < DefaultValueScore {
+		total = DefaultValueScore
+	}
+
+	return ValueScore{
+		Total:       total,
+		Importance:  importance,
+		Specificity: specificity,
+		Usefulness:  usefulness,
+	}
 }

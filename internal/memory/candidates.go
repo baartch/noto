@@ -5,18 +5,20 @@ import "strings"
 // NoteCandidate represents a provisional note extracted from a chat turn.
 type NoteCandidate struct {
 	Content     string
+	Category    string
+	Importance  int
 	ValueScore  ValueScore
 	DuplicateOf string
 	Evidence    []string
 }
 
 // EvaluateCandidate normalizes and scores a raw candidate string.
-// Implementation is added in the user story phase.
-func EvaluateCandidate(content string, evidence []string) NoteCandidate {
+func EvaluateCandidate(content string, importance int, evidence []string) NoteCandidate {
 	clean := strings.TrimSpace(content)
 	return NoteCandidate{
 		Content:    clean,
-		ValueScore: ScoreCandidate(ScoringInputs{Content: clean, Evidence: evidence}),
+		Importance: importance,
+		ValueScore: ScoreCandidate(ScoringInputs{Content: clean, Importance: importance, Evidence: evidence}),
 		Evidence:   evidence,
 	}
 }

@@ -26,6 +26,7 @@ func TestTUIModel_HandlesWindowResize(t *testing.T) {
 		"cache: n/a",
 		"tokens: n/a",
 		true,
+		false,
 		dispatcher,
 		execCtx,
 		nil,
@@ -56,6 +57,7 @@ func TestTUIModel_TogglesHelp(t *testing.T) {
 		"",
 		"cache: n/a",
 		"tokens: n/a",
+		false,
 		false,
 		dispatcher,
 		execCtx,
@@ -92,6 +94,7 @@ func TestTUIModel_OpenSettingsShortcut(t *testing.T) {
 		"",
 		"cache: n/a",
 		"tokens: n/a",
+		false,
 		false,
 		dispatcher,
 		execCtx,
@@ -151,7 +154,7 @@ func newSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext) {
 
 	execCtx := &commands.ExecContext{ProfileID: p.ID, ProfileSlug: p.Slug, DB: db}
 	model := tui.New(
-		"Profile", "", "", "cache: n/a", "tokens: n/a", false,
+		"Profile", "", "", "cache: n/a", "tokens: n/a", false, false,
 		chat.NewDispatcher(registry),
 		execCtx,
 		nil, nil,
@@ -238,6 +241,7 @@ func TestSettingsSubmenuNavigation_EscBehavior(t *testing.T) {
 		"",
 		"cache: n/a",
 		"tokens: n/a",
+		false,
 		false,
 		chat.NewDispatcher(commands.NewRegistry()),
 		execCtx,
