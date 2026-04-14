@@ -1,7 +1,7 @@
 # Implementation Plan: Release Publishing & Update Checks
 
-**Branch**: `006-release-pipelines` | **Date**: 2026-04-13 | **Spec**: /home/andy/gitrepos/noto/specs/006-release-pipelines/spec.md
-**Input**: Feature specification from `/specs/006-release-pipelines/spec.md`
+**Branch**: `007-release-pipelines` | **Date**: 2026-04-13 | **Spec**: /home/andy/gitrepos/noto/specs/007-release-pipelines/spec.md
+**Input**: Feature specification from `/specs/007-release-pipelines/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
@@ -23,7 +23,7 @@ GitHub Actions release pipeline builds Linux/Windows/macOS artifacts, runs `make
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+_GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 
 - **Code Quality Gate**: Release workflow runs `make tidy fmt vet lint test` before publish; CI stays on PRs. Go format (`gofmt`), `go vet`, `golangci-lint` enforced.
 - **Testing Standards Gate**: Add tests for update check (success/no update/error) and CLI/TUI notice paths; release workflow runs full test suite; contract coverage for version output.
@@ -35,7 +35,7 @@ GitHub Actions release pipeline builds Linux/Windows/macOS artifacts, runs `make
 ### Documentation (this feature)
 
 ```text
-specs/006-release-pipelines/
+specs/007-release-pipelines/
 ├── plan.md              # This file (/speckit.plan command output)
 ├── research.md          # Phase 0 output (/speckit.plan command)
 ├── data-model.md        # Phase 1 output (/speckit.plan command)
@@ -82,4 +82,4 @@ tests/
 > **Fill ONLY if Constitution Check has violations that must be justified**
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
+| --------- | ---------- | ------------------------------------ |

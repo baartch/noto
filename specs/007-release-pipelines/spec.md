@@ -1,11 +1,11 @@
 # Feature Specification: Release Publishing & Update Checks
 
-**Feature Branch**: `006-release-pipelines`  
+**Feature Branch**: `007-release-pipelines`  
 **Created**: 2026-04-13  
 **Status**: Draft  
 **Input**: User description: "Lets publish releases for linux, windows and macos on github. Therefor we need deployment pipelines (Github actions) and versioning. Ideally noto checks at startup for new versions."
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Publish multi-OS release (Priority: P1)
 
@@ -56,7 +56,7 @@ Team confirms versions follow a consistent, predictable scheme across releases.
 - If any platform build fails, the release is not published.
 - How does the app handle update checks when network is unavailable; startup continues and no blocking error.
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
@@ -70,7 +70,7 @@ Team confirms versions follow a consistent, predictable scheme across releases.
 - **FR-007**: Users MUST be able to identify current installed version within the app or CLI output.
 - **FR-009**: Release publishing MUST fail if any platform build fails.
 
-### Non-Functional Requirements *(mandatory)*
+### Non-Functional Requirements _(mandatory)_
 
 - **NFR-001 Code Quality**: Changes MUST pass formatting, linting, and static analysis rules
   defined by the project.
@@ -79,13 +79,13 @@ Team confirms versions follow a consistent, predictable scheme across releases.
 - **NFR-003 UX Consistency**: User-facing changes MUST follow established UX patterns
   (terminology, interaction flows, visual behavior) or document approved deviations.
 
-### Key Entities *(include if feature involves data)*
+### Key Entities _(include if feature involves data)_
 
 - **Release**: Public distribution of a version; includes version number, notes, date.
 - **Artifact**: Platform-specific package linked to a Release (Linux/Windows/macOS).
 - **Version**: Ordered identifier for a Release; used for comparison and update checks.
 
-## Success Criteria *(mandatory)*
+## Success Criteria _(mandatory)_
 
 ### Measurable Outcomes
 

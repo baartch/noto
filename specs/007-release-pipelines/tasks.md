@@ -1,11 +1,10 @@
 ---
-
 description: "Task list for Release Publishing & Update Checks"
 ---
 
 # Tasks: Release Publishing & Update Checks
 
-**Input**: Design documents from `/specs/006-release-pipelines/`
+**Input**: Design documents from `/specs/007-release-pipelines/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/
 
 **Tests**: Test tasks are REQUIRED for every user story and must be created before implementation tasks.
@@ -93,9 +92,9 @@ description: "Task list for Release Publishing & Update Checks"
 ## Phase 6: Polish & Cross-Cutting Concerns
 
 - [ ] T023 [P] Update docs for release/version usage in /home/andy/gitrepos/noto/README.md
-- [ ] T024 Validate quickstart steps in /home/andy/gitrepos/noto/specs/006-release-pipelines/quickstart.md
-- [ ] T025 Add UX consistency validation note for CLI/TUI update notice in /home/andy/gitrepos/noto/specs/006-release-pipelines/quickstart.md
-- [ ] T026 Add workflow validation checklist entry in /home/andy/gitrepos/noto/specs/006-release-pipelines/quickstart.md
+- [ ] T024 Validate quickstart steps in /home/andy/gitrepos/noto/specs/007-release-pipelines/quickstart.md
+- [ ] T025 Add UX consistency validation note for CLI/TUI update notice in /home/andy/gitrepos/noto/specs/007-release-pipelines/quickstart.md
+- [ ] T026 Add workflow validation checklist entry in /home/andy/gitrepos/noto/specs/007-release-pipelines/quickstart.md
 - [ ] T027 Ensure CI/lint/test parity notes in /home/andy/gitrepos/noto/.github/workflows/ci.yml (if needed)
 
 ---
