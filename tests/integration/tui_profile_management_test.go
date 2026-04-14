@@ -98,6 +98,8 @@ func TestSettingsProfiles_ListView(t *testing.T) {
 func TestSettingsProfiles_KeyHints(t *testing.T) {
 	m, _, _ := newProfileSettingsModel(t)
 	m = openProfilesSubmenu(t, m)
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'h', Mod: tea.ModCtrl})
+	m = asModel(t, updated)
 	view := m.View().Content
 
 	if !strings.Contains(view, "ctrl+n") || !strings.Contains(view, "ctrl+r") || !strings.Contains(view, "ctrl+d") || !strings.Contains(view, "enter") {

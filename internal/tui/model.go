@@ -349,8 +349,13 @@ func New(
 	helpModel.Styles.FullKey = helpFullStyle
 	helpModel.Styles.FullDesc = helpFullStyle
 	helpKeys := helpKeyMap{
-		primary:   []key.Binding{keys.toggleHelp},
-		secondary: nil,
+		primary: []key.Binding{keys.toggleHelp},
+		secondary: []key.Binding{
+			keys.openSettings,
+			keys.openModel,
+			keys.clearInput,
+			keys.quit,
+		},
 	}
 
 	if inputHistory == nil {
@@ -1143,7 +1148,7 @@ func (m Model) View() tea.View {
 
 	helperWidth := max(m.width-2, 0)
 	m.help.SetWidth(helperWidth)
-	m.updateHelpKeys()
+	m.updateListHelp()
 	var helpBlock string
 	if m.help.ShowAll {
 		helpBlock = "\n" + m.help.View(m.helpKeys) + "\n"
@@ -1301,11 +1306,12 @@ func (m *Model) renderSettingsDialog(height int) string {
 }
 
 func (m *Model) renderSettingsList(height int) string {
+	m.updateListHelp()
 	m.settingsList.SetHeight(max(height-2, 4))
 	m.settingsList.SetWidth(max(m.width-6, 20))
-	m.settingsList.Title = settingsHelpText
+	m.settingsList.Title = ""
 
-	head := m.settingsList.Title
+	head := settingsHelpText
 	if m.settingsErr != "" {
 		head = head + "\n" + errStyle.Render("  "+m.settingsErr)
 	}
@@ -1326,11 +1332,7 @@ func (m *Model) syncSettingsList() {
 		items[i] = settingsItem{entry: entry}
 	}
 	m.settingsList.SetItems(items)
-	header := settingsHelpText
-	if m.settingsMenu.Title != "" {
-		header = "  " + m.settingsMenu.Title
-	}
-	m.settingsList.Title = header
+	m.settingsList.Title = ""
 	m.settingsList.SetSize(max(m.width-6, 20), max(m.height/2-2, 6))
 	if len(items) > 0 {
 		m.settingsList.Select(0)
@@ -1500,9 +1502,11 @@ func formatSettingsValue(value string, maxWidth int) string {
 func newSettingsList(width int) list.Model {
 	delegate := settingsDelegate{}
 	l := list.New([]list.Item{}, delegate, width, 0)
-	l.SetShowHelp(false)
+	l.SetShowTitle(false)
+	l.SetShowHelp(true)
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)
+	l.DisableQuitKeybindings()
 	return l
 }
 
@@ -1791,32 +1795,33 @@ func obfuscateKey(key string) string {
 	return key[:4] + strings.Repeat("*", len(key)-8) + key[len(key)-4:]
 }
 
-func (m *Model) updateHelpKeys() {
-	m.helpKeys.primary = []key.Binding{m.keys.toggleHelp}
-	secondary := []key.Binding{}
-
+func (m *Model) updateListHelp() {
+	m.settingsList.SetShowHelp(true)
 	enterSelect := key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select"))
 	escBack := key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back/close"))
 
-	switch {
-	case m.picker != nil:
-		secondary = append(secondary, enterSelect, escBack)
-	case m.settingsOpen && m.settingsEditing:
-		secondary = append(secondary,
-			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "save")),
-			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
-			key.NewBinding(key.WithKeys("alt+enter"), key.WithHelp("alt+enter", "newline")),
-			key.NewBinding(key.WithKeys("ctrl+left", "ctrl+right"), key.WithHelp("ctrl+←/→", "word jump")),
-		)
-	case m.settingsOpen && m.settingsMenu != nil && m.settingsMenu.ID == settingsIDProfiles:
-		secondary = append(secondary, enterSelect, escBack, m.keys.profileNew, m.keys.profileRename, m.keys.profileDelete)
-	case m.settingsOpen:
-		secondary = append(secondary, enterSelect, escBack)
-	default:
-		secondary = append(secondary, m.keys.openSettings, m.keys.openModel, m.keys.clearInput, m.keys.quit)
+	shortHelp := func() []key.Binding {
+		if m.picker != nil {
+			return []key.Binding{enterSelect, escBack}
+		}
+		if m.settingsOpen && m.settingsEditing {
+			return []key.Binding{
+				key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "save")),
+				key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
+				key.NewBinding(key.WithKeys("alt+enter"), key.WithHelp("alt+enter", "newline")),
+				key.NewBinding(key.WithKeys("ctrl+left", "ctrl+right"), key.WithHelp("ctrl+←/→", "word jump")),
+			}
+		}
+		if m.settingsOpen && m.settingsMenu != nil && m.settingsMenu.ID == settingsIDProfiles {
+			return []key.Binding{enterSelect, escBack, m.keys.profileNew, m.keys.profileRename, m.keys.profileDelete}
+		}
+		if m.settingsOpen {
+			return []key.Binding{enterSelect, escBack}
+		}
+		return nil
 	}
-
-	m.helpKeys.secondary = secondary
+	m.settingsList.AdditionalShortHelpKeys = shortHelp
+	m.settingsList.AdditionalFullHelpKeys = shortHelp
 }
 
 func (m *Model) saveProviderEndpoint(endpoint string) error {
