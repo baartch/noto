@@ -5,6 +5,7 @@ import "sort"
 const (
 	settingsIDModel            = "model"
 	settingsIDExtractorModel   = "extractor_model"
+	settingsIDEmbeddingsModel  = "embeddings_model"
 	settingsIDSystemPrompt     = "system_prompt"
 	settingsIDMemoryTokenLimit = "memory_token_budget"
 	settingsIDProviders        = "providers"
@@ -120,6 +121,12 @@ func DefaultSettingsMenu() *SettingsMenu {
 			{
 				ID:        settingsIDExtractorModel,
 				Label:     "Model Extractor",
+				Kind:      SettingsEntryAction,
+				ValueType: SettingsValueAction,
+			},
+			{
+				ID:        settingsIDEmbeddingsModel,
+				Label:     "Model Embeddings",
 				Kind:      SettingsEntryAction,
 				ValueType: SettingsValueAction,
 			},

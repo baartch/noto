@@ -79,6 +79,27 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 			m.picker.err = errors.New("no provider configured")
 			m.picker.setItems([]pickerItem{{Value: "", Label: "No models available"}})
 		}
+	case pickerKindEmbeddingsModel:
+		m.picker = newPickerState("Select embeddings model", m.width-4)
+		m.picker.loading = true
+		if m.listEmbeddings != nil {
+			current := m.embeddingModel
+			cmds = append(cmds, func() tea.Msg {
+				models, err := m.listEmbeddings(context.Background())
+				if err != nil {
+					return modelsLoadedMsg{err: err}
+				}
+				items := make([]pickerItem, len(models))
+				for i, mi := range models {
+					items[i] = pickerItem{Value: mi.ID, Active: mi.ID == current}
+				}
+				return modelsLoadedMsg{items: items}
+			})
+		} else {
+			m.picker.loading = false
+			m.picker.err = errors.New("no provider configured")
+			m.picker.setItems([]pickerItem{{Value: "", Label: "No models available"}})
+		}
 	}
 
 	return m, tea.Batch(cmds...)
@@ -152,6 +173,17 @@ func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea
 				} else {
 					m.extractorModel = chosen
 					m.messages = append(m.messages, chatMessage{role: "command", content: "Extractor model set to: " + chosen, timestamp: time.Now()})
+					m.syncViewport()
+				}
+			}
+		case pickerKindEmbeddingsModel:
+			if m.embeddingModelSelected != nil {
+				if err := m.embeddingModelSelected(chosen); err != nil {
+					m.err = err
+				} else {
+					m.embeddingModel = chosen
+					m.embeddingModelMissing = chosen == ""
+					m.messages = append(m.messages, chatMessage{role: "command", content: "Embeddings model set to: " + chosen, timestamp: time.Now()})
 					m.syncViewport()
 				}
 			}

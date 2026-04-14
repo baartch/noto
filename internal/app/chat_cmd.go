@@ -116,10 +116,13 @@ func runChat(_ *cobra.Command, _ []string) error {
 	cacheStatus := "cache: n/a"
 	inputHistory := loadInputHistory(ctx, profileDB, activeProfile.ID)
 	embeddingModelMissing := false
+	embeddingModel := ""
 
 	var providerFn tui.ProviderFunc
 	var listModelsFn tui.ListModelsFunc
+	var listEmbeddingsFn tui.ListEmbeddingsFunc
 	modelSelectedFn := func(modelID string) error { return nil }
+	embeddingModelSelectedFn := func(modelID string) error { return nil }
 	extractorModelSelectedFn := func(modelID string) error { return nil }
 
 	if providerCfg != nil && decryptedKey != "" {
@@ -188,6 +191,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 		cacheStatus = sess.CacheStatus()
 		extractorFallback = sess.ExtractorFallbackActive()
 		embeddingModelMissing = sess.EmbeddingModelMissingActive()
+		embeddingModel = sess.EmbeddingModel()
 		providerFn = func(callCtx context.Context, userMsg string) (string, error) {
 			sess.SetModel(activeModel)
 			result, err := sess.Send(callCtx, userMsg)
@@ -203,6 +207,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 		listModelsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 			return provider.ListModels(callCtx, adapterCfg)
 		}
+		listEmbeddingsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
+			return provider.ListEmbeddingModels(callCtx, adapterCfg)
+		}
 
 		cfgRepo := store.NewProviderConfigRepo(profileDB)
 		modelSelectedFn = func(modelID string) error {
@@ -210,6 +217,19 @@ func runChat(_ *cobra.Command, _ []string) error {
 				return err
 			}
 			activeModel = modelID
+			return nil
+		}
+		embeddingModelSelectedFn = func(modelID string) error {
+			settings, err := profilepkg.ReadSettings(activeProfile.Slug)
+			if err != nil {
+				return err
+			}
+			settings.EmbeddingModel = modelID
+			if err := profilepkg.WriteSettings(activeProfile.Slug, settings); err != nil {
+				return err
+			}
+			embeddingModelMissing = modelID == ""
+			embeddingModel = modelID
 			return nil
 		}
 		extractorModelSelectedFn = func(modelID string) error {
@@ -255,7 +275,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 			cacheStatus = "cache: n/a"
 			providerFn = nil
 			listModelsFn = nil
+			listEmbeddingsFn = nil
 			modelSelectedFn = func(modelID string) error { return nil }
+			embeddingModelSelectedFn = func(modelID string) error { return nil }
 			extractorModelSelectedFn = func(modelID string) error { return nil }
 			extractorFallback = false
 			inputHistory = loadInputHistory(ctx, profileDB, p.ID)
@@ -313,6 +335,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 				cacheStatus = sess.CacheStatus()
 				extractorFallback = sess.ExtractorFallbackActive()
 				embeddingModelMissing = sess.EmbeddingModelMissingActive()
+				embeddingModel = sess.EmbeddingModel()
 				providerFn = func(callCtx context.Context, userMsg string) (string, error) {
 					sess.SetModel(activeModel)
 					result, err := sess.Send(callCtx, userMsg)
@@ -328,6 +351,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 				listModelsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 					return provider.ListModels(callCtx, adapterCfg)
 				}
+				listEmbeddingsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
+					return provider.ListEmbeddingModels(callCtx, adapterCfg)
+				}
 
 				cfgRepo := store.NewProviderConfigRepo(profileDB)
 				modelSelectedFn = func(modelID string) error {
@@ -335,6 +361,19 @@ func runChat(_ *cobra.Command, _ []string) error {
 						return err
 					}
 					activeModel = modelID
+					return nil
+				}
+				embeddingModelSelectedFn = func(modelID string) error {
+					settings, err := profilepkg.ReadSettings(p.Slug)
+					if err != nil {
+						return err
+					}
+					settings.EmbeddingModel = modelID
+					if err := profilepkg.WriteSettings(p.Slug, settings); err != nil {
+						return err
+					}
+					embeddingModelMissing = modelID == ""
+					embeddingModel = modelID
 					return nil
 				}
 				extractorModelSelectedFn = func(modelID string) error {
@@ -349,7 +388,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 				}
 			}
 
-			return tui.ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, "tokens: n/a", extractorFallback, embeddingModelMissing, providerFn, listModelsFn, modelSelectedFn, extractorModelSelectedFn, tui.DefaultSettingsMenu(), inputHistory)
+			return tui.ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, "tokens: n/a", extractorFallback, embeddingModelMissing, providerFn, listModelsFn, listEmbeddingsFn, modelSelectedFn, embeddingModelSelectedFn, extractorModelSelectedFn, tui.DefaultSettingsMenu(), inputHistory)
 		}
 	}
 	listBackupsFn := func(ctx context.Context) ([]string, error) {
@@ -361,12 +400,13 @@ func runChat(_ *cobra.Command, _ []string) error {
 
 	if sess != nil {
 		embeddingModelMissing = sess.EmbeddingModelMissingActive()
+		embeddingModel = sess.EmbeddingModel()
 	}
 	m := tui.New(
 		activeProfile.Name, activeModel, extractorModel,
 		cacheStatus, "tokens: n/a", extractorFallback, embeddingModelMissing,
 		dispatcher, execCtx,
-		providerFn, listModelsFn, modelSelectedFn,
+		providerFn, listModelsFn, listEmbeddingsFn, modelSelectedFn, embeddingModelSelectedFn,
 		profSvc,
 		profileSwitchCmd,
 		listBackupsFn, backupSelectedFn,

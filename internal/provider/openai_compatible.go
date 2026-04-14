@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -36,8 +37,15 @@ func (a *OpenAICompatible) ProviderType() string { return "openai_compatible" }
 func (a *OpenAICompatible) Embed(ctx context.Context, req EmbeddingRequest) (*EmbeddingResponse, error) {
 	endpoint := a.cfg.Endpoint
 	if endpoint == "" {
-		endpoint = "https://api.openai.com/v1/embeddings"
+		endpoint = "https://api.openai.com/v1"
 	}
+	endpoint = strings.TrimSuffix(endpoint, "/embeddings")
+	endpoint = strings.TrimSuffix(endpoint, "/embeddings/models")
+	endpoint = strings.TrimSuffix(endpoint, "/chat/completions")
+	endpoint = strings.TrimSuffix(endpoint, "/completions")
+	endpoint = strings.TrimSuffix(endpoint, "/responses")
+	endpoint = strings.TrimRight(endpoint, "/")
+	endpoint = endpoint + "/embeddings"
 
 	model := req.Model
 	if model == "" {
@@ -78,9 +86,13 @@ func (a *OpenAICompatible) Embed(ctx context.Context, req EmbeddingRequest) (*Em
 		return nil, fmt.Errorf("provider: unexpected status %d: %s", resp.StatusCode, string(data))
 	}
 
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("provider: read embedding response: %w", err)
+	}
 	var apiResp openAIEmbeddingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return nil, fmt.Errorf("provider: decode embedding response: %w", err)
+	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
+		return nil, fmt.Errorf("provider: decode embedding response: %w: %s", err, string(bodyBytes))
 	}
 	if len(apiResp.Data) == 0 {
 		return nil, errors.New("provider: no embedding data in response")
@@ -108,8 +120,15 @@ func (a *OpenAICompatible) SetModel(model string) { a.cfg.Model = model }
 func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
 	endpoint := a.cfg.Endpoint
 	if endpoint == "" {
-		endpoint = "https://api.openai.com/v1/chat/completions"
+		endpoint = "https://api.openai.com/v1"
 	}
+	endpoint = strings.TrimSuffix(endpoint, "/chat/completions")
+	endpoint = strings.TrimSuffix(endpoint, "/completions")
+	endpoint = strings.TrimSuffix(endpoint, "/responses")
+	endpoint = strings.TrimSuffix(endpoint, "/embeddings")
+	endpoint = strings.TrimSuffix(endpoint, "/embeddings/models")
+	endpoint = strings.TrimRight(endpoint, "/")
+	endpoint = endpoint + "/chat/completions"
 
 	model := req.Model
 	if model == "" {
@@ -154,9 +173,13 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 		return nil, fmt.Errorf("provider: unexpected status %d: %s", resp.StatusCode, string(data))
 	}
 
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("provider: read response: %w", err)
+	}
 	var apiResp openAIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return nil, fmt.Errorf("provider: decode response: %w", err)
+	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
+		return nil, fmt.Errorf("provider: decode response: %w: %s", err, string(bodyBytes))
 	}
 
 	if len(apiResp.Choices) == 0 {

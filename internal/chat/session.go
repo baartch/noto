@@ -494,6 +494,11 @@ func (s *Session) EmbeddingModelMissingActive() bool {
 	return s.missingEmbedding || s.embeddingModel == ""
 }
 
+// EmbeddingModel returns the currently selected embeddings model.
+func (s *Session) EmbeddingModel() string {
+	return s.embeddingModel
+}
+
 // Close archives the conversation, persists a session summary, and snapshots backups.
 func (s *Session) Close(ctx context.Context) {
 	if s.profileSlug != "" {

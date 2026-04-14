@@ -89,18 +89,18 @@
 
 ### Tests for User Story 3
 
-- [ ] T027 [P] [US3] Integration test for footer notification timing in tests/integration/ui/footer_note_test.go
-- [ ] T028 [P] [US3] Integration test for note review listing in tests/integration/memory/review_test.go
-- [ ] T029 [P] [US3] Integration test for embeddings model selector in tests/integration/tui/embed_model_picker_test.go
+- [X] T027 [P] [US3] Integration test for footer notification timing in tests/integration/tui_footer_note_test.go
+- [X] T028 [P] [US3] Integration test for note review listing in tests/integration/memory/review_test.go
+- [X] T029 [P] [US3] Integration test for embeddings model selector in tests/integration/tui_embed_model_picker_test.go
 
 ### Implementation for User Story 3
 
-- [ ] T030 [P] [US3] Add embeddings model entry in settings menu in internal/tui/settings_menu.go
-- [ ] T031 [US3] Implement embeddings model picker using /embeddings/models endpoint in internal/tui/model.go
-- [ ] T032 [US3] Add provider call to list embeddings models at baseURL+/embeddings/models in internal/provider/openai_compatible.go
-- [ ] T033 [US3] Persist embeddings model selection in internal/profile/settings.go
-- [ ] T034 [US3] Show embeddings model selection state in settings list in internal/tui/settings_menu.go
-- [ ] T035 [US3] Update embeddings request to use baseURL+/embeddings with selected model in internal/provider/openai_compatible.go
+- [X] T030 [P] [US3] Add embeddings model entry in settings menu in internal/tui/settings_menu.go
+- [X] T031 [US3] Implement embeddings model picker using /embeddings/models endpoint in internal/tui/model.go
+- [X] T032 [US3] Add provider call to list embeddings models at baseURL+/embeddings/models in internal/provider/openai_compatible.go
+- [X] T033 [US3] Persist embeddings model selection in internal/profile/settings.go
+- [X] T034 [US3] Show embeddings model selection state in settings list in internal/tui/settings_menu.go
+- [X] T035 [US3] Update embeddings request to use baseURL+/embeddings with selected model in internal/provider/openai_compatible.go
 - [ ] T036 [US3] Replace chat/completions calls with Responses API at baseURL+/responses in internal/provider/openai_compatible.go
 - [ ] T037 [US3] Map Responses API request/response payloads in internal/provider/openai_compatible.go
 

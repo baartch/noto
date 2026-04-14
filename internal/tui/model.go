@@ -34,8 +34,14 @@ type ProviderFunc func(ctx context.Context, userMsg string) (string, error)
 // ListModelsFunc fetches the available models from the configured provider.
 type ListModelsFunc func(ctx context.Context) ([]provider.ModelInfo, error)
 
+// ListEmbeddingsFunc fetches available embeddings models from the provider.
+type ListEmbeddingsFunc func(ctx context.Context) ([]provider.ModelInfo, error)
+
 // ModelSelectedFunc is called when the user picks a model in the picker.
 type ModelSelectedFunc func(modelID string) error
+
+// EmbeddingModelSelectedFunc is called when the user picks an embeddings model.
+type EmbeddingModelSelectedFunc func(modelID string) error
 
 // ProfileSwitchCmd switches the active profile and refreshes the TUI.
 type ProfileSwitchCmd func(profileName string) tea.Cmd
@@ -61,18 +67,21 @@ func NotesSaving() tea.Msg { return notesSavingMsg{} }
 func StatsUpdated(formatted string) tea.Msg { return statsUpdatedMsg{formatted: formatted} }
 
 // ProfileSwitched updates the TUI state after switching profiles.
-func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, tokenStatus string, extractorFallback, embeddingModelMissing bool, provider ProviderFunc, listModels ListModelsFunc, modelSelected ModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, settings *SettingsMenu, history []string) profileSwitchedMsg {
+func ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, tokenStatus string, extractorFallback, embeddingModelMissing bool, provider ProviderFunc, listModels ListModelsFunc, listEmbeddings ListEmbeddingsFunc, modelSelected ModelSelectedFunc, embeddingModelSelected EmbeddingModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, settings *SettingsMenu, history []string) profileSwitchedMsg {
 	return profileSwitchedMsg{
 		profileName:            profileName,
 		activeModel:            activeModel,
 		extractorModel:         extractorModel,
+		embeddingModel:         embeddingModel,
 		cacheStatus:            cacheStatus,
 		tokenStatus:            tokenStatus,
 		extractorFallback:      extractorFallback,
 		embeddingModelMissing:  embeddingModelMissing,
 		provider:               provider,
 		listModels:             listModels,
+		listEmbeddings:         listEmbeddings,
 		modelSelected:          modelSelected,
+		embeddingModelSelected: embeddingModelSelected,
 		extractorModelSelected: extractorModelSelected,
 		settings:               settings,
 		history:                history,
@@ -142,13 +151,16 @@ type profileSwitchedMsg struct {
 	profileName            string
 	activeModel            string
 	extractorModel         string
+	embeddingModel         string
 	cacheStatus            string
 	tokenStatus            string
 	extractorFallback      bool
 	embeddingModelMissing  bool
 	provider               ProviderFunc
 	listModels             ListModelsFunc
+	listEmbeddings         ListEmbeddingsFunc
 	modelSelected          ModelSelectedFunc
+	embeddingModelSelected EmbeddingModelSelectedFunc
 	extractorModelSelected ExtractorModelSelectedFunc
 	settings               *SettingsMenu
 	history                []string
@@ -161,9 +173,10 @@ type spinnerTickMsg struct{}
 type pickerKind int
 
 const (
-	pickerKindModel          pickerKind = iota
-	pickerKindBackup         pickerKind = iota
-	pickerKindExtractorModel pickerKind = iota
+	pickerKindModel pickerKind = iota
+	pickerKindBackup
+	pickerKindExtractorModel
+	pickerKindEmbeddingsModel
 )
 
 const (
@@ -235,7 +248,9 @@ type Model struct {
 	execCtx                *commands.ExecContext
 	provider               ProviderFunc
 	listModels             ListModelsFunc
+	listEmbeddings         ListEmbeddingsFunc
 	modelSelected          ModelSelectedFunc
+	embeddingModelSelected EmbeddingModelSelectedFunc
 	profileService         *profile.Service
 	profileSwitch          ProfileSwitchCmd
 	listBackups            ListBackupsFunc
@@ -245,6 +260,7 @@ type Model struct {
 	extractorModelSelected ExtractorModelSelectedFunc
 	extractorFallback      bool
 	embeddingModelMissing  bool
+	embeddingModel         string
 }
 
 type chatMessage struct {
@@ -307,7 +323,9 @@ func New(
 	execCtx *commands.ExecContext,
 	providerFn ProviderFunc,
 	listModels ListModelsFunc,
+	listEmbeddings ListEmbeddingsFunc,
 	modelSelected ModelSelectedFunc,
+	embeddingModelSelected EmbeddingModelSelectedFunc,
 	profileService *profile.Service,
 	profileSwitch ProfileSwitchCmd,
 	listBackups ListBackupsFunc,
@@ -377,6 +395,9 @@ func New(
 		execCtx:                execCtx,
 		provider:               providerFn,
 		embeddingModelMissing:  embeddingModelMissing,
+		listEmbeddings:         listEmbeddings,
+		embeddingModelSelected: embeddingModelSelected,
+		embeddingModel:         "",
 		keys:                   keys,
 		help:                   helpModel,
 		helpKeys:               helpKeys,
@@ -423,7 +444,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ---- picker items loaded ------------------------------------------------
 	case modelsLoadedMsg:
-		if m.picker != nil && (m.pickerKind == pickerKindModel || m.pickerKind == pickerKindExtractorModel) {
+		if m.picker != nil && (m.pickerKind == pickerKindModel || m.pickerKind == pickerKindExtractorModel || m.pickerKind == pickerKindEmbeddingsModel) {
 			m.picker.loading = false
 			if msg.err != nil {
 				m.picker.err = msg.err
@@ -495,9 +516,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tokenStatus = msg.tokenStatus
 		m.provider = msg.provider
 		m.listModels = msg.listModels
+		m.listEmbeddings = msg.listEmbeddings
 		m.modelSelected = msg.modelSelected
+		m.embeddingModelSelected = msg.embeddingModelSelected
 		m.extractorModelSelected = msg.extractorModelSelected
+		m.embeddingModelMissing = msg.embeddingModelMissing
+		m.embeddingModel = msg.embeddingModel
 		m.settingsMenu = msg.settings
+		m.embeddingModel = msg.embeddingModel
 		m.memoryTokenBudget = 0
 		m.systemPrompt = ""
 		m.settingsEditEntry = nil
@@ -1323,6 +1349,9 @@ func (m Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
 		case settingsIDExtractorModel:
 			m.pickerFromSettings = true
 			return m.openPicker(pickerKindExtractorModel, nil)
+		case settingsIDEmbeddingsModel:
+			m.pickerFromSettings = true
+			return m.openPicker(pickerKindEmbeddingsModel, nil)
 		}
 		return m, nil
 	}
@@ -1487,6 +1516,7 @@ func (m *Model) refreshSettingsValues() {
 	if m.execCtx.ProfileSlug != "" {
 		if settings, err := profile.ReadSettings(m.execCtx.ProfileSlug); err == nil {
 			m.memoryTokenBudget = settings.MemoryTokenBudget
+			m.embeddingModel = settings.EmbeddingModel
 		}
 	}
 	if m.execCtx.ProfileID != "" && m.execCtx.DB != nil {
@@ -1539,6 +1569,10 @@ func applyToMenu(menu *SettingsMenu, m *Model) {
 		if entries[i].ID == settingsIDExtractorModel {
 			entries[i].Value = ""
 			entries[i].Active = false
+		}
+		if entries[i].ID == settingsIDEmbeddingsModel {
+			entries[i].Value = m.embeddingModel
+			entries[i].Active = entries[i].Value != ""
 		}
 		if entries[i].Submenu != nil {
 			applyToMenu(entries[i].Submenu, m)

@@ -30,7 +30,7 @@ func asModel(t *testing.T, updated tea.Model) tui.Model {
 func openProfilesSubmenu(t *testing.T, m tui.Model) tui.Model {
 	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	m = asModel(t, updated)
-	for range 3 {
+	for range 4 {
 		updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 		m = asModel(t, updated)
 	}
@@ -59,7 +59,8 @@ func newProfileSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext, *p
 		p.Name, "", "", "cache: n/a", "tokens: n/a", false, false,
 		chat.NewDispatcher(commands.NewRegistry()),
 		execCtx,
-		nil, nil,
+		nil, nil, nil,
+		func(string) error { return nil },
 		func(string) error { return nil },
 		svc,
 		func(string) tea.Cmd { return nil },
