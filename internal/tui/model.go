@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -887,181 +885,6 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// openPicker initializes the picker overlay and fires the async data fetch.
-func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
-	m.pickerKind = kind
-	m.input.SetValue("")
-	m.input.Blur()
-	switch kind {
-	case pickerKindModel:
-		m.picker = newPickerState("Select model", m.width-4)
-		m.picker.loading = true
-		if m.listModels != nil {
-			current := m.activeModel
-			cmds = append(cmds, func() tea.Msg {
-				models, err := m.listModels(context.Background())
-				if err != nil {
-					return modelsLoadedMsg{err: err}
-				}
-				items := make([]pickerItem, len(models))
-				for i, mi := range models {
-					items[i] = pickerItem{Value: mi.ID, Active: mi.ID == current}
-				}
-				return modelsLoadedMsg{items: items}
-			})
-		} else {
-			m.picker.loading = false
-			m.picker.err = errors.New("no provider configured")
-		}
-
-	case pickerKindBackup:
-		m.picker = newPickerState("Restore backup", m.width-4)
-		m.picker.loading = true
-		if m.listBackups != nil {
-			cmds = append(cmds, func() tea.Msg {
-				backups, err := m.listBackups(context.Background())
-				if err != nil {
-					return backupsLoadedMsg{err: err}
-				}
-				items := make([]pickerItem, len(backups))
-				for i, ts := range backups {
-					items[i] = pickerItem{Value: ts, Label: formatBackupTimestamp(ts)}
-				}
-				return backupsLoadedMsg{items: items}
-			})
-		} else {
-			m.picker.loading = false
-			m.picker.err = errors.New("no backup service available")
-		}
-	case pickerKindExtractorModel:
-		m.picker = newPickerState("Select extractor model", m.width-4)
-		m.picker.loading = true
-		if m.listModels != nil {
-			current := m.extractorModel
-			cmds = append(cmds, func() tea.Msg {
-				models, err := m.listModels(context.Background())
-				if err != nil {
-					return modelsLoadedMsg{err: err}
-				}
-				items := make([]pickerItem, len(models))
-				for i, mi := range models {
-					items[i] = pickerItem{Value: mi.ID, Active: mi.ID == current}
-				}
-				return modelsLoadedMsg{items: items}
-			})
-		} else {
-			m.picker.loading = false
-			m.picker.err = errors.New("no provider configured")
-		}
-	}
-
-	return m, tea.Batch(cmds...)
-}
-
-// updatePicker handles keypresses while the picker overlay is open.
-func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
-	//exhaustive:ignore
-	switch {
-	case msg.Key().Code == tea.KeyEsc:
-		m.picker = nil
-		if m.pickerFromSettings {
-			m.pickerFromSettings = false
-			return m, nil
-		}
-		cmds = append(cmds, m.input.Focus())
-	case key.Matches(msg, m.keys.quit):
-		return m, tea.Quit
-	case key.Matches(msg, m.keys.clearInput):
-		m.picker = nil
-		m.input.SetValue("")
-		m.clearSuggestions()
-		return m, m.input.Focus()
-	case key.Matches(msg, m.keys.openModel):
-		m.picker = nil
-		m.input.SetValue("")
-		m.clearSuggestions()
-		return m.openPicker(pickerKindModel, cmds)
-	case key.Matches(msg, m.keys.toggleHelp):
-		m.help.ShowAll = !m.help.ShowAll
-		return m, nil
-
-	case msg.Key().Code == tea.KeyEnter:
-		chosen := m.picker.selectedValue()
-		kind := m.pickerKind
-		m.picker = nil
-		m.input.SetValue("")
-		m.clearSuggestions()
-		if m.pickerFromSettings {
-			m.pickerFromSettings = false
-		} else {
-			cmds = append(cmds, m.input.Focus())
-		}
-		if chosen == "" {
-			return m, tea.Batch(cmds...)
-		}
-		switch kind {
-		case pickerKindModel:
-			if m.modelSelected != nil {
-				if err := m.modelSelected(chosen); err != nil {
-					m.err = err
-				} else {
-					m.activeModel = chosen
-					m.messages = append(m.messages, chatMessage{role: "command", content: "Model set to: " + chosen, timestamp: time.Now()})
-					m.syncViewport()
-				}
-			}
-		case pickerKindBackup:
-			if m.backupSelected != nil {
-				if err := m.backupSelected(chosen); err != nil {
-					m.err = err
-				} else {
-					m.messages = append(m.messages, chatMessage{role: "command", content: "Restored backup: " + chosen, timestamp: time.Now()})
-					m.syncViewport()
-				}
-			}
-		case pickerKindExtractorModel:
-			if m.extractorModelSelected != nil {
-				if err := m.extractorModelSelected(chosen); err != nil {
-					m.err = err
-				} else {
-					m.extractorModel = chosen
-					m.messages = append(m.messages, chatMessage{role: "command", content: "Extractor model set to: " + chosen, timestamp: time.Now()})
-					m.syncViewport()
-				}
-			}
-		}
-
-	default:
-		if m.picker != nil {
-			ph := max(m.height/2, 6)
-			maxRows := max(ph-2, 5)
-			m.picker.list.SetSize(max(m.width-2, 10), maxRows)
-			updated, cmd := m.picker.list.Update(msg)
-			m.picker.list = updated
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-		}
-	}
-	return m, tea.Batch(cmds...)
-}
-
-// openEditor suspends the TUI and opens a file in $EDITOR via tea.ExecProcess.
-func (m Model) openEditor(path string, onSave func() error, cmds []tea.Cmd) tea.Cmd {
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = os.Getenv("VISUAL")
-	}
-	if editor == "" {
-		editor = "vi"
-	}
-	c := exec.CommandContext(context.Background(), editor, path)
-	cmds = append(cmds, tea.ExecProcess(c, func(err error) tea.Msg {
-		return editorFinishedMsg{err: err, onSave: onSave}
-	}))
-	return tea.Batch(cmds...)
-}
-
 // refreshSuggestions recomputes the suggestion list from current input.
 func (m *Model) refreshSuggestions() {
 	val := m.input.Value()
@@ -1150,7 +973,7 @@ func (m Model) View() tea.View {
 	m.help.SetWidth(helperWidth)
 	m.updateListHelp()
 	var helpBlock string
-	if m.help.ShowAll {
+	if m.help.ShowAll && m.picker == nil {
 		helpBlock = "\n" + m.help.View(m.helpKeys) + "\n"
 	}
 
@@ -1182,73 +1005,6 @@ func (m Model) View() tea.View {
 		footer)
 	view.AltScreen = true
 	return view
-}
-
-// renderFooter draws the bottom status line.
-func (m *Model) renderFooter() string {
-	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	green := lipgloss.NewStyle().Foreground(lipgloss.Color("71"))
-	blue := lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	yellow := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
-	purple := lipgloss.NewStyle().Foreground(lipgloss.Color("135"))
-	white := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-
-	// Left: token stats + cache status + notes badge + extractor warning.
-	var leftParts []string
-
-	if m.tokenStatus != "" {
-		leftParts = append(leftParts, blue.Render(m.tokenStatus))
-	}
-
-	cache := strings.TrimSpace(m.cacheStatus)
-	switch {
-	case strings.Contains(cache, "hit"):
-		leftParts = append(leftParts, green.Render("ctx:hit"))
-	case strings.Contains(cache, "miss"):
-		leftParts = append(leftParts, yellow.Render("ctx:miss"))
-	default:
-		leftParts = append(leftParts, dim.Render("ctx:n/a"))
-	}
-
-	if m.notesIndicator != "" {
-		leftParts = append(leftParts, green.Render(m.notesIndicator))
-	}
-	if m.extractorFallback {
-		leftParts = append(leftParts, yellow.Render("Extractor model missing — using main model."))
-	}
-
-	left := strings.Join(leftParts, dim.Render("  "))
-
-	// Right: profile + model + help.
-	right := white.Render(m.profileName)
-	if m.activeModel != "" {
-		right = right + dim.Render("  ") + purple.Render("["+m.activeModel+"]")
-	}
-	helpView := m.help.ShortHelpView(m.helpKeys.ShortHelp())
-	if helpView != "" {
-		right = right + dim.Render("  ") + helpView
-	}
-
-	_ = yellow // suppress unused if no cost yet
-
-	margin := lipgloss.Width(m.input.Prompt) + 1
-	margin = max(margin, 0)
-	innerWidth := m.width - margin*2
-	innerWidth = max(innerWidth, 0)
-	pad := strings.Repeat(" ", margin)
-	return pad + footerLine(innerWidth, left, right) + pad
-}
-
-// footerLine pads left/right content to terminal width.
-func footerLine(width int, left, right string) string {
-	if width <= 0 {
-		return left + "  " + right
-	}
-	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 2 {
-		return left + "  " + right
-	}
-	return left + strings.Repeat(" ", gap) + right
 }
 
 func formatBackupTimestamp(ts string) string {
@@ -1925,7 +1681,7 @@ func (m *Model) deleteSelectedProfileByName(name string) (tea.Model, tea.Cmd) {
 	}
 	if err := m.profileService.Delete(context.Background(), name, confirm); err != nil {
 		if errors.Is(err, profile.ErrConfirmationRequired) {
-			m.settingsErr = "delete cancelled"
+			m.settingsErr = "delete canceled"
 			m.err = nil
 			return m, nil
 		}

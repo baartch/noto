@@ -3,6 +3,7 @@
 Auto-generated from all feature plans. Last updated: 2026-04-12
 
 ## Active Technologies
+
 - Go 1.26+ + Bubble Tea + Bubbles + Lip Gloss (TUI), Cobra (command registry is shared by CLI and slash execution) (003-slash-command-navigation)
 - N/A (this feature is UI/interaction behavior; command registry already exists in-memory) (003-slash-command-navigation)
 - Go 1.26+ + Bubble Tea + Bubbles + Lip Gloss (TUI), Cobra (CLI) (004-bubbletea-tui)
@@ -33,17 +34,24 @@ tests/
 
 ## Commands
 
-# Add commands for Go 1.26+
+`make build` - Build the project
+`make test` - Run tests
+`make lint` - Run linters
+`make fmt` - Format code
+`make vet` - Run `go vet`
+`make tidy` - Run `go mod tidy`
+`make clean` - Clean build artifacts
+`make run` - Run the application
 
 ## Code Style
 
 Go 1.26+: Follow standard conventions
 
 ## Recent Changes
+
 - 006-settings-dialog: Added Go 1.26+ + charm.land/bubbletea/v2, charm.land/bubbles/v2, charm.land/lipgloss/v2, Cobra
 - 006-settings-dialog: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 - 006-settings-dialog: Added Go 1.26+ + Bubble Tea v2, Bubbles v2, Lip Gloss v2, Cobra
-
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
