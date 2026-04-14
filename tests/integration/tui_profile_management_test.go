@@ -12,6 +12,7 @@ import (
 	"noto/internal/profile"
 	"noto/internal/store"
 	"noto/internal/tui"
+	"noto/tests/integration/testutil"
 )
 
 func asModel(t *testing.T, updated tea.Model) tui.Model {
@@ -40,7 +41,7 @@ func openProfilesSubmenu(t *testing.T, m tui.Model) tui.Model {
 
 func newProfileSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext, *profile.Service) {
 	t.Helper()
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	t.Cleanup(closeDB)
 
 	repo := store.NewProfileRepo(db)

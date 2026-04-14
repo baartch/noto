@@ -9,11 +9,12 @@ import (
 	"noto/internal/config"
 	"noto/internal/profile"
 	"noto/internal/store"
+	"noto/tests/integration/testutil"
 )
 
 func TestProfilePortability_MoveProfileDirectory(t *testing.T) {
 	// Instance A
-	dbA, closeA := tempDB(t)
+	dbA, closeA := testutil.TempDB(t)
 	defer closeA()
 	ctx := context.Background()
 	svcA := profile.NewService(store.NewProfileRepo(dbA))

@@ -11,7 +11,14 @@ type CaptureLogHook interface {
 // NoopCaptureLogHook is a default hook that does nothing.
 type NoopCaptureLogHook struct{}
 
-func (NoopCaptureLogHook) CandidateScored(NoteCandidate)                     {}
-func (NoopCaptureLogHook) DuplicateDetected(NoteCandidate, string)          {}
-func (NoopCaptureLogHook) NoteStored(NoteCandidate, string)                 {}
-func (NoopCaptureLogHook) NoteStorageFailed(NoteCandidate, error)           {}
+// CandidateScored is a no-op event handler.
+func (NoopCaptureLogHook) CandidateScored(NoteCandidate) {}
+
+// DuplicateDetected is a no-op event handler.
+func (NoopCaptureLogHook) DuplicateDetected(NoteCandidate, string) {}
+
+// NoteStored is a no-op event handler.
+func (NoopCaptureLogHook) NoteStored(NoteCandidate, string) {}
+
+// NoteStorageFailed is a no-op event handler.
+func (NoopCaptureLogHook) NoteStorageFailed(NoteCandidate, error) {}

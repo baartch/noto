@@ -9,6 +9,8 @@ import (
 	"noto/internal/profile"
 	"noto/internal/provider"
 	"noto/internal/store"
+
+	"noto/tests/integration/testutil"
 )
 
 type stubAdapter struct{}
@@ -23,7 +25,7 @@ func (s *stubAdapter) ProviderType() string { return "stub" }
 
 func TestEmbeddingsModelRequiredForRetrieval(t *testing.T) {
 	ctx := context.Background()
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 
 	svc := profile.NewService(store.NewProfileRepo(db))

@@ -20,8 +20,8 @@ type Deduper interface {
 	CheckDuplicate(ctx context.Context, profileID string, content string) (DedupResult, error)
 }
 
-// VectorDeduper implements Deduper using the vector index.
-type VectorDeduper struct {
+// DeduperImpl implements Deduper using the vector index.
+type DeduperImpl struct {
 	index     Index
 	embedder  Embedder
 	model     string
@@ -30,25 +30,25 @@ type VectorDeduper struct {
 	warnFn    func(error)
 }
 
-// NewVectorDeduper constructs a VectorDeduper.
-func NewVectorDeduper(index Index, profileID string, embedder Embedder, model string) *VectorDeduper {
-	return &VectorDeduper{index: index, embedder: embedder, model: model, threshold: defaultDedupThreshold, profileID: profileID}
+// NewVectorDeduper constructs a DeduperImpl.
+func NewVectorDeduper(index Index, profileID string, embedder Embedder, model string) *DeduperImpl {
+	return &DeduperImpl{index: index, embedder: embedder, model: model, threshold: defaultDedupThreshold, profileID: profileID}
 }
 
 // WithWarnFunc sets a warning handler.
-func (d *VectorDeduper) WithWarnFunc(fn func(error)) *VectorDeduper {
+func (d *DeduperImpl) WithWarnFunc(fn func(error)) *DeduperImpl {
 	d.warnFn = fn
 	return d
 }
 
 // WithThreshold sets the dedup similarity threshold.
-func (d *VectorDeduper) WithThreshold(threshold float32) *VectorDeduper {
+func (d *DeduperImpl) WithThreshold(threshold float32) *DeduperImpl {
 	d.threshold = threshold
 	return d
 }
 
 // CheckDuplicate compares the candidate against existing vectors.
-func (d *VectorDeduper) CheckDuplicate(ctx context.Context, profileID string, content string) (DedupResult, error) {
+func (d *DeduperImpl) CheckDuplicate(ctx context.Context, profileID string, content string) (DedupResult, error) {
 	if d == nil || d.index == nil || d.embedder == nil {
 		return DedupResult{IsDuplicate: false}, nil
 	}

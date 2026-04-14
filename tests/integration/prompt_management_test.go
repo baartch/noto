@@ -6,10 +6,11 @@ import (
 
 	"noto/internal/profile"
 	"noto/internal/store"
+	"noto/tests/integration/testutil"
 )
 
 func TestPromptStore_GetDefault_WhenMissing(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 
 	repo := store.NewSystemPromptRepo(db)
@@ -25,7 +26,7 @@ func TestPromptStore_GetDefault_WhenMissing(t *testing.T) {
 }
 
 func TestPromptStore_SetAndGet(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 
 	repo := store.NewSystemPromptRepo(db)
@@ -46,7 +47,7 @@ func TestPromptStore_SetAndGet(t *testing.T) {
 }
 
 func TestPromptStore_UpdateOverwrites(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 
 	repo := store.NewSystemPromptRepo(db)

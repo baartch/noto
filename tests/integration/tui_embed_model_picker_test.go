@@ -44,9 +44,11 @@ func TestEmbeddingsModelPicker_SelectsModel(t *testing.T) {
 		nil,
 	)
 
-	updated, _ := model.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
+	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m := updated.(tui.Model)
-	for range 3 {
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
+	m = updated.(tui.Model)
+	for range 2 {
 		updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 		m = updated.(tui.Model)
 	}

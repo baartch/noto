@@ -12,6 +12,7 @@ import (
 	"noto/internal/profile"
 	"noto/internal/store"
 	"noto/internal/tui"
+	"noto/tests/integration/testutil"
 )
 
 func TestTUIModel_HandlesWindowResize(t *testing.T) {
@@ -128,7 +129,7 @@ func TestTUIModel_OpenSettingsShortcut(t *testing.T) {
 
 func newSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext) {
 	t.Helper()
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	t.Cleanup(closeDB)
 
 	repo := store.NewProfileRepo(db)
@@ -230,7 +231,7 @@ func TestTUISettingsEditor_InvalidNumber(t *testing.T) {
 }
 
 func TestSettingsSubmenuNavigation_EscBehavior(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 
 	repo := store.NewProfileRepo(db)

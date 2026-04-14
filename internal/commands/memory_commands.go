@@ -110,9 +110,15 @@ func memoryListHandler(ctx *ExecContext, _ []string) error {
 		return err
 	}
 	for _, note := range notes {
-		fmt.Fprintf(ctx.Output, "- %s [%s] %s\n", note.ID, note.Category, note.Content)
-		fmt.Fprintf(ctx.Output, "  importance: %d\n", note.Importance)
-		fmt.Fprintf(ctx.Output, "  sources: %s\n", note.SourceMessageIDs)
+		if _, err := fmt.Fprintf(ctx.Output, "- %s [%s] %s\n", note.ID, note.Category, note.Content); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(ctx.Output, "  importance: %d\n", note.Importance); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(ctx.Output, "  sources: %s\n", note.SourceMessageIDs); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -33,11 +33,6 @@ type extractedItem struct {
 	Importance int    `json:"importance"` // 1-10
 }
 
-type dedupeResult struct {
-	IsNew  bool   `json:"is_new"`
-	Reason string `json:"reason"`
-}
-
 const extractionPrompt = `Extract memory-worthy facts from this conversation exchange.
 Reply ONLY with JSON (no markdown, no explanation). Language: match the user's language.
 
@@ -60,17 +55,6 @@ Existing notes (pick target_id from here if updating):
 Exchange:
 User: %s
 Assistant: %s`
-
-const dedupePrompt = `You are a memory deduplication assistant. Given a candidate note and a list of existing notes, decide if the candidate is NEW.
-Reply ONLY with JSON: {"is_new": true|false, "reason": "short reason"}
-
-Consider paraphrases as duplicates (same meaning, different wording). Only mark true if the candidate adds new information.
-
-Existing notes:
-%s
-
-Candidate note:
-%s`
 
 // CacheInvalidator invalidates cached memory retrieval context.
 type CacheInvalidator interface {
@@ -165,7 +149,6 @@ func (e *Extractor) llmExtract(ctx context.Context, userMsg, assistantMsg string
 	return payload
 }
 
-// filterNewNotes uses an LLM-based semantic check to remove duplicates.
 func formatExistingNotes(existing []*store.MemoryNote) string {
 	if len(existing) == 0 {
 		return "(none)"
@@ -178,54 +161,6 @@ func formatExistingNotes(existing []*store.MemoryNote) string {
 		lines = append(lines, fmt.Sprintf("- %s | (%s) %s", n.ID, n.Category, n.Content))
 	}
 	return strings.Join(lines, "\n")
-}
-
-func (e *Extractor) filterNewNotes(ctx context.Context, items []extractedItem, existing []*store.MemoryNote) []extractedItem {
-	// Limit to last 50 notes to keep prompt bounded.
-	if len(existing) > 50 {
-		existing = existing[len(existing)-50:]
-	}
-
-	existingLines := make([]string, 0, len(existing))
-	for _, n := range existing {
-		existingLines = append(existingLines, fmt.Sprintf("- (%s) %s", n.Category, n.Content))
-	}
-	existingBlock := strings.Join(existingLines, "\n")
-	if existingBlock == "" {
-		return items
-	}
-
-	var out []extractedItem
-	for _, item := range items {
-		if strings.TrimSpace(item.Content) == "" {
-			continue
-		}
-		prompt := fmt.Sprintf(dedupePrompt, existingBlock, item.Content)
-		resp, err := e.adapter.Complete(ctx, provider.CompletionRequest{
-			Messages:    []provider.Message{{Role: "user", Content: prompt}},
-			Temperature: 0.0,
-		})
-		if err != nil {
-			// If dedupe fails, keep the note (fail-open) so we don't lose data.
-			out = append(out, item)
-			continue
-		}
-		raw := strings.TrimSpace(resp.Content)
-		raw = strings.TrimPrefix(raw, "```json")
-		raw = strings.TrimPrefix(raw, "```")
-		raw = strings.TrimSuffix(raw, "```")
-		raw = strings.TrimSpace(raw)
-
-		var result dedupeResult
-		if err := json.Unmarshal([]byte(raw), &result); err != nil {
-			out = append(out, item)
-			continue
-		}
-		if result.IsNew {
-			out = append(out, item)
-		}
-	}
-	return out
 }
 
 func (e *Extractor) updateNote(ctx context.Context, profileID, targetID string, items []extractedItem, sourceMessageIDs []string) (bool, error) {

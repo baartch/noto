@@ -9,10 +9,11 @@ import (
 	"noto/internal/memory"
 	"noto/internal/profile"
 	"noto/internal/store"
+	"noto/tests/integration/testutil"
 )
 
 func TestContextCache_HitAfterPut(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 	ctx := context.Background()
 
@@ -37,7 +38,7 @@ func TestContextCache_HitAfterPut(t *testing.T) {
 }
 
 func TestContextCache_MissOnUnknownKey(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 	ctx := context.Background()
 
@@ -55,7 +56,7 @@ func TestContextCache_MissOnUnknownKey(t *testing.T) {
 }
 
 func TestContextCache_InvalidateRemovesEntry(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 	ctx := context.Background()
 
@@ -77,7 +78,7 @@ func TestContextCache_InvalidateRemovesEntry(t *testing.T) {
 }
 
 func TestContextCache_ExpiredEntry_ReturnsMiss(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 	ctx := context.Background()
 
@@ -109,7 +110,7 @@ func TestContextCache_ExpiredEntry_ReturnsMiss(t *testing.T) {
 }
 
 func TestContextCache_InvalidateAll_ClearsProfile(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 	ctx := context.Background()
 
@@ -166,7 +167,7 @@ func TestContextCache_RelevanceSelection_FallbackOrdering(t *testing.T) {
 }
 
 func TestContextCache_ReusesAcrossRestarts(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 	ctx := context.Background()
 

@@ -9,20 +9,22 @@ import (
 	"noto/internal/provider"
 	"noto/internal/store"
 	"noto/internal/vector"
+
+	"noto/tests/integration/testutil"
 )
 
 type stubVectorIndex struct {
 	results []vector.SearchResult
 }
 
-func (s *stubVectorIndex) Upsert(_ vector.Entry) error { return nil }
+func (s *stubVectorIndex) Upsert(_ vector.Entry) error                { return nil }
 func (s *stubVectorIndex) Delete(_ vector.SourceType, _ string) error { return nil }
 func (s *stubVectorIndex) Search(_ []float32, _ int) ([]vector.SearchResult, error) {
 	return s.results, nil
 }
 func (s *stubVectorIndex) Rebuild(_ []vector.Entry) error { return nil }
-func (s *stubVectorIndex) Flush() error { return nil }
-func (s *stubVectorIndex) Close() error { return nil }
+func (s *stubVectorIndex) Flush() error                   { return nil }
+func (s *stubVectorIndex) Close() error                   { return nil }
 
 type stubRetrievalEmbedder struct{}
 
@@ -31,7 +33,7 @@ func (s *stubRetrievalEmbedder) Embed(_ context.Context, _ provider.EmbeddingReq
 }
 
 func TestRetrievalPipeline_RanksNotes(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 	ctx := context.Background()
 

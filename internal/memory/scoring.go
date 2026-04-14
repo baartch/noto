@@ -50,10 +50,7 @@ func ScoreCandidate(inputs ScoringInputs) ValueScore {
 		usefulness = 2
 	}
 
-	total := importance
-	if total < DefaultValueScore {
-		total = DefaultValueScore
-	}
+	total := max(importance, DefaultValueScore)
 
 	return ValueScore{
 		Total:       total,

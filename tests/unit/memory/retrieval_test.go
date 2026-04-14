@@ -1,9 +1,10 @@
-package memory
+package memory_test
 
 import (
 	"testing"
 	"time"
 
+	"noto/internal/memory"
 	"noto/internal/store"
 )
 
@@ -13,7 +14,7 @@ func TestSelectNotesForContext_RankedOrder(t *testing.T) {
 		{ID: "n2", Content: "Beta", Importance: 8, CreatedAt: time.Now().Add(-1 * time.Hour)},
 		{ID: "n3", Content: "Gamma", Importance: 3, CreatedAt: time.Now().Add(-3 * time.Hour)},
 	}
-	ordered := SelectNotesForContext(notes, []string{"n3", "n1", "n2"}, 100)
+	ordered := memory.SelectNotesForContext(notes, []string{"n3", "n1", "n2"}, 100)
 	if len(ordered) != 3 {
 		t.Fatalf("expected 3 notes, got %d", len(ordered))
 	}

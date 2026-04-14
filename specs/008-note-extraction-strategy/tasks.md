@@ -101,8 +101,8 @@
 - [X] T033 [US3] Persist embeddings model selection in internal/profile/settings.go
 - [X] T034 [US3] Show embeddings model selection state in settings list in internal/tui/settings_menu.go
 - [X] T035 [US3] Update embeddings request to use baseURL+/embeddings with selected model in internal/provider/openai_compatible.go
-- [ ] T036 [US3] Replace chat/completions calls with Responses API at baseURL+/responses in internal/provider/openai_compatible.go
-- [ ] T037 [US3] Map Responses API request/response payloads in internal/provider/openai_compatible.go
+- [X] T036 [US3] Replace chat/completions calls with Responses API at baseURL+/responses in internal/provider/openai_compatible.go
+- [X] T037 [US3] Map Responses API request/response payloads in internal/provider/openai_compatible.go
 
 **Checkpoint**: User Story 3 functional and testable independently
 

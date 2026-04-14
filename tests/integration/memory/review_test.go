@@ -9,10 +9,12 @@ import (
 	"noto/internal/commands"
 	"noto/internal/profile"
 	"noto/internal/store"
+
+	"noto/tests/integration/testutil"
 )
 
 func TestMemoryReviewList_ShowsSourceAndReason(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 	ctx := context.Background()
 
