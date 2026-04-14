@@ -50,7 +50,7 @@ func TestTUIModel_UsesBubblesComponents(t *testing.T) {
 	}
 
 	view := m.View().Content
-	if !strings.Contains(view, "ctrl+d") {
+	if !strings.Contains(view, "ctrl+h") {
 		t.Fatalf("expected help bindings to be rendered in footer")
 	}
 }

@@ -25,6 +25,7 @@ type Metadata struct {
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 	SystemPromptPath  string    `json:"system_prompt_path"`
+	SystemPromptDB    bool      `json:"system_prompt_db"`
 	MemoryTokenBudget int       `json:"memory_token_budget"`
 }
 
@@ -34,6 +35,7 @@ func DefaultSystemPromptRelPath() string {
 }
 
 // DefaultSystemPromptPath returns the default absolute path for a profile's system prompt.
+// NOTE: retained for backwards compatibility; system prompts now live in SQLite.
 func DefaultSystemPromptPath(slug string) (string, error) {
 	profileDir, err := config.ProfileDir(slug)
 	if err != nil {
@@ -120,7 +122,7 @@ func validateMetadata(meta *Metadata) error {
 	if strings.TrimSpace(meta.Slug) == "" {
 		return errors.New("profile: metadata slug must not be empty")
 	}
-	if strings.TrimSpace(meta.SystemPromptPath) == "" {
+	if !meta.SystemPromptDB && strings.TrimSpace(meta.SystemPromptPath) == "" {
 		return errors.New("profile: metadata system prompt path must not be empty")
 	}
 	return nil
@@ -132,6 +134,9 @@ func normalizeMetadata(meta *Metadata) *Metadata {
 	}
 	if meta.MemoryTokenBudget <= 0 {
 		meta.MemoryTokenBudget = config.DefaultMemoryTokenBudget
+	}
+	if !meta.SystemPromptDB {
+		meta.SystemPromptDB = true
 	}
 	return meta
 }

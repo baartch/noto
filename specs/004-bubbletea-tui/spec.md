@@ -31,7 +31,8 @@ As a maintainer, I want all TUI interactions to be built with Bubble Tea so that
 5. **Given** the TUI is active, **When** the user presses `Ctrl+D`, **Then** the app exits immediately.
 6. **Given** the TUI is active, **When** the user presses `Ctrl+L`, **Then** the model picker opens.
 7. **Given** the TUI is active, **When** the user presses `Ctrl+H`, **Then** help expands above the input textarea.
-8. **Given** the TUI is active, **When** the footer is rendered, **Then** it displays keybinding help and always shows `Ctrl+H` for help.
+8. **Given** the TUI is active, **When** the user presses `Ctrl+J`, **Then** the settings dialog opens.
+9. **Given** the TUI is active, **When** the footer is rendered, **Then** it displays keybinding help with `Ctrl+H` in the primary group and all other keybindings in the secondary group.
 
 ---
 
@@ -67,7 +68,7 @@ As a maintainer, I want to reuse existing Bubbles components whenever possible s
 - **FR-006**: The system MUST support filtering in picker overlays via the Bubbles list filter input without hiding the list results.
 - **FR-007**: The system MUST exit the TUI when the user presses `Ctrl+D`.
 - **FR-008**: The system MUST open the model picker when the user presses `Ctrl+L`.
-- **FR-009**: The system MUST render keybinding help in the footer using the Bubbles Help component, including `Ctrl+H` for help.
+- **FR-009**: The system MUST render keybinding help in the footer using the Bubbles Help component, with `Ctrl+H` in the primary group and all other keybindings in the secondary group.
 - **FR-010**: The system MUST render expanded help above the input textarea when help is opened via `Ctrl+H`.
 - **FR-011**: The system MUST document any custom TUI components and explain why no Bubbles component was suitable.
 
@@ -98,7 +99,7 @@ As a maintainer, I want to reuse existing Bubbles components whenever possible s
 - **SC-004**: Pickers and suggestion lists do not displace the input bar and footer from the bottom of the screen.
 - **SC-005**: Picker overlays support `/`-triggered filtering that updates the list results in place.
 - **SC-006**: `Ctrl+D` exits the TUI, and `Ctrl+L` opens the model picker.
-- **SC-007**: The footer consistently shows keybinding help for the active view, including `Ctrl+H`.
+- **SC-007**: The footer consistently shows keybinding help with `Ctrl+H` in the primary group and all other keybindings in the secondary group.
 - **SC-008**: Expanded help renders above the input textarea when opened via `Ctrl+H`.
 - **SC-009**: Any custom TUI components include documented rationale for not using Bubbles.
 - **SC-010**: 0 lint/format violations in CI for the feature scope.

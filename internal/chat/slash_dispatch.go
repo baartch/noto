@@ -88,6 +88,7 @@ func (d *Dispatcher) Dispatch(input string, ctx *commands.ExecContext) DispatchR
 		Confirm:          ctx.Confirm,
 		SuspendForEditor: ctx.SuspendForEditor,
 		OnPromptChanged:  ctx.OnPromptChanged,
+		DB:               ctx.DB,
 	}
 
 	if err := cmd.Handler(execCtx, parsed.Args); err != nil {

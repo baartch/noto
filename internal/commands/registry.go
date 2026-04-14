@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"noto/internal/store"
 )
 
 // Scope defines whether a command operates on a specific profile or globally.
@@ -17,11 +19,16 @@ const (
 )
 
 // Command represents a single canonical command definition shared by the CLI and slash dispatcher.
+
+// HandlerFunc is the function signature for command handlers.
+type HandlerFunc = func(ctx *ExecContext, args []string) error
+
+// Command defines a single canonical command shared by the CLI and slash dispatcher.
 type Command struct {
-	// Path is the canonical hierarchical path, e.g. "profile list" or "prompt show".
+	// Path is the canonical hierarchical path, e.g. "prompt show".
 	Path string
 
-	// Usage is the short usage string, e.g. "profile list".
+	// Usage is the short usage string, e.g. "prompt show".
 	Usage string
 
 	// Description is the human-readable description shown in suggestions and help.
@@ -38,7 +45,7 @@ type Command struct {
 
 	// Handler is the function invoked when the command is executed.
 	// args contains positional arguments after the command path.
-	Handler func(ctx *ExecContext, args []string) error
+	Handler HandlerFunc
 }
 
 // ExecContext carries the runtime context for command execution.
@@ -51,6 +58,9 @@ type ExecContext struct {
 
 	// Output is the writer where command output should be sent.
 	Output interface{ Write([]byte) (int, error) }
+
+	// DB is the active profile database, if available.
+	DB *store.DB
 
 	// Confirm is a function that prompts the user for explicit confirmation.
 	// It returns true if the user confirmed, false otherwise.

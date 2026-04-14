@@ -1,18 +1,21 @@
 package integration
 
 import (
+	"context"
 	"testing"
 
 	"noto/internal/profile"
+	"noto/internal/store"
 )
 
-func TestPromptStore_GetDefault_WhenFileAbsent(t *testing.T) {
-	// Use a temp slug that won't have a real file on disk.
-	slug := "test-prompt-slug-" + t.Name()
-	t.Setenv("NOTO_APP_DIR", t.TempDir())
-	ps := profile.NewPromptStore(slug)
+func TestPromptStore_GetDefault_WhenMissing(t *testing.T) {
+	db, closeDB := tempDB(t)
+	defer closeDB()
 
-	content, err := ps.GetSystemPrompt()
+	repo := store.NewSystemPromptRepo(db)
+	ps := profile.NewPromptStore("test-profile-id", repo)
+
+	content, err := ps.GetSystemPrompt(context.Background())
 	if err != nil {
 		t.Fatalf("GetSystemPrompt: %v", err)
 	}
@@ -22,16 +25,18 @@ func TestPromptStore_GetDefault_WhenFileAbsent(t *testing.T) {
 }
 
 func TestPromptStore_SetAndGet(t *testing.T) {
-	slug := "test-prompt-set-" + t.Name()
-	t.Setenv("NOTO_APP_DIR", t.TempDir())
-	ps := profile.NewPromptStore(slug)
+	db, closeDB := tempDB(t)
+	defer closeDB()
+
+	repo := store.NewSystemPromptRepo(db)
+	ps := profile.NewPromptStore("test-profile-id", repo)
 
 	custom := "You are a specialized assistant for software architecture."
-	if err := ps.SetSystemPrompt(custom); err != nil {
+	if err := ps.SetSystemPrompt(context.Background(), custom); err != nil {
 		t.Fatalf("SetSystemPrompt: %v", err)
 	}
 
-	got, err := ps.GetSystemPrompt()
+	got, err := ps.GetSystemPrompt(context.Background())
 	if err != nil {
 		t.Fatalf("GetSystemPrompt after set: %v", err)
 	}
@@ -40,30 +45,26 @@ func TestPromptStore_SetAndGet(t *testing.T) {
 	}
 }
 
-func TestPromptStore_PromptVersion_ChangesAfterUpdate(t *testing.T) {
-	slug := "test-prompt-version-" + t.Name()
-	t.Setenv("NOTO_APP_DIR", t.TempDir())
-	ps := profile.NewPromptStore(slug)
+func TestPromptStore_UpdateOverwrites(t *testing.T) {
+	db, closeDB := tempDB(t)
+	defer closeDB()
 
-	if err := ps.SetSystemPrompt("version 1"); err != nil {
+	repo := store.NewSystemPromptRepo(db)
+	ps := profile.NewPromptStore("test-profile-id", repo)
+	ctx := context.Background()
+
+	if err := ps.SetSystemPrompt(ctx, "version 1"); err != nil {
 		t.Fatal(err)
 	}
-	v1, err := ps.PromptVersion()
+	if err := ps.SetSystemPrompt(ctx, "version 2"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ps.GetSystemPrompt(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	if err := ps.SetSystemPrompt("version 2"); err != nil {
-		t.Fatal(err)
-	}
-	v2, err := ps.PromptVersion()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Both versions should be non-empty; they may or may not differ (depends on
-	// filesystem mtime resolution), but the version string should be defined.
-	if v1 == "" || v2 == "" {
-		t.Error("prompt version should not be empty")
+	if got != "version 2" {
+		t.Errorf("expected version 2, got %q", got)
 	}
 }

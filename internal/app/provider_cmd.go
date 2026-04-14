@@ -199,7 +199,7 @@ func resolveActiveProfile(ctx context.Context) (*store.Profile, error) {
 	svc := profile.NewService(nil)
 	p, err := svc.GetActive(ctx)
 	if err != nil {
-		return nil, errors.New("no active profile — run: noto profile select <name>")
+		return nil, errors.New("no active profile")
 	}
 	return p, nil
 }

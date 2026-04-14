@@ -1,72 +1,57 @@
 package profile
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
-	"noto/internal/config"
+	"noto/internal/store"
 )
 
-const defaultSystemPrompt = `You are a helpful assistant. Respond clearly and concisely.`
+const defaultSystemPrompt = "You are Noto. A buddy who takes notes."
 
-// PromptStore manages prompt files for a profile.
+// PromptStore manages reading and writing the profile system prompt from SQLite.
 type PromptStore struct {
-	slug string
+	profileID string
+	repo      *store.SystemPromptRepo
 }
 
-// NewPromptStore creates a PromptStore for the given profile slug.
-func NewPromptStore(slug string) *PromptStore {
-	return &PromptStore{slug: slug}
+// NewPromptStore creates a PromptStore.
+func NewPromptStore(profileID string, repo *store.SystemPromptRepo) *PromptStore {
+	return &PromptStore{profileID: profileID, repo: repo}
 }
 
-// GetSystemPrompt reads the profile's system prompt file.
-// If the file does not exist, it initializes it with the default prompt.
-func (ps *PromptStore) GetSystemPrompt() (string, error) {
-	path, err := config.ProfileSystemPromptPath(ps.slug)
-	if err != nil {
-		return "", err
-	}
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		// Initialize with default.
-		if err2 := ps.SetSystemPrompt(defaultSystemPrompt); err2 != nil {
-			return "", err2
-		}
+// GetSystemPrompt returns the stored prompt or a default if missing.
+func (ps *PromptStore) GetSystemPrompt(ctx context.Context) (string, error) {
+	if ps.repo == nil {
 		return defaultSystemPrompt, nil
 	}
+	prompt, err := ps.repo.GetByProfile(ctx, ps.profileID)
 	if err != nil {
-		return "", fmt.Errorf("profile: read system prompt: %w", err)
+		if errors.Is(err, store.ErrSystemPromptNotFound) {
+			return defaultSystemPrompt, nil
+		}
+		return "", fmt.Errorf("profile: get system prompt: %w", err)
 	}
-	return string(data), nil
+	if prompt.Prompt == "" {
+		return defaultSystemPrompt, nil
+	}
+	return prompt.Prompt, nil
 }
 
-// SetSystemPrompt writes content to the profile's system prompt file.
-func (ps *PromptStore) SetSystemPrompt(content string) error {
-	path, err := config.ProfileSystemPromptPath(ps.slug)
-	if err != nil {
-		return err
+// SetSystemPrompt writes the prompt to SQLite.
+func (ps *PromptStore) SetSystemPrompt(ctx context.Context, content string) error {
+	if ps.repo == nil {
+		return errors.New("profile: system prompt repo is nil")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("profile: create prompts dir: %w", err)
+	p := &store.SystemPrompt{
+		ID:        fmt.Sprintf("sp-%x", time.Now().UnixNano()),
+		ProfileID: ps.profileID,
+		Prompt:    content,
 	}
-	return os.WriteFile(path, []byte(content), 0o600)
-}
-
-// PromptVersion returns a version string derived from the last modification time of the prompt file.
-// Returns "default" if the file does not yet exist.
-func (ps *PromptStore) PromptVersion() (string, error) {
-	path, err := config.ProfileSystemPromptPath(ps.slug)
-	if err != nil {
-		return "", err
+	if err := ps.repo.Upsert(ctx, p); err != nil {
+		return fmt.Errorf("profile: set system prompt: %w", err)
 	}
-	info, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		return "default", nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("profile: stat prompt: %w", err)
-	}
-	return info.ModTime().UTC().Format(time.RFC3339Nano), nil
+	return nil
 }
