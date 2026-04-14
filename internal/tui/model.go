@@ -168,7 +168,7 @@ const (
 
 const (
 	settingsHeaderText = "Settings"
-	settingsHelpText   = "  Settings  ↑↓ navigate · enter select · esc back/close · ctrl+h help"
+	settingsHelpText   = "  Settings"
 )
 
 // ---- TUI model --------------------------------------------------------------
@@ -349,13 +349,8 @@ func New(
 	helpModel.Styles.FullKey = helpFullStyle
 	helpModel.Styles.FullDesc = helpFullStyle
 	helpKeys := helpKeyMap{
-		primary: []key.Binding{keys.toggleHelp},
-		secondary: []key.Binding{
-			keys.openSettings,
-			keys.openModel,
-			keys.quit,
-			keys.clearInput,
-		},
+		primary:   []key.Binding{keys.toggleHelp},
+		secondary: nil,
 	}
 
 	if inputHistory == nil {
@@ -1148,6 +1143,7 @@ func (m Model) View() tea.View {
 
 	helperWidth := max(m.width-2, 0)
 	m.help.SetWidth(helperWidth)
+	m.updateHelpKeys()
 	var helpBlock string
 	if m.help.ShowAll {
 		helpBlock = "\n" + m.help.View(m.helpKeys) + "\n"
@@ -1310,9 +1306,6 @@ func (m *Model) renderSettingsList(height int) string {
 	m.settingsList.Title = settingsHelpText
 
 	head := m.settingsList.Title
-	if m.settingsMenu != nil && m.settingsMenu.ID == settingsIDProfiles {
-		head = head + "\n" + helpShortStyle.Render("  enter select · ctrl+n new · ctrl+r rename · ctrl+d delete")
-	}
 	if m.settingsErr != "" {
 		head = head + "\n" + errStyle.Render("  "+m.settingsErr)
 	}
@@ -1335,7 +1328,7 @@ func (m *Model) syncSettingsList() {
 	m.settingsList.SetItems(items)
 	header := settingsHelpText
 	if m.settingsMenu.Title != "" {
-		header = "  " + m.settingsMenu.Title + "  " + strings.TrimSpace(strings.TrimPrefix(settingsHelpText, "  Settings"))
+		header = "  " + m.settingsMenu.Title
 	}
 	m.settingsList.Title = header
 	m.settingsList.SetSize(max(m.width-6, 20), max(m.height/2-2, 6))
@@ -1798,6 +1791,34 @@ func obfuscateKey(key string) string {
 	return key[:4] + strings.Repeat("*", len(key)-8) + key[len(key)-4:]
 }
 
+func (m *Model) updateHelpKeys() {
+	m.helpKeys.primary = []key.Binding{m.keys.toggleHelp}
+	secondary := []key.Binding{}
+
+	enterSelect := key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select"))
+	escBack := key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back/close"))
+
+	switch {
+	case m.picker != nil:
+		secondary = append(secondary, enterSelect, escBack)
+	case m.settingsOpen && m.settingsEditing:
+		secondary = append(secondary,
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "save")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
+			key.NewBinding(key.WithKeys("alt+enter"), key.WithHelp("alt+enter", "newline")),
+			key.NewBinding(key.WithKeys("ctrl+left", "ctrl+right"), key.WithHelp("ctrl+←/→", "word jump")),
+		)
+	case m.settingsOpen && m.settingsMenu != nil && m.settingsMenu.ID == settingsIDProfiles:
+		secondary = append(secondary, enterSelect, escBack, m.keys.profileNew, m.keys.profileRename, m.keys.profileDelete)
+	case m.settingsOpen:
+		secondary = append(secondary, enterSelect, escBack)
+	default:
+		secondary = append(secondary, m.keys.openSettings, m.keys.openModel, m.keys.clearInput, m.keys.quit)
+	}
+
+	m.helpKeys.secondary = secondary
+}
+
 func (m *Model) saveProviderEndpoint(endpoint string) error {
 	if m.execCtx == nil || m.execCtx.DB == nil {
 		return errors.New("settings: no database available")
@@ -1931,13 +1952,12 @@ func (m *Model) renderSettingsEditor(height int) string {
 	if description != "" {
 		descBlock = "\n" + helpShortStyle.Render("  "+description)
 	}
-	hint := helpShortStyle.Render("  enter save · esc cancel · alt+enter newline · ctrl+←/→ word jump")
 	body := m.settingsEditor.View()
 	var errBlock string
 	if m.settingsErr != "" {
 		errBlock = "\n" + errStyle.Render("  "+m.settingsErr)
 	}
-	return pickerBorderStyle.Render(header + descBlock + "\n" + hint + "\n" + body + errBlock)
+	return pickerBorderStyle.Render(header + descBlock + "\n" + body + errBlock)
 }
 
 func settingsEditorDescription(entryID string) string {

@@ -111,6 +111,7 @@ As a user, I want to manage profiles from the settings dialog so I can create, r
 - **FR-009a**: Long or multi-line values MUST be flattened and truncated with `...` in the list view.
 - **FR-010**: The editor MUST save changes on enter and cancel changes on esc.
 - **FR-011**: Lists MUST indicate the current selection using a colored style and a leading dot indicator instead of text labels, but only within the submenu where the selection is made.
+- **FR-012**: Keybinding hints MUST only appear in the footer help menu; list headers and editors must not duplicate keybinding hints. The footer MUST show only keybindings relevant to the current view (settings, profiles list, editor, picker).
 
 ### Non-Functional Requirements *(mandatory)*
 
