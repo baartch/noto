@@ -22,11 +22,11 @@
 
 **Purpose**: Core infrastructure that MUST be complete before ANY user story can be implemented
 
-- [ ] T005 Define note value scoring inputs and thresholds in internal/memory/scoring.go
-- [ ] T006 Define duplicate matching strategy using vector index in internal/vector/dedup.go
-- [ ] T007 Create NoteCandidate evaluation helper in internal/memory/candidates.go
-- [ ] T008 Add shared error handling/logging hooks for note capture in internal/memory/logging.go
-- [ ] T009 Add profile setting for embeddings model selection in internal/profile/settings.go
+- [X] T005 Define note value scoring inputs and thresholds in internal/memory/scoring.go
+- [X] T006 Define duplicate matching strategy using vector index in internal/vector/dedup.go
+- [X] T007 Create NoteCandidate evaluation helper in internal/memory/candidates.go
+- [X] T008 Add shared error handling/logging hooks for note capture in internal/memory/logging.go
+- [X] T009 Add profile setting for embeddings model selection in internal/profile/settings.go
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
