@@ -75,6 +75,7 @@ func (s *Service) Create(ctx context.Context, name string) (*store.Profile, erro
 		CreatedAt:         p.CreatedAt,
 		UpdatedAt:         p.UpdatedAt,
 		SystemPromptPath:  DefaultSystemPromptRelPath(),
+		SystemPromptDB:    true,
 		MemoryTokenBudget: config.DefaultMemoryTokenBudget,
 	}); err != nil {
 		return nil, err
@@ -167,6 +168,7 @@ func (s *Service) Rename(ctx context.Context, oldName, newName string) (*store.P
 		CreatedAt:         p.CreatedAt,
 		UpdatedAt:         p.UpdatedAt,
 		SystemPromptPath:  DefaultSystemPromptRelPath(),
+		SystemPromptDB:    true,
 		MemoryTokenBudget: config.DefaultMemoryTokenBudget,
 	}); err != nil {
 		return nil, err

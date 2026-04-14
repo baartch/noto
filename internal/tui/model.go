@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
+	"io"
+	"strconv"
 	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -18,7 +19,9 @@ import (
 
 	"noto/internal/chat"
 	"noto/internal/commands"
+	"noto/internal/profile"
 	"noto/internal/provider"
+	"noto/internal/security"
 	"noto/internal/store"
 	"noto/internal/suggest"
 )
@@ -34,10 +37,7 @@ type ListModelsFunc func(ctx context.Context) ([]provider.ModelInfo, error)
 // ModelSelectedFunc is called when the user picks a model in the picker.
 type ModelSelectedFunc func(modelID string) error
 
-// ListProfilesFunc returns all profiles for the profile picker.
-type ListProfilesFunc func(ctx context.Context) ([]*store.Profile, error)
-
-// ProfileSwitchCmd returns a command to switch profiles.
+// ProfileSwitchCmd switches the active profile and refreshes the TUI.
 type ProfileSwitchCmd func(profileName string) tea.Cmd
 
 // ListBackupsFunc returns backup timestamps for the active profile.
@@ -61,7 +61,7 @@ func NotesSaving() tea.Msg { return notesSavingMsg{} }
 func StatsUpdated(formatted string) tea.Msg { return statsUpdatedMsg{formatted: formatted} }
 
 // ProfileSwitched updates the TUI state after switching profiles.
-func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, tokenStatus string, extractorFallback bool, provider ProviderFunc, listModels ListModelsFunc, modelSelected ModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, history []string) profileSwitchedMsg {
+func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, tokenStatus string, extractorFallback bool, provider ProviderFunc, listModels ListModelsFunc, modelSelected ModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, settings *SettingsMenu, history []string) profileSwitchedMsg {
 	return profileSwitchedMsg{
 		profileName:            profileName,
 		activeModel:            activeModel,
@@ -73,6 +73,7 @@ func ProfileSwitched(profileName, activeModel, extractorModel, cacheStatus, toke
 		listModels:             listModels,
 		modelSelected:          modelSelected,
 		extractorModelSelected: extractorModelSelected,
+		settings:               settings,
 		history:                history,
 	}
 }
@@ -92,10 +93,6 @@ type modelsLoadedMsg struct {
 	items []pickerItem
 	err   error
 }
-type profilesLoadedMsg struct {
-	items []pickerItem
-	err   error
-}
 type backupsLoadedMsg struct {
 	items []pickerItem
 	err   error
@@ -103,8 +100,43 @@ type backupsLoadedMsg struct {
 type notesSavedMsg struct{ saved, updated int }
 type notesSavingMsg struct{}
 type clearNotesIndicatorMsg struct{}
-type editorFinishedMsg struct{ err error }
+type editorFinishedMsg struct {
+	err    error
+	onSave func() error
+}
 type statsUpdatedMsg struct{ formatted string }
+
+type profilesAction interface {
+	Label() string
+	Apply(ctx context.Context, svc *profile.Service, selected string) (*store.Profile, error)
+}
+
+type profilesCreateAction struct{}
+
+type profilesRenameAction struct {
+	current string
+}
+
+func (profilesCreateAction) Label() string { return "New Profile" }
+
+func (profilesCreateAction) Apply(ctx context.Context, svc *profile.Service, value string) (*store.Profile, error) {
+	if svc == nil {
+		return nil, errors.New("settings: no profile service")
+	}
+	return svc.Create(ctx, value)
+}
+
+func (a profilesRenameAction) Label() string {
+	return "Rename Profile"
+}
+
+func (a profilesRenameAction) Apply(ctx context.Context, svc *profile.Service, value string) (*store.Profile, error) {
+	if svc == nil {
+		return nil, errors.New("settings: no profile service")
+	}
+	return svc.Rename(ctx, a.current, value)
+}
+
 type profileSwitchedMsg struct {
 	profileName            string
 	activeModel            string
@@ -116,6 +148,7 @@ type profileSwitchedMsg struct {
 	listModels             ListModelsFunc
 	modelSelected          ModelSelectedFunc
 	extractorModelSelected ExtractorModelSelectedFunc
+	settings               *SettingsMenu
 	history                []string
 }
 type profileSwitchFailedMsg struct{ err error }
@@ -127,9 +160,13 @@ type pickerKind int
 
 const (
 	pickerKindModel          pickerKind = iota
-	pickerKindProfile        pickerKind = iota
 	pickerKindBackup         pickerKind = iota
 	pickerKindExtractorModel pickerKind = iota
+)
+
+const (
+	settingsHeaderText = "Settings"
+	settingsHelpText   = "  Settings"
 )
 
 // ---- TUI model --------------------------------------------------------------
@@ -162,8 +199,28 @@ type Model struct {
 	historyDraft string
 
 	// picker overlay
-	picker     *pickerState
-	pickerKind pickerKind
+	picker             *pickerState
+	pickerKind         pickerKind
+	pickerFromSettings bool
+
+	// settings dialog
+	settingsOpen bool
+	settingsMenu *SettingsMenu
+
+	// settings editor
+	settingsList      list.Model
+	settingsEditing   bool
+	settingsEditor    textarea.Model
+	settingsEditEntry *SettingsEntry
+	settingsErr       string
+
+	profileDeleteCandidate string
+
+	// profile settings
+	memoryTokenBudget int
+	systemPrompt      string
+	providerEndpoint  string
+	providerAPIKey    string // decrypted; displayed obfuscated
 
 	// notes badge
 	notesIndicator string
@@ -177,10 +234,11 @@ type Model struct {
 	provider               ProviderFunc
 	listModels             ListModelsFunc
 	modelSelected          ModelSelectedFunc
-	listProfiles           ListProfilesFunc
+	profileService         *profile.Service
 	profileSwitch          ProfileSwitchCmd
 	listBackups            ListBackupsFunc
 	backupSelected         BackupSelectedFunc
+	profilesAction         profilesAction
 	extractorModel         string
 	extractorModelSelected ExtractorModelSelectedFunc
 	extractorFallback      bool
@@ -193,10 +251,14 @@ type chatMessage struct {
 }
 
 type keyMap struct {
-	quit       key.Binding
-	openModel  key.Binding
-	clearInput key.Binding
-	toggleHelp key.Binding
+	quit          key.Binding
+	openModel     key.Binding
+	clearInput    key.Binding
+	toggleHelp    key.Binding
+	openSettings  key.Binding
+	profileNew    key.Binding
+	profileRename key.Binding
+	profileDelete key.Binding
 }
 
 type helpKeyMap struct {
@@ -242,7 +304,7 @@ func New(
 	providerFn ProviderFunc,
 	listModels ListModelsFunc,
 	modelSelected ModelSelectedFunc,
-	listProfiles ListProfilesFunc,
+	profileService *profile.Service,
 	profileSwitch ProfileSwitchCmd,
 	listBackups ListBackupsFunc,
 	backupSelected BackupSelectedFunc,
@@ -261,16 +323,23 @@ func New(
 	styles.Blurred.Prompt = promptStyle
 	styles.Cursor = cursorStyleDef
 	ti.SetStyles(styles)
+
+	settingsList := newSettingsList(30)
+	settingsEditor := newSettingsEditor()
 	// Enter sends; Alt+Enter inserts newline.
 	ti.KeyMap.InsertNewline = key.NewBinding(
 		key.WithKeys("alt+enter"),
 		key.WithHelp("alt+enter", "insert newline"),
 	)
 	keys := keyMap{
-		quit:       key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "quit")),
-		openModel:  key.NewBinding(key.WithKeys("ctrl+l"), key.WithHelp("ctrl+l", "model picker")),
-		clearInput: key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "clear")),
-		toggleHelp: key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "help")),
+		quit:          key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "quit")),
+		openModel:     key.NewBinding(key.WithKeys("ctrl+l"), key.WithHelp("ctrl+l", "model picker")),
+		clearInput:    key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "clear")),
+		toggleHelp:    key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "help")),
+		openSettings:  key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j", "settings")),
+		profileNew:    key.NewBinding(key.WithKeys("ctrl+n"), key.WithHelp("ctrl+n", "new profile")),
+		profileRename: key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "rename profile")),
+		profileDelete: key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "delete profile")),
 	}
 	helpModel := help.New()
 	helpModel.Styles.ShortKey = helpShortStyle
@@ -278,9 +347,12 @@ func New(
 	helpModel.Styles.FullKey = helpFullStyle
 	helpModel.Styles.FullDesc = helpFullStyle
 	helpKeys := helpKeyMap{
-		primary: []key.Binding{keys.toggleHelp, keys.openModel, keys.quit},
+		primary: []key.Binding{keys.toggleHelp},
 		secondary: []key.Binding{
+			keys.openSettings,
+			keys.openModel,
 			keys.clearInput,
+			keys.quit,
 		},
 	}
 
@@ -305,13 +377,17 @@ func New(
 		helpKeys:               helpKeys,
 		listModels:             listModels,
 		modelSelected:          modelSelected,
-		listProfiles:           listProfiles,
+		profileService:         profileService,
 		profileSwitch:          profileSwitch,
 		listBackups:            listBackups,
 		backupSelected:         backupSelected,
 		extractorModel:         extractorModel,
 		extractorModelSelected: extractorModelSelected,
 		extractorFallback:      extractorFallback,
+		settingsMenu:           DefaultSettingsMenu(),
+		settingsList:           settingsList,
+		settingsEditor:         settingsEditor,
+		settingsErr:            "",
 	}
 }
 
@@ -343,16 +419,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// ---- picker items loaded ------------------------------------------------
 	case modelsLoadedMsg:
 		if m.picker != nil && (m.pickerKind == pickerKindModel || m.pickerKind == pickerKindExtractorModel) {
-			m.picker.loading = false
-			if msg.err != nil {
-				m.picker.err = msg.err
-			} else {
-				m.picker.setItems(msg.items)
-			}
-		}
-
-	case profilesLoadedMsg:
-		if m.picker != nil && m.pickerKind == pickerKindProfile {
 			m.picker.loading = false
 			if msg.err != nil {
 				m.picker.err = msg.err
@@ -401,9 +467,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editorFinishedMsg:
 		if msg.err != nil {
 			m.err = msg.err
-		} else {
-			m.messages = append(m.messages, chatMessage{role: "command", content: "System prompt updated.", timestamp: time.Now()})
-			m.syncViewport()
+		} else if msg.onSave != nil {
+			if err := msg.onSave(); err != nil {
+				m.err = err
+			} else {
+				m.messages = append(m.messages, chatMessage{role: "command", content: "System prompt updated.", timestamp: time.Now()})
+				m.syncViewport()
+			}
 		}
 
 	// ---- stats update -------------------------------------------------------
@@ -421,6 +491,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.listModels = msg.listModels
 		m.modelSelected = msg.modelSelected
 		m.extractorModelSelected = msg.extractorModelSelected
+		m.settingsMenu = msg.settings
+		m.memoryTokenBudget = 0
+		m.systemPrompt = ""
+		m.settingsEditEntry = nil
+		m.settingsEditing = false
+		m.settingsErr = ""
 		m.history = msg.history
 		m.historyIndex = len(msg.history)
 		m.historyDraft = ""
@@ -428,6 +504,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = nil
 		m.clearSuggestions()
 		m.input.SetValue("")
+		m.refreshSettingsValues()
+		m.syncSettingsList()
 		m.syncViewport()
 
 	case profileSwitchFailedMsg:
@@ -469,6 +547,82 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.picker != nil {
 			return m.updatePicker(msg, cmds)
 		}
+		if m.settingsOpen && m.settingsEditing {
+			// ctrl+h toggles help even while editing
+			if key.Matches(msg, m.keys.toggleHelp) {
+				m.help.ShowAll = !m.help.ShowAll
+				return m, nil
+			}
+			switch {
+			case msg.Key().Code == tea.KeyEsc:
+				m.settingsEditing = false
+				m.settingsEditEntry = nil
+				m.settingsErr = ""
+				m.profileDeleteCandidate = ""
+				m.profilesAction = nil
+				return m, nil
+			// enter saves; alt+enter falls through to the textarea for newline
+			case msg.Key().Code == tea.KeyEnter && msg.Key().Mod == 0:
+				return m.handleSettingsSave()
+			}
+			var cmd tea.Cmd
+			m.settingsEditor, cmd = m.settingsEditor.Update(msg)
+			return m, cmd
+		}
+		if m.settingsOpen && !m.settingsEditing {
+			if m.profileDeleteCandidate != "" {
+				switch msg.Key().Code {
+				case tea.KeyEnter:
+					return m.confirmProfileDelete()
+				case tea.KeyEsc:
+					m.profileDeleteCandidate = ""
+					m.settingsErr = ""
+					return m, nil
+				default:
+					m.profileDeleteCandidate = ""
+					m.settingsErr = ""
+					return m, nil
+				}
+			}
+			// ctrl+h toggles help; ctrl+j closes settings
+			if key.Matches(msg, m.keys.toggleHelp) {
+				m.help.ShowAll = !m.help.ShowAll
+				return m, nil
+			}
+			if key.Matches(msg, m.keys.openSettings) || msg.String() == "ctrl+j" || msg.Key().Keystroke() == "ctrl+j" {
+				m.settingsOpen = false
+				m.settingsErr = ""
+				return m, m.input.Focus()
+			}
+			if m.settingsMenu != nil && m.settingsMenu.ID == settingsIDProfiles {
+				switch {
+				case key.Matches(msg, m.keys.profileNew):
+					return m.startProfileEditor("New Profile", profilesCreateAction{})
+				case key.Matches(msg, m.keys.profileRename):
+					return m.startProfileEditor("Rename Profile", profilesRenameAction{current: m.selectedProfileName()})
+				case key.Matches(msg, m.keys.profileDelete):
+					return m.handleProfileDeleteRequest()
+				}
+			}
+			switch msg.Key().Code {
+			case tea.KeyEsc:
+				if next, ok := NavigateUp(m.settingsMenu); ok {
+					m.settingsMenu = next
+					m.syncSettingsList()
+					return m, nil
+				}
+				m.settingsOpen = false
+				m.settingsErr = ""
+				m.profileDeleteCandidate = ""
+				return m, m.input.Focus()
+			case tea.KeyEnter:
+				return m.handleSettingsEnter()
+			default:
+				var cmd tea.Cmd
+				m.settingsList, cmd = m.settingsList.Update(msg)
+				return m, cmd
+			}
+		}
 		if m.suggActive && len(m.suggestions) > 0 {
 			return m.updateSuggNav(msg, cmds)
 		}
@@ -490,7 +644,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.help.ShowAll = !m.help.ShowAll
 			return m, nil
 
+		case key.Matches(msg, m.keys.openSettings) || msg.String() == "ctrl+j" || msg.Key().Keystroke() == "ctrl+j":
+			m.clearSuggestions()
+			m.input.SetValue("")
+			m.settingsOpen = !m.settingsOpen
+			if m.settingsOpen {
+				m.settingsEditing = false
+				m.settingsErr = ""
+				m.profileDeleteCandidate = ""
+				m.profilesAction = nil
+				if m.settingsMenu == nil {
+					m.settingsMenu = DefaultSettingsMenu()
+				}
+				m.input.Blur()
+				m.refreshSettingsValues()
+				m.syncSettingsList()
+			} else {
+				m.input.Focus()
+			}
+			return m, nil
+
 		case msg.Key().Code == tea.KeyEsc:
+			if m.settingsOpen {
+				if !m.settingsEditing {
+					if next, ok := NavigateUp(m.settingsMenu); ok {
+						m.settingsMenu = next
+						return m, nil
+					}
+				}
+				m.settingsOpen = false
+				m.settingsEditing = false
+				m.settingsErr = ""
+				m.profileDeleteCandidate = ""
+				m.profilesAction = nil
+				return m, nil
+			}
 			if len(m.suggestions) > 0 {
 				m.clearSuggestions()
 				m.input.SetValue("")
@@ -650,10 +838,7 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 	if result.IsSlash {
 		if result.Err != nil {
 			if openErr, ok := commands.AsErrOpenEditor(result.Err); ok {
-				return m, m.openEditor(openErr.Path, cmds)
-			}
-			if commands.AsErrOpenProfilePicker(result.Err) {
-				return m.openPicker(pickerKindProfile, cmds)
+				return m, m.openEditor(openErr.Path, openErr.OnSave, cmds)
 			}
 			if commands.AsErrOpenBackupPicker(result.Err) {
 				return m.openPicker(pickerKindBackup, cmds)
@@ -698,199 +883,6 @@ func (m Model) handleSubmit(val string, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
 		return providerReplyMsg{content: reply, err: err}
 	})
 	return m, tea.Batch(cmds...)
-}
-
-// openPicker initializes the picker overlay and fires the async data fetch.
-func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
-	m.pickerKind = kind
-	m.input.SetValue("")
-	m.input.Blur()
-	switch kind {
-	case pickerKindModel:
-		m.picker = newPickerState("Select model", m.width-4)
-		m.picker.loading = true
-		if m.listModels != nil {
-			cmds = append(cmds, func() tea.Msg {
-				models, err := m.listModels(context.Background())
-				if err != nil {
-					return modelsLoadedMsg{err: err}
-				}
-				items := make([]pickerItem, len(models))
-				for i, mi := range models {
-					items[i] = pickerItem{Value: mi.ID}
-				}
-				return modelsLoadedMsg{items: items}
-			})
-		} else {
-			m.picker.loading = false
-			m.picker.err = errors.New("no provider configured")
-		}
-
-	case pickerKindProfile:
-		m.picker = newPickerState("Select profile", m.width-4)
-		m.picker.loading = true
-		if m.listProfiles != nil {
-			current := m.profileName
-			cmds = append(cmds, func() tea.Msg {
-				profiles, err := m.listProfiles(context.Background())
-				if err != nil {
-					return profilesLoadedMsg{err: err}
-				}
-				items := make([]pickerItem, len(profiles))
-				for i, p := range profiles {
-					items[i] = pickerItem{
-						Value:  p.Name,
-						Active: p.Name == current,
-					}
-				}
-				return profilesLoadedMsg{items: items}
-			})
-		} else {
-			m.picker.loading = false
-			m.picker.err = errors.New("no profile service available")
-		}
-
-	case pickerKindBackup:
-		m.picker = newPickerState("Restore backup", m.width-4)
-		m.picker.loading = true
-		if m.listBackups != nil {
-			cmds = append(cmds, func() tea.Msg {
-				backups, err := m.listBackups(context.Background())
-				if err != nil {
-					return backupsLoadedMsg{err: err}
-				}
-				items := make([]pickerItem, len(backups))
-				for i, ts := range backups {
-					items[i] = pickerItem{Value: ts, Label: formatBackupTimestamp(ts)}
-				}
-				return backupsLoadedMsg{items: items}
-			})
-		} else {
-			m.picker.loading = false
-			m.picker.err = errors.New("no backup service available")
-		}
-	case pickerKindExtractorModel:
-		m.picker = newPickerState("Select extractor model", m.width-4)
-		m.picker.loading = true
-		if m.listModels != nil {
-			current := m.extractorModel
-			cmds = append(cmds, func() tea.Msg {
-				models, err := m.listModels(context.Background())
-				if err != nil {
-					return modelsLoadedMsg{err: err}
-				}
-				items := make([]pickerItem, len(models))
-				for i, mi := range models {
-					items[i] = pickerItem{Value: mi.ID, Active: mi.ID == current}
-				}
-				return modelsLoadedMsg{items: items}
-			})
-		} else {
-			m.picker.loading = false
-			m.picker.err = errors.New("no provider configured")
-		}
-	}
-
-	return m, tea.Batch(cmds...)
-}
-
-// updatePicker handles keypresses while the picker overlay is open.
-func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
-	//exhaustive:ignore
-	switch {
-	case msg.Key().Code == tea.KeyEsc:
-		m.picker = nil
-		cmds = append(cmds, m.input.Focus())
-	case key.Matches(msg, m.keys.quit):
-		return m, tea.Quit
-	case key.Matches(msg, m.keys.clearInput):
-		m.picker = nil
-		m.input.SetValue("")
-		m.clearSuggestions()
-		return m, m.input.Focus()
-	case key.Matches(msg, m.keys.openModel):
-		m.picker = nil
-		m.input.SetValue("")
-		m.clearSuggestions()
-		return m.openPicker(pickerKindModel, cmds)
-	case key.Matches(msg, m.keys.toggleHelp):
-		m.help.ShowAll = !m.help.ShowAll
-		return m, nil
-	case msg.Key().Code == tea.KeyEnter:
-		chosen := m.picker.selectedValue()
-		kind := m.pickerKind
-		m.picker = nil
-		m.input.SetValue("")
-		m.clearSuggestions()
-		cmds = append(cmds, m.input.Focus())
-		if chosen == "" {
-			return m, tea.Batch(cmds...)
-		}
-		switch kind {
-		case pickerKindModel:
-			if m.modelSelected != nil {
-				if err := m.modelSelected(chosen); err != nil {
-					m.err = err
-				} else {
-					m.activeModel = chosen
-					m.messages = append(m.messages, chatMessage{role: "command", content: "Model set to: " + chosen, timestamp: time.Now()})
-					m.syncViewport()
-				}
-			}
-		case pickerKindProfile:
-			if m.profileSwitch != nil {
-				cmds = append(cmds, m.profileSwitch(chosen))
-			}
-		case pickerKindBackup:
-			if m.backupSelected != nil {
-				if err := m.backupSelected(chosen); err != nil {
-					m.err = err
-				} else {
-					m.messages = append(m.messages, chatMessage{role: "command", content: "Restored backup: " + chosen, timestamp: time.Now()})
-					m.syncViewport()
-				}
-			}
-		case pickerKindExtractorModel:
-			if m.extractorModelSelected != nil {
-				if err := m.extractorModelSelected(chosen); err != nil {
-					m.err = err
-				} else {
-					m.extractorModel = chosen
-					m.messages = append(m.messages, chatMessage{role: "command", content: "Extractor model set to: " + chosen, timestamp: time.Now()})
-					m.syncViewport()
-				}
-			}
-		}
-
-	default:
-		if m.picker != nil {
-			ph := max(m.height/2, 6)
-			maxRows := max(ph-2, 5)
-			m.picker.list.SetSize(max(m.width-2, 10), maxRows)
-			updated, cmd := m.picker.list.Update(msg)
-			m.picker.list = updated
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-		}
-	}
-	return m, tea.Batch(cmds...)
-}
-
-// openEditor suspends the TUI and opens a file in $EDITOR via tea.ExecProcess.
-func (m Model) openEditor(path string, cmds []tea.Cmd) tea.Cmd {
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = os.Getenv("VISUAL")
-	}
-	if editor == "" {
-		editor = "vi"
-	}
-	c := exec.CommandContext(context.Background(), editor, path)
-	cmds = append(cmds, tea.ExecProcess(c, func(err error) tea.Msg {
-		return editorFinishedMsg{err: err}
-	}))
-	return tea.Batch(cmds...)
 }
 
 // refreshSuggestions recomputes the suggestion list from current input.
@@ -967,18 +959,21 @@ func (m Model) View() tea.View {
 
 	// ---- middle: picker or suggestions ----
 	var mid strings.Builder
-	if m.picker != nil {
-		ph := m.height / 2
-		ph = max(ph, 10)
+	ph := max(m.height/2, 10)
+	switch {
+	case m.picker != nil:
 		mid.WriteString(m.picker.render(ph) + "\n")
-	} else if len(m.suggestions) > 0 {
+	case m.settingsOpen:
+		mid.WriteString(m.renderSettingsDialog(ph) + "\n")
+	case len(m.suggestions) > 0:
 		mid.WriteString(m.renderSuggestions(m.suggestionMaxHeight()))
 	}
 
 	helperWidth := max(m.width-2, 0)
 	m.help.SetWidth(helperWidth)
+	m.updateListHelp()
 	var helpBlock string
-	if m.help.ShowAll {
+	if m.help.ShowAll && m.picker == nil {
 		helpBlock = "\n" + m.help.View(m.helpKeys) + "\n"
 	}
 
@@ -1010,73 +1005,6 @@ func (m Model) View() tea.View {
 		footer)
 	view.AltScreen = true
 	return view
-}
-
-// renderFooter draws the bottom status line.
-func (m *Model) renderFooter() string {
-	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	green := lipgloss.NewStyle().Foreground(lipgloss.Color("71"))
-	blue := lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	yellow := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
-	purple := lipgloss.NewStyle().Foreground(lipgloss.Color("135"))
-	white := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-
-	// Left: token stats + cache status + notes badge + extractor warning.
-	var leftParts []string
-
-	if m.tokenStatus != "" {
-		leftParts = append(leftParts, blue.Render(m.tokenStatus))
-	}
-
-	cache := strings.TrimSpace(m.cacheStatus)
-	switch {
-	case strings.Contains(cache, "hit"):
-		leftParts = append(leftParts, green.Render("ctx:hit"))
-	case strings.Contains(cache, "miss"):
-		leftParts = append(leftParts, yellow.Render("ctx:miss"))
-	default:
-		leftParts = append(leftParts, dim.Render("ctx:n/a"))
-	}
-
-	if m.notesIndicator != "" {
-		leftParts = append(leftParts, green.Render(m.notesIndicator))
-	}
-	if m.extractorFallback {
-		leftParts = append(leftParts, yellow.Render("Extractor model missing — using main model."))
-	}
-
-	left := strings.Join(leftParts, dim.Render("  "))
-
-	// Right: profile + model + help.
-	right := white.Render(m.profileName)
-	if m.activeModel != "" {
-		right = right + dim.Render("  ") + purple.Render("["+m.activeModel+"]")
-	}
-	helpView := m.help.ShortHelpView(m.helpKeys.ShortHelp())
-	if helpView != "" {
-		right = right + dim.Render("  ") + helpView
-	}
-
-	_ = yellow // suppress unused if no cost yet
-
-	margin := lipgloss.Width(m.input.Prompt) + 1
-	margin = max(margin, 0)
-	innerWidth := m.width - margin*2
-	innerWidth = max(innerWidth, 0)
-	pad := strings.Repeat(" ", margin)
-	return pad + footerLine(innerWidth, left, right) + pad
-}
-
-// footerLine pads left/right content to terminal width.
-func footerLine(width int, left, right string) string {
-	if width <= 0 {
-		return left + "  " + right
-	}
-	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 2 {
-		return left + "  " + right
-	}
-	return left + strings.Repeat(" ", gap) + right
 }
 
 func formatBackupTimestamp(ts string) string {
@@ -1121,6 +1049,687 @@ func (m *Model) renderSuggestions(maxRows int) string {
 		sb.WriteString(suggNormalStyle.Render(fmt.Sprintf("  … %d more", more)) + "\n")
 	}
 	return sb.String()
+}
+
+func (m *Model) renderSettingsDialog(height int) string {
+	if m.settingsMenu == nil {
+		return ""
+	}
+	if m.settingsEditing {
+		return m.renderSettingsEditor(height)
+	}
+	return m.renderSettingsList(height)
+}
+
+func (m *Model) renderSettingsList(height int) string {
+	m.updateListHelp()
+	m.settingsList.SetHeight(max(height-2, 4))
+	m.settingsList.SetWidth(max(m.width-6, 20))
+	m.settingsList.Title = ""
+
+	head := settingsHelpText
+	if m.settingsErr != "" {
+		head = head + "\n" + errStyle.Render("  "+m.settingsErr)
+	}
+
+	return pickerBorderStyle.Render(head + "\n" + m.settingsList.View())
+}
+
+func (m *Model) syncSettingsList() {
+	if m.settingsMenu == nil {
+		return
+	}
+	entries := make([]SettingsEntry, len(m.settingsMenu.Entries))
+	copy(entries, m.settingsMenu.Entries)
+	SortSettingsEntries(entries)
+
+	items := make([]list.Item, len(entries))
+	for i, entry := range entries {
+		items[i] = settingsItem{entry: entry}
+	}
+	m.settingsList.SetItems(items)
+	m.settingsList.Title = ""
+	m.settingsList.SetSize(max(m.width-6, 20), max(m.height/2-2, 6))
+	if len(items) > 0 {
+		m.settingsList.Select(0)
+	}
+}
+
+func (m *Model) refreshProfilesList() {
+	if m.settingsMenu == nil {
+		return
+	}
+	var menu *SettingsMenu
+	if m.settingsMenu.ID == settingsIDProfiles {
+		menu = m.settingsMenu
+	} else if next, ok := NavigateToSubmenu(m.settingsMenu, settingsIDProfiles); ok {
+		menu = next
+	}
+	if menu == nil {
+		return
+	}
+	menu.Entries = nil
+	if m.profileService == nil {
+		return
+	}
+	profiles, err := m.profileService.List(context.Background())
+	if err != nil {
+		return
+	}
+	items := make([]SettingsEntry, 0, len(profiles))
+	for _, p := range profiles {
+		items = append(items, SettingsEntry{
+			ID:     p.Name,
+			Label:  p.Name,
+			Kind:   SettingsEntryProfile,
+			Value:  p.Slug,
+			Active: p.IsDefault,
+		})
+	}
+	menu.Entries = items
+}
+
+func (m *Model) selectedProfileName() string {
+	entry := m.selectedSettingsEntry()
+	if entry == nil {
+		return ""
+	}
+	return entry.ID
+}
+
+func (m *Model) selectProfileEntry(entry *SettingsEntry) (tea.Model, tea.Cmd) {
+	if entry == nil || m.profileService == nil {
+		return m, nil
+	}
+	if m.profileSwitch != nil {
+		return m, m.profileSwitch(entry.ID)
+	}
+	m.settingsMenu = DefaultSettingsMenu()
+	p, err := m.profileService.Select(context.Background(), entry.ID)
+	if err != nil {
+		m.settingsErr = err.Error()
+		return m, nil
+	}
+	m.profileName = p.Name
+	m.execCtx.ProfileID = p.ID
+	m.execCtx.ProfileSlug = p.Slug
+	m.settingsErr = ""
+	m.settingsMenu = DefaultSettingsMenu()
+	m.refreshSettingsValues()
+	m.syncSettingsList()
+	return m, nil
+}
+
+func (m *Model) startProfileEditor(label string, action profilesAction) (tea.Model, tea.Cmd) {
+	m.settingsEditing = true
+	m.settingsErr = ""
+	m.settingsEditEntry = &SettingsEntry{ID: settingsIDProfiles, Label: label, Kind: SettingsEntryValue, ValueType: SettingsValueText}
+	m.settingsEditor = newSettingsEditor()
+	if action != nil {
+		m.settingsEditor.SetValue("")
+		if renameAction, ok := action.(profilesRenameAction); ok {
+			m.settingsEditor.SetValue(renameAction.current)
+		}
+		m.profilesAction = action
+	}
+	return m, m.settingsEditor.Focus()
+}
+
+type settingsItem struct {
+	entry SettingsEntry
+}
+
+func (s settingsItem) Title() string { return s.entry.Label }
+func (s settingsItem) Description() string {
+	if s.entry.Kind == SettingsEntrySubmenu {
+		return "submenu"
+	}
+	return s.entry.Value
+}
+func (s settingsItem) FilterValue() string { return s.entry.Label }
+
+type settingsDelegate struct{}
+
+func (d settingsDelegate) Height() int  { return 1 }
+func (d settingsDelegate) Spacing() int { return 0 }
+func (d settingsDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd {
+	return nil
+}
+
+func (d settingsDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	it, ok := item.(settingsItem)
+	if !ok {
+		return
+	}
+	indicator := " "
+	style := pickerNormalStyle
+	switch {
+	case index == m.Index():
+		indicator = "›"
+		style = pickerCursorStyle
+	case it.entry.Active:
+		indicator = "●"
+		style = pickerActiveStyle
+	}
+
+	label := it.entry.Label
+	switch it.entry.Kind {
+	case SettingsEntrySubmenu:
+		label += " ›"
+	case SettingsEntryAction:
+		label += " →"
+		if it.entry.Value != "" {
+			label = label + " · " + it.entry.Value
+		}
+	case SettingsEntryValue:
+		if it.entry.Value != "" {
+			label = label + ": " + formatSettingsValue(it.entry.Value, m.Width()-10)
+		}
+	case SettingsEntryProfile:
+		if it.entry.Value != "" {
+			label = label + " · " + it.entry.Value
+		}
+	}
+	line := "  " + indicator + " " + label
+	_, _ = fmt.Fprint(w, style.Render(fitLine(line, m.Width())))
+}
+
+func formatSettingsValue(value string, maxWidth int) string {
+	trimmed := strings.TrimSpace(value)
+	trimmed = strings.ReplaceAll(trimmed, "\n", " ")
+	trimmed = strings.Join(strings.Fields(trimmed), " ")
+	if maxWidth <= 0 {
+		return trimmed
+	}
+	if lipgloss.Width(trimmed) <= maxWidth {
+		return trimmed
+	}
+	if maxWidth <= 3 {
+		return "..."
+	}
+	runes := []rune(trimmed)
+	maxRunes := maxWidth - 3
+	if len(runes) <= maxRunes {
+		return trimmed
+	}
+	return string(runes[:maxRunes]) + "..."
+}
+
+func newSettingsList(width int) list.Model {
+	delegate := settingsDelegate{}
+	l := list.New([]list.Item{}, delegate, width, 0)
+	l.SetShowTitle(false)
+	l.SetShowHelp(true)
+	l.SetShowStatusBar(false)
+	l.SetFilteringEnabled(false)
+	l.DisableQuitKeybindings()
+	return l
+}
+
+func newSettingsEditor() textarea.Model {
+	editor := textarea.New()
+	editor.ShowLineNumbers = false
+	editor.Prompt = "  "
+	editor.SetHeight(5)
+	editor.CharLimit = 8000
+	styles := editor.Styles()
+	styles.Cursor = cursorStyleDef
+	editor.SetStyles(styles)
+	editor.KeyMap.InsertNewline = key.NewBinding(
+		key.WithKeys("alt+enter"),
+		key.WithHelp("alt+enter", "insert newline"),
+	)
+	editor.KeyMap.WordForward = key.NewBinding(
+		key.WithKeys("alt+right", "alt+f", "ctrl+right"),
+		key.WithHelp("ctrl+right", "word forward"),
+	)
+	editor.KeyMap.WordBackward = key.NewBinding(
+		key.WithKeys("alt+left", "alt+b", "ctrl+left"),
+		key.WithHelp("ctrl+left", "word backward"),
+	)
+	return editor
+}
+
+func parsePositiveInt(val string) (int, error) {
+	if val == "" {
+		return 0, errors.New("value must be a positive number")
+	}
+	parsed, err := strconv.Atoi(val)
+	if err != nil || parsed <= 0 {
+		return 0, errors.New("value must be a positive number")
+	}
+	return parsed, nil
+}
+
+func (m Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
+	if m.settingsMenu == nil {
+		return m, nil
+	}
+	entry := m.selectedSettingsEntry()
+	if entry == nil {
+		return m, nil
+	}
+	if entry.Kind == SettingsEntryAction {
+		switch entry.ID {
+		case settingsIDModel:
+			m.pickerFromSettings = true
+			return m.openPicker(pickerKindModel, nil)
+		case settingsIDExtractorModel:
+			m.pickerFromSettings = true
+			return m.openPicker(pickerKindExtractorModel, nil)
+		}
+		return m, nil
+	}
+	if entry.Kind == SettingsEntryProfile {
+		return m.selectProfileEntry(entry)
+	}
+	if entry.Kind == SettingsEntrySubmenu {
+		if next, ok := NavigateToSubmenu(m.settingsMenu, entry.ID); ok {
+			m.settingsMenu = next
+			m.refreshProfilesList()
+			m.syncSettingsList()
+			return m, nil
+		}
+		return m, nil
+	}
+	if entry.Kind == SettingsEntryValue {
+		m.settingsEditing = true
+		m.settingsEditEntry = entry
+		m.settingsErr = ""
+		m.settingsEditor = newSettingsEditor()
+		// For the API key, populate with real value (not obfuscated)
+		if entry.ID == settingsIDProviderAPIKey {
+			m.settingsEditor.SetValue(m.providerAPIKey)
+		} else {
+			m.settingsEditor.SetValue(entry.Value)
+		}
+		return m, m.settingsEditor.Focus()
+	}
+	return m, nil
+}
+
+func (m Model) handleSettingsSave() (tea.Model, tea.Cmd) {
+	if m.settingsEditEntry == nil {
+		m.settingsEditing = false
+		return m, nil
+	}
+	val := strings.TrimSpace(m.settingsEditor.Value())
+	entry := *m.settingsEditEntry
+	if m.profilesAction != nil && entry.ID == settingsIDProfiles {
+		action := m.profilesAction
+		val = strings.TrimSpace(m.settingsEditor.Value())
+		if val == "" {
+			m.settingsErr = "value must not be empty"
+			return m, nil
+		}
+		p, err := action.Apply(context.Background(), m.profileService, val)
+		if err != nil {
+			m.settingsErr = err.Error()
+			return m, nil
+		}
+		m.profilesAction = nil
+		m.settingsEditing = false
+		m.settingsEditEntry = nil
+		m.settingsErr = ""
+
+		switch action := action.(type) {
+		case profilesCreateAction:
+			selected, err := m.profileService.Select(context.Background(), p.Name)
+			if err != nil {
+				m.settingsErr = err.Error()
+				return m, nil
+			}
+			if cmd := m.switchToProfile(selected); cmd != nil {
+				return m, cmd
+			}
+		case profilesRenameAction:
+			if strings.EqualFold(action.current, m.profileName) {
+				if cmd := m.switchToProfile(p); cmd != nil {
+					return m, cmd
+				}
+			} else {
+				if cmd := m.syncActiveProfile(); cmd != nil {
+					return m, cmd
+				}
+			}
+		}
+		m.refreshSettingsValues()
+		m.syncSettingsList()
+		return m, nil
+	}
+	if entry.ValueType == SettingsValueNumber {
+		parsed, err := parsePositiveInt(val)
+		if err != nil {
+			m.settingsErr = err.Error()
+			return m, nil
+		}
+		m.memoryTokenBudget = parsed
+		entry.Value = strconv.Itoa(parsed)
+		if err := profile.WriteSettings(m.execCtx.ProfileSlug, &profile.Settings{MemoryTokenBudget: parsed}); err != nil {
+			m.settingsErr = err.Error()
+			return m, nil
+		}
+	}
+	if entry.ValueType == SettingsValueText {
+		switch entry.ID {
+		case settingsIDSystemPrompt:
+			m.systemPrompt = val
+			entry.Value = val
+			if err := m.saveSystemPrompt(val); err != nil {
+				m.settingsErr = err.Error()
+				return m, nil
+			}
+		case settingsIDProviderEndpoint:
+			m.providerEndpoint = val
+			entry.Value = val
+			if err := m.saveProviderEndpoint(val); err != nil {
+				m.settingsErr = err.Error()
+				return m, nil
+			}
+		case settingsIDProviderAPIKey:
+			m.providerAPIKey = val
+			entry.Value = obfuscateKey(val)
+			if err := m.saveProviderAPIKey(val); err != nil {
+				m.settingsErr = err.Error()
+				return m, nil
+			}
+		default:
+			entry.Value = val
+		}
+	}
+	m.updateSettingsEntry(entry)
+	m.settingsEditing = false
+	m.settingsEditEntry = nil
+	m.settingsErr = ""
+	m.syncSettingsList()
+	return m, nil
+}
+
+func (m *Model) selectedSettingsEntry() *SettingsEntry {
+	item := m.settingsList.SelectedItem()
+	if item == nil {
+		return nil
+	}
+	settingsItem, ok := item.(settingsItem)
+	if !ok {
+		return nil
+	}
+	entry := settingsItem.entry
+	return &entry
+}
+
+func (m *Model) updateSettingsEntry(updated SettingsEntry) {
+	if m.settingsMenu == nil {
+		return
+	}
+	entries := make([]SettingsEntry, len(m.settingsMenu.Entries))
+	copy(entries, m.settingsMenu.Entries)
+	for i, entry := range entries {
+		if entry.ID == updated.ID {
+			entries[i] = updated
+			break
+		}
+	}
+	m.settingsMenu.Entries = entries
+}
+
+func (m *Model) refreshSettingsValues() {
+	if m.settingsMenu == nil || m.execCtx == nil {
+		return
+	}
+	ctx := context.Background()
+	if m.execCtx.ProfileSlug != "" {
+		if settings, err := profile.ReadSettings(m.execCtx.ProfileSlug); err == nil {
+			m.memoryTokenBudget = settings.MemoryTokenBudget
+		}
+	}
+	if m.execCtx.ProfileID != "" && m.execCtx.DB != nil {
+		repo := store.NewSystemPromptRepo(m.execCtx.DB)
+		promptStore := profile.NewPromptStore(m.execCtx.ProfileID, repo)
+		if prompt, err := promptStore.GetSystemPrompt(ctx); err == nil {
+			m.systemPrompt = prompt
+		}
+		cfgRepo := store.NewProviderConfigRepo(m.execCtx.DB)
+		if cfg, err := cfgRepo.GetActive(ctx, m.execCtx.ProfileID); err == nil {
+			m.providerEndpoint = cfg.Endpoint
+			if pass, err := security.MachinePassphrase(); err == nil {
+				if dec, err := security.Decrypt(cfg.CredentialRef, pass); err == nil {
+					m.providerAPIKey = dec
+				}
+			}
+		}
+	}
+	m.applySettingsValues()
+	m.refreshProfilesList()
+}
+
+func (m *Model) applySettingsValues() {
+	applyToMenu(m.settingsMenu, m)
+}
+
+func applyToMenu(menu *SettingsMenu, m *Model) {
+	if menu == nil {
+		return
+	}
+	entries := make([]SettingsEntry, len(menu.Entries))
+	copy(entries, menu.Entries)
+	for i := range entries {
+		switch entries[i].ID {
+		case settingsIDMemoryTokenLimit:
+			if m.memoryTokenBudget > 0 {
+				entries[i].Value = strconv.Itoa(m.memoryTokenBudget)
+			}
+		case settingsIDSystemPrompt:
+			entries[i].Value = m.systemPrompt
+		case settingsIDProviderEndpoint:
+			entries[i].Value = m.providerEndpoint
+		case settingsIDProviderAPIKey:
+			entries[i].Value = obfuscateKey(m.providerAPIKey)
+		}
+		if entries[i].ID == settingsIDModel {
+			entries[i].Value = ""
+			entries[i].Active = false
+		}
+		if entries[i].ID == settingsIDExtractorModel {
+			entries[i].Value = ""
+			entries[i].Active = false
+		}
+		if entries[i].Submenu != nil {
+			applyToMenu(entries[i].Submenu, m)
+		}
+	}
+	menu.Entries = entries
+}
+
+func obfuscateKey(key string) string {
+	if len(key) == 0 {
+		return ""
+	}
+	if len(key) <= 8 {
+		return strings.Repeat("*", len(key))
+	}
+	return key[:4] + strings.Repeat("*", len(key)-8) + key[len(key)-4:]
+}
+
+func (m *Model) updateListHelp() {
+	m.settingsList.SetShowHelp(true)
+	enterSelect := key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select"))
+	escBack := key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back/close"))
+
+	shortHelp := func() []key.Binding {
+		if m.picker != nil {
+			return []key.Binding{enterSelect, escBack}
+		}
+		if m.settingsOpen && m.settingsEditing {
+			return []key.Binding{
+				key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "save")),
+				key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
+				key.NewBinding(key.WithKeys("alt+enter"), key.WithHelp("alt+enter", "newline")),
+				key.NewBinding(key.WithKeys("ctrl+left", "ctrl+right"), key.WithHelp("ctrl+←/→", "word jump")),
+			}
+		}
+		if m.settingsOpen && m.settingsMenu != nil && m.settingsMenu.ID == settingsIDProfiles {
+			return []key.Binding{enterSelect, escBack, m.keys.profileNew, m.keys.profileRename, m.keys.profileDelete}
+		}
+		if m.settingsOpen {
+			return []key.Binding{enterSelect, escBack}
+		}
+		return nil
+	}
+	m.settingsList.AdditionalShortHelpKeys = shortHelp
+	m.settingsList.AdditionalFullHelpKeys = shortHelp
+}
+
+func (m *Model) saveProviderEndpoint(endpoint string) error {
+	if m.execCtx == nil || m.execCtx.DB == nil {
+		return errors.New("settings: no database available")
+	}
+	repo := store.NewProviderConfigRepo(m.execCtx.DB)
+	return repo.SetEndpoint(context.Background(), m.execCtx.ProfileID, endpoint)
+}
+
+func (m *Model) saveProviderAPIKey(key string) error {
+	if m.execCtx == nil || m.execCtx.DB == nil {
+		return errors.New("settings: no database available")
+	}
+	pass, err := security.MachinePassphrase()
+	if err != nil {
+		return fmt.Errorf("settings: passphrase: %w", err)
+	}
+	encrypted, err := security.Encrypt(key, pass)
+	if err != nil {
+		return fmt.Errorf("settings: encrypt key: %w", err)
+	}
+	repo := store.NewProviderConfigRepo(m.execCtx.DB)
+	return repo.SetCredentialRef(context.Background(), m.execCtx.ProfileID, encrypted)
+}
+
+func (m *Model) saveSystemPrompt(prompt string) error {
+	if m.execCtx == nil || m.execCtx.DB == nil {
+		return errors.New("settings: no database available")
+	}
+	repo := store.NewSystemPromptRepo(m.execCtx.DB)
+	promptStore := profile.NewPromptStore(m.execCtx.ProfileID, repo)
+	if err := promptStore.SetSystemPrompt(context.Background(), prompt); err != nil {
+		return err
+	}
+	if m.execCtx.OnPromptChanged != nil {
+		return m.execCtx.OnPromptChanged(m.execCtx.ProfileSlug)
+	}
+	return nil
+}
+
+func (m *Model) switchToProfile(p *store.Profile) tea.Cmd {
+	if p == nil {
+		return nil
+	}
+	m.profileName = p.Name
+	if m.execCtx != nil {
+		m.execCtx.ProfileID = p.ID
+		m.execCtx.ProfileSlug = p.Slug
+	}
+	m.settingsMenu = DefaultSettingsMenu()
+	if m.profileSwitch != nil {
+		return m.profileSwitch(p.Name)
+	}
+	return nil
+}
+
+func (m *Model) syncActiveProfile() tea.Cmd {
+	if m.profileService == nil {
+		return nil
+	}
+	active, err := m.profileService.GetActive(context.Background())
+	if err != nil {
+		m.err = err
+		return nil
+	}
+	m.err = nil
+	return m.switchToProfile(active)
+}
+
+func (m *Model) handleProfileDeleteRequest() (tea.Model, tea.Cmd) {
+	name := m.selectedProfileName()
+	if name == "" {
+		return m, nil
+	}
+	m.profileDeleteCandidate = name
+	m.settingsErr = "press enter to confirm deleting \"" + name + "\" or esc to cancel"
+	return m, nil
+}
+
+func (m *Model) confirmProfileDelete() (tea.Model, tea.Cmd) {
+	if m.profileDeleteCandidate == "" {
+		return m, nil
+	}
+	name := m.profileDeleteCandidate
+	m.profileDeleteCandidate = ""
+	m.settingsErr = ""
+	return m.deleteSelectedProfileByName(name)
+}
+
+func (m *Model) deleteSelectedProfileByName(name string) (tea.Model, tea.Cmd) {
+	if m.profileService == nil {
+		return m, nil
+	}
+	if name == "" {
+		return m, nil
+	}
+	confirm := func(string) bool { return true }
+	if m.execCtx != nil && m.execCtx.Confirm != nil {
+		confirm = m.execCtx.Confirm
+	}
+	if err := m.profileService.Delete(context.Background(), name, confirm); err != nil {
+		if errors.Is(err, profile.ErrConfirmationRequired) {
+			m.settingsErr = "delete canceled"
+			m.err = nil
+			return m, nil
+		}
+		m.err = err
+		m.settingsErr = ""
+		return m, nil
+	}
+	m.err = nil
+	m.settingsErr = ""
+	if cmd := m.syncActiveProfile(); cmd != nil {
+		return m, cmd
+	}
+	m.refreshSettingsValues()
+	m.syncSettingsList()
+	return m, nil
+}
+
+func (m *Model) renderSettingsEditor(height int) string {
+	if m.settingsEditEntry == nil {
+		return ""
+	}
+	height = max(height-4, 6)
+	m.settingsEditor.SetHeight(height)
+	m.settingsEditor.SetWidth(max(m.width-8, 40))
+
+	header := lipgloss.NewStyle().Bold(true).Render(m.settingsEditEntry.Label)
+	description := settingsEditorDescription(m.settingsEditEntry.ID)
+	var descBlock string
+	if description != "" {
+		descBlock = "\n" + helpShortStyle.Render("  "+description)
+	}
+	body := m.settingsEditor.View()
+	var errBlock string
+	if m.settingsErr != "" {
+		errBlock = "\n" + errStyle.Render("  "+m.settingsErr)
+	}
+	return pickerBorderStyle.Render(header + descBlock + "\n" + body + errBlock)
+}
+
+func settingsEditorDescription(entryID string) string {
+	switch entryID {
+	case settingsIDMemoryTokenLimit:
+		return "Limits how much memory context is injected into replies. Higher values use more tokens."
+	case settingsIDSystemPrompt:
+		return "Sets the system role prompt that guides every reply."
+	default:
+		return ""
+	}
 }
 
 func suggestionWindow(total, cursor, maxRows int) (start, end int) {

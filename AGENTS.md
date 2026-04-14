@@ -22,7 +22,14 @@ tests/
 
 ## Commands
 
-# Add commands for Go 1.26+
+`make build` - Build the project
+`make test` - Run tests
+`make lint` - Run linters
+`make fmt` - Format code
+`make vet` - Run `go vet`
+`make tidy` - Run `go mod tidy`
+`make clean` - Clean build artifacts
+`make run` - Run the application
 
 ## Code Style
 
@@ -31,8 +38,8 @@ Go 1.26+: Follow standard conventions
 ## Recent Changes
 
 - 007-release-pipelines: Added Go 1.26 + Cobra, Bubble Tea/Bubbles, Lip Gloss, modernc.org/sqlite, golang.org/x/mod/semver (new)
+- 006-settings-dialog: Added Go 1.26+ + Bubble Tea v2, Bubbles v2, Lip Gloss v2, Cobra
 - 005-memory-context: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
-- 004-bubbletea-tui: Added Go 1.26+ + Bubble Tea + Bubbles + Lip Gloss (TUI), Cobra (CLI)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

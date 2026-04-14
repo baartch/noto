@@ -120,6 +120,38 @@ func (r *ProviderConfigRepo) SetExtractorModel(ctx context.Context, profileID, m
 	return nil
 }
 
+// SetEndpoint updates the endpoint for a profile's active provider config.
+func (r *ProviderConfigRepo) SetEndpoint(ctx context.Context, profileID, endpoint string) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE provider_config SET endpoint = ?, updated_at = datetime('now')
+		WHERE profile_id = ? AND is_active = 1
+	`, endpoint, profileID)
+	if err != nil {
+		return fmt.Errorf("store: set endpoint: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrProviderConfigNotFound
+	}
+	return nil
+}
+
+// SetCredentialRef updates the encrypted API key for a profile's active provider config.
+func (r *ProviderConfigRepo) SetCredentialRef(ctx context.Context, profileID, credentialRef string) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE provider_config SET credential_ref = ?, updated_at = datetime('now')
+		WHERE profile_id = ? AND is_active = 1
+	`, credentialRef, profileID)
+	if err != nil {
+		return fmt.Errorf("store: set credential ref: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrProviderConfigNotFound
+	}
+	return nil
+}
+
 func (r *ProviderConfigRepo) scanOne(row *sql.Row) (*ProviderConfig, error) {
 	c := &ProviderConfig{}
 	var isActive int
