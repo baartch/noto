@@ -11,10 +11,10 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Verify memory profile paths and storage files in internal/config/ and internal/store/
-- [ ] T002 [P] Capture current note extraction + storage flow references in internal/memory/ and internal/store/
-- [ ] T003 [P] Confirm TUI notification patterns in internal/tui/ for reuse in footer notifications
-- [ ] T004 [P] Capture provider base endpoint + fixed suffixes (/responses, /embeddings/models, /embeddings) and deprecate /chat/completions in internal/provider/
+- [X] T001 Verify memory profile paths and storage files in internal/config/ and internal/store/
+- [X] T002 [P] Capture current note extraction + storage flow references in internal/memory/ and internal/store/
+- [X] T003 [P] Confirm TUI notification patterns in internal/tui/ for reuse in footer notifications
+- [X] T004 [P] Capture provider base endpoint + fixed suffixes (/responses, /embeddings/models, /embeddings) and deprecate /chat/completions in internal/provider/
 
 ---
 
