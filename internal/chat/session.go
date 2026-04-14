@@ -491,7 +491,7 @@ func (s *Session) ExtractorFallbackActive() bool {
 
 // EmbeddingModelMissingActive reports whether embeddings are missing.
 func (s *Session) EmbeddingModelMissingActive() bool {
-	return s.missingEmbedding
+	return s.missingEmbedding || s.embeddingModel == ""
 }
 
 // Close archives the conversation, persists a session summary, and snapshots backups.

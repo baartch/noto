@@ -316,6 +316,9 @@ func (r *Retrieval) rankNotes(ctx context.Context, systemPrompt, summaryText str
 	if summaryText != "" {
 		queryText = queryText + "\n" + summaryText
 	}
+	if r.embeddingModel == "" {
+		return nil, nil
+	}
 	if queryText == "" {
 		return nil, nil
 	}

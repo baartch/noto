@@ -66,16 +66,16 @@
 
 ### Tests for User Story 2
 
-- [ ] T020 [P] [US2] Unit test for ranking relevance in tests/unit/memory/retrieval_test.go
-- [ ] T021 [P] [US2] Integration test for retrieval pipeline in tests/integration/memory/retrieval_flow_test.go
-- [ ] T022 [P] [US2] Integration test for embeddings model requirement in tests/integration/memory/embed_model_gate_test.go
+- [X] T020 [P] [US2] Unit test for ranking relevance in tests/unit/memory/retrieval_test.go
+- [X] T021 [P] [US2] Integration test for retrieval pipeline in tests/integration/memory/retrieval_flow_test.go
+- [X] T022 [P] [US2] Integration test for embeddings model requirement in tests/integration/memory/embed_model_gate_test.go
 
 ### Implementation for User Story 2
 
-- [ ] T023 [P] [US2] Implement relevance scoring in internal/memory/retrieval.go
-- [ ] T024 [US2] Implement ranking + top-N selection in internal/memory/retrieval.go
-- [ ] T025 [US2] Wire retrieval into chat prompt handling in internal/memory/context.go
-- [ ] T026 [US2] Use embeddings model setting for retrieval in internal/chat/session.go
+- [X] T023 [P] [US2] Implement relevance scoring in internal/memory/retrieval.go
+- [X] T024 [US2] Implement ranking + top-N selection in internal/memory/retrieval.go
+- [X] T025 [US2] Wire retrieval into chat prompt handling in internal/chat/session.go
+- [X] T026 [US2] Use embeddings model setting for retrieval in internal/chat/session.go
 
 **Checkpoint**: User Story 2 functional and testable independently
 
