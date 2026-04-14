@@ -40,9 +40,9 @@
 
 ### Tests for User Story 1
 
-- [ ] T010 [P] [US1] Unit test for scoring threshold decisions in tests/unit/memory/scoring_test.go
-- [ ] T011 [P] [US1] Integration test for deduplication with vector index in tests/integration/memory/dedup_test.go
-- [ ] T012 [P] [US1] Unit test for candidate extraction inputs in tests/unit/memory/candidates_test.go
+- [X] T010 [P] [US1] Unit test for scoring threshold decisions in tests/unit/memory/scoring_test.go
+- [X] T011 [P] [US1] Integration test for deduplication with vector index in tests/integration/memory/dedup_test.go
+- [X] T012 [P] [US1] Unit test for candidate extraction inputs in tests/unit/memory/candidates_test.go
 
 ### Implementation for User Story 1
 
