@@ -10,6 +10,7 @@
 ### Session 2026-04-14
 
 - Q: When should the user see the footer message for newly captured notes? → A: Show the footer message only when a note is actually stored.
+- Q: Should embeddings use a separate model setting? → A: Require users to explicitly select an embeddings model (no fallback to the main model).
 
 ## User Scenarios & Testing _(mandatory)_
 
@@ -76,6 +77,7 @@ As a user, I want to see a brief footer notification when a note is actually sto
 - **FR-007**: System MUST limit surfaced notes to a concise list that fits the conversation context.
 - **FR-008**: System MUST show a footer notification when a note is stored, displaying the note content for roughly 3 seconds.
 - **FR-009**: System MUST expose a user-facing review that includes each note’s origin and storage rationale.
+- **FR-010**: System MUST require an explicit embeddings model selection for vector indexing and retrieval (no fallback to the main chat model).
 
 ### Non-Functional Requirements _(mandatory)_
 
@@ -112,3 +114,4 @@ As a user, I want to see a brief footer notification when a note is actually sto
 - The feature scope focuses on text chat interactions and does not include external document ingestion.
 - The system can access the existing note storage and retrieval infrastructure.
 - Users have access to a standard review interface for viewing stored notes.
+- Users must configure an embeddings model before vector indexing is enabled.

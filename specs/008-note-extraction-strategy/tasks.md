@@ -11,9 +11,10 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Verify existing memory profile paths and storage files in internal/profiles/ and internal/memory/
-- [ ] T002 [P] Capture current note extraction + storage flow references in internal/memory/ for baseline documentation
-- [ ] T003 [P] Confirm TUI notification patterns in internal/ui/ for reuse in footer notifications
+- [ ] T001 Verify memory profile paths and storage files in internal/config/ and internal/store/
+- [ ] T002 [P] Capture current note extraction + storage flow references in internal/memory/ and internal/store/
+- [ ] T003 [P] Confirm TUI notification patterns in internal/tui/ for reuse in footer notifications
+- [ ] T004 [P] Capture provider base endpoint + fixed suffixes (/responses, /embeddings/models, /embeddings) and deprecate /chat/completions in internal/provider/
 
 ---
 
@@ -21,10 +22,11 @@
 
 **Purpose**: Core infrastructure that MUST be complete before ANY user story can be implemented
 
-- [ ] T004 Define note value scoring inputs and thresholds in internal/memory/scoring.go
-- [ ] T005 Define duplicate matching strategy using vector index in internal/vector/dedup.go
-- [ ] T006 Create NoteCandidate evaluation helper in internal/memory/candidates.go
-- [ ] T007 Add shared error handling/logging hooks for note capture in internal/memory/logging.go
+- [ ] T005 Define note value scoring inputs and thresholds in internal/memory/scoring.go
+- [ ] T006 Define duplicate matching strategy using vector index in internal/vector/dedup.go
+- [ ] T007 Create NoteCandidate evaluation helper in internal/memory/candidates.go
+- [ ] T008 Add shared error handling/logging hooks for note capture in internal/memory/logging.go
+- [ ] T009 Add profile setting for embeddings model selection in internal/profile/settings.go
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -38,17 +40,19 @@
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] Unit test for scoring threshold decisions in tests/unit/memory/scoring_test.go
-- [ ] T009 [P] [US1] Integration test for deduplication with vector index in tests/integration/memory/dedup_test.go
-- [ ] T010 [P] [US1] Unit test for candidate extraction inputs in tests/unit/memory/candidates_test.go
+- [ ] T010 [P] [US1] Unit test for scoring threshold decisions in tests/unit/memory/scoring_test.go
+- [ ] T011 [P] [US1] Integration test for deduplication with vector index in tests/integration/memory/dedup_test.go
+- [ ] T012 [P] [US1] Unit test for candidate extraction inputs in tests/unit/memory/candidates_test.go
 
 ### Implementation for User Story 1
 
-- [ ] T011 [P] [US1] Implement scoring logic in internal/memory/scoring.go
-- [ ] T012 [P] [US1] Implement candidate extraction in internal/memory/candidates.go
-- [ ] T013 [US1] Implement deduplication comparison in internal/vector/dedup.go
-- [ ] T014 [US1] Implement note storage + link-to-existing behavior in internal/memory/store.go
-- [ ] T015 [US1] Wire extraction → scoring → dedup → storage flow in internal/memory/processor.go
+- [ ] T013 [P] [US1] Implement scoring logic in internal/memory/scoring.go
+- [ ] T014 [P] [US1] Implement candidate extraction in internal/memory/candidates.go
+- [ ] T015 [US1] Implement deduplication comparison in internal/vector/dedup.go
+- [ ] T016 [US1] Implement note storage + link-to-existing behavior in internal/memory/store.go
+- [ ] T017 [US1] Wire extraction → scoring → dedup → storage flow in internal/memory/processor.go
+- [ ] T018 [US1] Require embeddings model selection before vector sync in internal/chat/session.go
+- [ ] T019 [US1] Show footer warning when embeddings model is missing in internal/tui/footer_view.go
 
 **Checkpoint**: User Story 1 fully functional and testable independently
 
@@ -62,14 +66,16 @@
 
 ### Tests for User Story 2
 
-- [ ] T016 [P] [US2] Unit test for ranking relevance in tests/unit/memory/retrieval_test.go
-- [ ] T017 [P] [US2] Integration test for retrieval pipeline in tests/integration/memory/retrieval_flow_test.go
+- [ ] T020 [P] [US2] Unit test for ranking relevance in tests/unit/memory/retrieval_test.go
+- [ ] T021 [P] [US2] Integration test for retrieval pipeline in tests/integration/memory/retrieval_flow_test.go
+- [ ] T022 [P] [US2] Integration test for embeddings model requirement in tests/integration/memory/embed_model_gate_test.go
 
 ### Implementation for User Story 2
 
-- [ ] T018 [P] [US2] Implement relevance scoring in internal/memory/retrieval.go
-- [ ] T019 [US2] Implement ranking + top-N selection in internal/memory/retrieval.go
-- [ ] T020 [US2] Wire retrieval into chat prompt handling in internal/memory/context.go
+- [ ] T023 [P] [US2] Implement relevance scoring in internal/memory/retrieval.go
+- [ ] T024 [US2] Implement ranking + top-N selection in internal/memory/retrieval.go
+- [ ] T025 [US2] Wire retrieval into chat prompt handling in internal/memory/context.go
+- [ ] T026 [US2] Use embeddings model setting for retrieval in internal/chat/session.go
 
 **Checkpoint**: User Story 2 functional and testable independently
 
@@ -83,15 +89,20 @@
 
 ### Tests for User Story 3
 
-- [ ] T021 [P] [US3] Integration test for footer notification timing in tests/integration/ui/footer_note_test.go
-- [ ] T022 [P] [US3] Integration test for note review listing in tests/integration/memory/review_test.go
+- [ ] T027 [P] [US3] Integration test for footer notification timing in tests/integration/ui/footer_note_test.go
+- [ ] T028 [P] [US3] Integration test for note review listing in tests/integration/memory/review_test.go
+- [ ] T029 [P] [US3] Integration test for embeddings model selector in tests/integration/tui/embed_model_picker_test.go
 
 ### Implementation for User Story 3
 
-- [ ] T023 [P] [US3] Implement footer notification display in internal/ui/footer.go
-- [ ] T024 [US3] Trigger footer notifications when notes are stored in internal/memory/processor.go
-- [ ] T025 [US3] Implement note review listing in internal/memory/review.go
-- [ ] T026 [US3] Add storage rationale metadata to review output in internal/memory/review.go
+- [ ] T030 [P] [US3] Add embeddings model entry in settings menu in internal/tui/settings_menu.go
+- [ ] T031 [US3] Implement embeddings model picker using /embeddings/models endpoint in internal/tui/model.go
+- [ ] T032 [US3] Add provider call to list embeddings models at baseURL+/embeddings/models in internal/provider/openai_compatible.go
+- [ ] T033 [US3] Persist embeddings model selection in internal/profile/settings.go
+- [ ] T034 [US3] Show embeddings model selection state in settings list in internal/tui/settings_menu.go
+- [ ] T035 [US3] Update embeddings request to use baseURL+/embeddings with selected model in internal/provider/openai_compatible.go
+- [ ] T036 [US3] Replace chat/completions calls with Responses API at baseURL+/responses in internal/provider/openai_compatible.go
+- [ ] T037 [US3] Map Responses API request/response payloads in internal/provider/openai_compatible.go
 
 **Checkpoint**: User Story 3 functional and testable independently
 
@@ -101,11 +112,11 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T027 [P] Run quickstart.md validation steps and capture any deltas in specs/008-note-extraction-strategy/quickstart.md
-- [ ] T028 [P] Verify footer timing/placement matches existing TUI notification patterns in internal/ui/
-- [ ] T029 [P] Update docs/ or README.md with note extraction and footer notification behavior
-- [ ] T030 [P] Measure retrieval latency against 2s target in tests/integration/memory/retrieval_perf_test.go
-- [ ] T031 Run gofmt/go vet/make lint for feature scope and resolve issues
+- [ ] T038 [P] Run quickstart.md validation steps and capture any deltas in specs/008-note-extraction-strategy/quickstart.md
+- [ ] T039 [P] Verify footer timing/placement matches existing TUI notification patterns in internal/tui/
+- [ ] T040 [P] Update docs/ or README.md with note extraction, embeddings model selector, and Responses API behavior
+- [ ] T041 [P] Measure retrieval latency against 2s target in tests/integration/memory/retrieval_perf_test.go
+- [ ] T042 Run gofmt/go vet/make lint for feature scope and resolve issues
 
 ---
 
@@ -126,11 +137,11 @@
 
 ### Parallel Opportunities
 
-- Setup tasks T002, T003 can run in parallel
-- US1 unit/integration tests (T008-T010) can run in parallel
-- US2 tests (T016-T017) can run in parallel
-- US3 tests (T021-T022) can run in parallel
-- Implementation tasks T011, T012 can run in parallel
+- Setup tasks T002-T004 can run in parallel
+- US1 unit/integration tests (T010-T012) can run in parallel
+- US2 tests (T020-T022) can run in parallel
+- US3 tests (T027-T029) can run in parallel
+- Implementation tasks T013, T014 can run in parallel
 
 ---
 

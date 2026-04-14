@@ -21,3 +21,8 @@
 - **note_id**: Referenced Note id
 - **relevance_score**: Similarity/relevance score
 - **rank**: Position in ranked results
+
+## EmbeddingsModelSetting
+
+- **model_id**: Selected embeddings model identifier
+- **profile_id**: Profile that owns the setting
