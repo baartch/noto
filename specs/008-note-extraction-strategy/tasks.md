@@ -1,180 +1,97 @@
 # Tasks: note-extraction-strategy
 
 **Input**: Design documents from `/specs/008-note-extraction-strategy/`
-**Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
-
-**Tests**: Tests are required per constitution and plan gate; include unit and integration coverage for new behaviors.
-
-**Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
+**Prerequisites**: plan.md, spec.md, research.md, data-model.md, quickstart.md
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Project initialization and basic structure
-
-- [X] T001 Verify memory profile paths and storage files in internal/config/ and internal/store/
-- [X] T002 [P] Capture current note extraction + storage flow references in internal/memory/ and internal/store/
-- [X] T003 [P] Confirm TUI notification patterns in internal/tui/ for reuse in footer notifications
-- [X] T004 [P] Capture provider base endpoint + fixed suffixes (/responses, /embeddings/models, /embeddings) and deprecate /chat/completions in internal/provider/
+- [ ] T001 Confirm existing provider_config schema usage in internal/store/migrations/profile/*.sql
+- [ ] T002 [P] Review embedding model persistence in internal/profile/settings.go
+- [ ] T003 [P] Review settings UI bindings in internal/tui/model.go
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Core infrastructure that MUST be complete before ANY user story can be implemented
-
-- [X] T005 Define note value scoring inputs and thresholds in internal/memory/scoring.go
-- [X] T006 Define duplicate matching strategy using vector index in internal/vector/dedup.go
-- [X] T007 Create NoteCandidate evaluation helper in internal/memory/candidates.go
-- [X] T008 Add shared error handling/logging hooks for note capture in internal/memory/logging.go
-- [X] T009 Add profile setting for embeddings model selection in internal/profile/settings.go
-
-**Checkpoint**: Foundation ready - user story implementation can now begin in parallel
+- [ ] T004 Add provider_config embeddings_model column migration in internal/store/migrations/profile/
+- [ ] T005 Remove unused columns from new profile schema in internal/store/migrations/profile/ (no drop migration needed)
 
 ---
 
-## Phase 3: User Story 1 - Capture valuable notes without duplicates (Priority: P1) 🎯 MVP
+## Phase 3: Foundational (2b) - Provider config migration stability
 
-**Goal**: Extract note candidates, score them, and store only valuable unique notes with deduplication.
+**Goal**: Ensure provider config changes do not regress note capture.
+**Independent Test**: Run a chat session and verify no duplicate notes are created.
 
-**Independent Test**: Run a chat session with repeated facts and verify only one stored note plus linked context.
+### Tests for migration stability
 
-### Tests for User Story 1
+- [ ] T006 [P] Add regression test for duplicate note detection in tests/integration/
 
-- [X] T010 [P] [US1] Unit test for scoring threshold decisions in tests/unit/memory/scoring_test.go
-- [X] T011 [P] [US1] Integration test for deduplication with vector index in tests/integration/memory/dedup_test.go
-- [X] T012 [P] [US1] Unit test for candidate extraction inputs in tests/unit/memory/candidates_test.go
+### Validation for migration stability
 
-### Implementation for User Story 1
-
-- [X] T013 [P] [US1] Implement scoring logic in internal/memory/scoring.go
-- [X] T014 [P] [US1] Implement candidate extraction in internal/memory/candidates.go
-- [X] T015 [US1] Implement deduplication comparison in internal/vector/dedup.go
-- [X] T016 [US1] Implement note storage + link-to-existing behavior in internal/memory/store.go
-- [X] T017 [US1] Wire extraction → scoring → dedup → storage flow in internal/memory/processor.go
-- [X] T018 [US1] Require embeddings model selection before vector sync in internal/chat/session.go
-- [X] T019 [US1] Show footer warning when embeddings model is missing in internal/tui/footer_view.go
-
-**Checkpoint**: User Story 1 fully functional and testable independently
+- [ ] T007 Validate note capture flow still passes after provider_config migration in internal/memory/ (update if needed)
 
 ---
 
 ## Phase 4: User Story 2 - Surface important notes during chat (Priority: P2)
 
-**Goal**: Retrieve and rank relevant notes for each prompt.
-
-**Independent Test**: With multiple notes stored, ask a related prompt and verify top relevant notes are surfaced.
+**Goal**: Ensure embeddings model persistence is used in retrieval context.
+**Independent Test**: Change embeddings model and confirm retrieval uses updated config after restart.
 
 ### Tests for User Story 2
 
-- [X] T020 [P] [US2] Unit test for ranking relevance in tests/unit/memory/retrieval_test.go
-- [X] T021 [P] [US2] Integration test for retrieval pipeline in tests/integration/memory/retrieval_flow_test.go
-- [X] T022 [P] [US2] Integration test for embeddings model requirement in tests/integration/memory/embed_model_gate_test.go
+- [ ] T008 [P] [US2] Add integration test for embeddings model retrieval flow in tests/integration/
 
 ### Implementation for User Story 2
 
-- [X] T023 [P] [US2] Implement relevance scoring in internal/memory/retrieval.go
-- [X] T024 [US2] Implement ranking + top-N selection in internal/memory/retrieval.go
-- [X] T025 [US2] Wire retrieval into chat prompt handling in internal/chat/session.go
-- [X] T026 [US2] Use embeddings model setting for retrieval in internal/chat/session.go
-
-**Checkpoint**: User Story 2 functional and testable independently
+- [ ] T009 [US2] Update provider_config usage for embeddings model in internal/app/chat_cmd.go
+- [ ] T010 [US2] Wire embeddings model into vector indexing in internal/vector/sync.go (Syncer) and internal/vector/index.go (manifest header)
 
 ---
 
 ## Phase 5: User Story 3 - Review and manage captured notes (Priority: P3)
 
-**Goal**: Provide footer notifications for stored notes and a review surface with rationale.
-
-**Independent Test**: Store a note and verify footer notification appears for ~3 seconds; list notes with rationale.
+**Goal**: Settings list updates instantly when embeddings model changes.
+**Independent Test**: Change embeddings model in Settings and verify list updates immediately.
 
 ### Tests for User Story 3
 
-- [X] T027 [P] [US3] Integration test for footer notification timing in tests/integration/tui_footer_note_test.go
-- [X] T028 [P] [US3] Integration test for note review listing in tests/integration/memory/review_test.go
-- [X] T029 [P] [US3] Integration test for embeddings model selector in tests/integration/tui_embed_model_picker_test.go
+- [ ] T011 [P] [US3] Add UI regression test for settings list refresh in tests/integration/
 
 ### Implementation for User Story 3
 
-- [X] T030 [P] [US3] Add embeddings model entry in settings menu in internal/tui/settings_menu.go
-- [X] T031 [US3] Implement embeddings model picker using /embeddings/models endpoint in internal/tui/model.go
-- [X] T032 [US3] Add provider call to list embeddings models at baseURL+/embeddings/models in internal/provider/openai_compatible.go
-- [X] T033 [US3] Persist embeddings model selection in internal/profile/settings.go
-- [X] T034 [US3] Show embeddings model selection state in settings list in internal/tui/settings_menu.go
-- [X] T035 [US3] Update embeddings request to use baseURL+/embeddings with selected model in internal/provider/openai_compatible.go
-- [X] T036 [US3] Replace chat/completions calls with Responses API at baseURL+/responses in internal/provider/openai_compatible.go
-- [X] T037 [US3] Map Responses API request/response payloads in internal/provider/openai_compatible.go
-
-**Checkpoint**: User Story 3 functional and testable independently
+- [ ] T012 [P] [US3] Extend store.ProviderConfig with embeddings model in internal/store/provider_config_repo.go
+- [ ] T013 [US3] Update provider_config upsert/select to include embeddings_model in internal/store/provider_config_repo.go
+- [ ] T014 [US3] Migrate profile embedding model to provider_config in internal/profile/settings.go
+- [ ] T015 [US3] Load embeddings model from provider_config in internal/tui/model.go
+- [ ] T016 [US3] Persist embeddings model selection via provider_config in internal/tui/model.go
+- [ ] T017 [US3] Refresh settings list immediately after embeddings model picker selection in internal/tui/model.go
+- [ ] T018 [US3] Add UX validation checklist for settings refresh in specs/008-note-extraction-strategy/quickstart.md
 
 ---
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-**Purpose**: Improvements that affect multiple user stories
-
-- [X] T038 [P] Run quickstart.md validation steps and capture any deltas in specs/008-note-extraction-strategy/quickstart.md
-- [X] T039 [P] Verify footer timing/placement matches existing TUI notification patterns in internal/tui/
-- [X] T040 [P] Update docs/ or README.md with note extraction, embeddings model selector, and Responses API behavior
-- [X] T041 [P] Measure retrieval latency against 2s target in tests/integration/memory/retrieval_perf_test.go
-- [X] T042 Run gofmt/go vet/make lint for feature scope and resolve issues
+- [ ] T019 [P] Run quickstart validation steps in specs/008-note-extraction-strategy/quickstart.md
+- [ ] T020 [P] Add regression coverage for provider_config embeddings model in tests/integration/
+- [ ] T021 [P] Run gofmt/go vet/go test/lint for code quality gates
+- [ ] T022 Update docs if provider_config schema changes are user-facing in docs/
 
 ---
 
 ## Dependencies & Execution Order
 
-### Phase Dependencies
+- Setup (Phase 1) → Foundational (Phase 2) → User Stories (Phases 3-5) → Polish (Phase 6)
+- User stories can proceed after Phase 2, with P1 recommended before P2/P3.
 
-- **Setup (Phase 1)**: No dependencies - can start immediately
-- **Foundational (Phase 2)**: Depends on Setup completion - BLOCKS all user stories
-- **User Stories (Phase 3+)**: All depend on Foundational phase completion
-- **Polish (Final Phase)**: Depends on all desired user stories being complete
+## Parallel Execution Examples
 
-### User Story Dependencies
-
-- **User Story 1 (P1)**: Can start after Foundational - no dependencies on other stories
-- **User Story 2 (P2)**: Can start after Foundational - integrates with US1 data
-- **User Story 3 (P3)**: Can start after Foundational - uses US1 storage and US2 context
-
-### Parallel Opportunities
-
-- Setup tasks T002-T004 can run in parallel
-- US1 unit/integration tests (T010-T012) can run in parallel
-- US2 tests (T020-T022) can run in parallel
-- US3 tests (T027-T029) can run in parallel
-- Implementation tasks T013, T014 can run in parallel
-
----
-
-## Parallel Example: User Story 1
-
-```bash
-Task: "Unit test for scoring threshold decisions in tests/unit/memory/scoring_test.go"
-Task: "Unit test for candidate extraction inputs in tests/unit/memory/candidates_test.go"
-Task: "Implement scoring logic in internal/memory/scoring.go"
-Task: "Implement candidate extraction in internal/memory/candidates.go"
-```
-
----
+- Phase 1: T002 and T003 can run in parallel.
+- Phase 3: T006 can run in parallel with other story tests.
+- Phase 5: T012 and T013 can run in parallel.
+- Phase 6: T019 and T020 can run in parallel.
 
 ## Implementation Strategy
 
-### MVP First (User Story 1 Only)
-
-1. Complete Phase 1: Setup
-2. Complete Phase 2: Foundational
-3. Complete Phase 3: User Story 1
-4. **STOP and VALIDATE**: Run US1 tests and manual chat verification
-
-### Incremental Delivery
-
-1. Foundation ready
-2. Add User Story 1 → Test independently → Demo
-3. Add User Story 2 → Test independently → Demo
-4. Add User Story 3 → Test independently → Demo
-
-## Notes
-
-- [P] tasks = different files, no dependencies
-- [Story] label maps task to specific user story for traceability
-- Each user story should be independently completable and testable
-- Commit after each task or logical group
+- MVP: Complete Phases 1-3 and validate quickstart.
+- Incremental: Add P2 and P3 flows, then cross-cutting cleanup.

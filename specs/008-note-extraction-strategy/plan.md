@@ -79,7 +79,7 @@ No constitution violations required.
 
 ### Data model updates
 - Add embeddings model to provider_config schema (and migrate existing profile settings).
-- Remove unused provider_config columns after verifying references.
+- Remove unused provider_config columns from new profile schemas only (no drop migration).
 
 ### UI behavior
 - Ensure settings menu values refresh immediately after embedding model selection.
@@ -93,7 +93,7 @@ No constitution violations required.
 1. **Schema & migration**
    - Add a migration to introduce an embeddings_model column in provider_config.
    - Migrate existing profile.json embedding model into provider_config for the active profile.
-   - Remove unused provider_config columns (only those confirmed unused in code/tests).
+   - Remove unused provider_config columns from new profile schemas only (no drop migration).
 
 2. **Storage layer updates**
    - Extend `store.ProviderConfig` to include embeddings model.
@@ -113,4 +113,4 @@ No constitution violations required.
 
 6. **QA**
    - Verify settings list updates instantly for model/extractor/embeddings changes.
-   - Verify provider_config schema cleanup does not break existing profiles.
+   - Verify provider_config schema cleanup for new profiles does not break existing profiles.
