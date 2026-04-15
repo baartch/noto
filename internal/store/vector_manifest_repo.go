@@ -230,3 +230,35 @@ func (r *VectorManifestRepo) ListEntries(ctx context.Context, profileID string) 
 	}
 	return entries, rows.Err()
 }
+
+// ListEntriesVec returns all vector manifest entries for a profile as vector.ManifestEntry for syncer use.
+func (r *VectorManifestRepo) ListEntriesVec(ctx context.Context, profileID string) ([]*vector.ManifestEntry, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, profile_id, source_type, source_id, chunk_hash,
+		       embedding_model, embedding_dim, vector_ref
+		FROM vector_index_entries
+		WHERE profile_id = ?
+		ORDER BY updated_at ASC
+	`, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("store: list vector manifest entries: %w", err)
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	var entries []*vector.ManifestEntry
+	for rows.Next() {
+		var e vector.ManifestEntry
+		var sourceType string
+		if err := rows.Scan(
+			&e.ID, &e.ProfileID, &sourceType, &e.SourceID, &e.ChunkHash,
+			&e.EmbeddingModel, &e.EmbeddingDim, &e.VectorRef,
+		); err != nil {
+			return nil, fmt.Errorf("store: scan vector manifest entry: %w", err)
+		}
+		e.SourceType = vector.SourceType(sourceType)
+		entries = append(entries, &e)
+	}
+	return entries, rows.Err()
+}
