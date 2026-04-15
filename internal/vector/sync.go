@@ -36,6 +36,7 @@ type ManifestEntry struct {
 // ManifestEntryRepo persists manifest entries.
 type ManifestEntryRepo interface {
 	UpsertEntry(ctx context.Context, e *ManifestEntry) error
+	ListEntriesVec(ctx context.Context, profileID string) ([]*ManifestEntry, error)
 }
 
 // Embedder generates embeddings for text.
@@ -64,7 +65,21 @@ func (s *Syncer) WithManifest(manifest ManifestEntryRepo) *Syncer {
 }
 
 // SyncNotes upserts the given notes into the vector index.
+// If metadata already exists for a note with matching content hash, reuses the embedding.
 func (s *Syncer) SyncNotes(ctx context.Context, notes []MemoryNoteRecord) error {
+	// Load existing metadata if available to avoid re-embedding
+	var existingMetadata map[string]*ManifestEntry
+	if s.manifest != nil {
+		if entries, err := s.manifest.ListEntriesVec(ctx, s.profileID); err == nil {
+			existingMetadata = make(map[string]*ManifestEntry)
+			for _, e := range entries {
+				if e.SourceType == SourceMemoryNote {
+					existingMetadata[e.SourceID] = e
+				}
+			}
+		}
+	}
+
 	for _, note := range notes {
 		chunkHash := ContentHash(note.Content)
 		entry := Entry{
@@ -75,20 +90,37 @@ func (s *Syncer) SyncNotes(ctx context.Context, notes []MemoryNoteRecord) error 
 			ChunkHash:      chunkHash,
 			EmbeddingModel: s.embeddingModel,
 		}
-		if fileIndex, ok := s.index.(*FileIndex); ok {
-			if ref, ok := fileIndex.VectorRefFor(SourceMemoryNote, note.ID); ok {
-				entry.VectorRef = ref
+
+		// Check if metadata exists with matching hash (content hasn't changed)
+		if existing, ok := existingMetadata[note.ID]; ok && existing.ChunkHash == chunkHash {
+			// Reuse existing embedding metadata
+			entry.EmbeddingDim = existing.EmbeddingDim
+			entry.VectorRef = existing.VectorRef
+			// Load vector ref from file index if available
+			if fileIndex, ok := s.index.(*FileIndex); ok {
+				if ref, ok := fileIndex.VectorRefFor(SourceMemoryNote, note.ID); ok {
+					entry.VectorRef = ref
+				}
 			}
+			// Note: Vector data will be reconstructed during index operations
+		} else {
+			// Need to embed (new note or content changed)
+			if fileIndex, ok := s.index.(*FileIndex); ok {
+				if ref, ok := fileIndex.VectorRefFor(SourceMemoryNote, note.ID); ok {
+					entry.VectorRef = ref
+				}
+			}
+			if s.embedder == nil {
+				return errors.New("vector: embedder not configured")
+			}
+			resp, err := s.embedder.Embed(ctx, provider.EmbeddingRequest{Input: note.Content, Model: s.embeddingModel})
+			if err != nil {
+				return fmt.Errorf("vector: embed note %s: %w", note.ID, err)
+			}
+			entry.Vector = resp.Embedding
+			entry.EmbeddingDim = len(resp.Embedding)
 		}
-		if s.embedder == nil {
-			return errors.New("vector: embedder not configured")
-		}
-		resp, err := s.embedder.Embed(ctx, provider.EmbeddingRequest{Input: note.Content, Model: s.embeddingModel})
-		if err != nil {
-			return fmt.Errorf("vector: embed note %s: %w", note.ID, err)
-		}
-		entry.Vector = resp.Embedding
-		entry.EmbeddingDim = len(resp.Embedding)
+
 		if err := s.index.Upsert(entry); err != nil {
 			return fmt.Errorf("vector: upsert index entry %s: %w", note.ID, err)
 		}

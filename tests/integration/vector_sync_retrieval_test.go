@@ -115,3 +115,7 @@ func (s *stubManifestRepo) UpsertEntry(_ context.Context, e *vector.ManifestEntr
 	s.entries = append(s.entries, e)
 	return nil
 }
+
+func (s *stubManifestRepo) ListEntriesVec(_ context.Context, profileID string) ([]*vector.ManifestEntry, error) {
+	return s.entries, nil
+}
