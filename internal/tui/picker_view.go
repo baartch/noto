@@ -185,6 +185,8 @@ func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea
 					m.embeddingModelMissing = chosen == ""
 					m.messages = append(m.messages, chatMessage{role: "command", content: "Embeddings model set to: " + chosen, timestamp: time.Now()})
 					m.syncViewport()
+					m.applySettingsValues()
+					m.syncSettingsList()
 				}
 			}
 		}

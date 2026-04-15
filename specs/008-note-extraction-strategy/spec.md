@@ -12,6 +12,12 @@
 - Q: When should the user see the footer message for newly captured notes? → A: Show the footer message only when a note is actually stored.
 - Q: Should embeddings use a separate model setting? → A: Require users to explicitly select an embeddings model (no fallback to the main model).
 
+### Session 2026-04-15
+
+- Q: Where should the selected embeddings model be persisted? → A: Store the selected embeddings model in the provider_config table.
+- Q: How should unused provider_config fields be handled? → A: Remove unused columns from new profile schemas only (no drop migration).
+- Q: How should the settings list behave after a model change? → A: Update the Settings list immediately after the model selection changes.
+
 ## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Capture valuable notes without duplicates (Priority: P1)
@@ -78,6 +84,9 @@ As a user, I want to see a brief footer notification when a note is actually sto
 - **FR-008**: System MUST show a footer notification when a note is stored, displaying the note content for roughly 3 seconds.
 - **FR-009**: System MUST expose a user-facing review that includes each note’s origin and storage rationale.
 - **FR-010**: System MUST require an explicit embeddings model selection for vector indexing and retrieval (no fallback to the main chat model).
+- **FR-011**: System MUST persist the selected embeddings model in the provider_config table.
+- **FR-012**: System MUST remove unused columns from new provider_config schemas (no drop migration).
+- **FR-013**: System MUST refresh the Settings list immediately when the embeddings model selection changes.
 
 ### Non-Functional Requirements _(mandatory)_
 
@@ -95,6 +104,7 @@ As a user, I want to see a brief footer notification when a note is actually sto
 - **Note**: A stored memory item with content, metadata (source, timestamp), and a value score.
 - **Note Candidate**: A provisional extracted item with evidence, confidence, and duplicate match status.
 - **Note Retrieval Result**: A ranked list of notes selected for a specific prompt with relevance scores.
+- **Provider Config**: Stored configuration values for a provider, including the selected embeddings model.
 
 ## Success Criteria _(mandatory)_
 

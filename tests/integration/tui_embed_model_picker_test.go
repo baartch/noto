@@ -62,7 +62,7 @@ func TestEmbeddingsModelPicker_SelectsModel(t *testing.T) {
 	updated, _ = m.Update(msg)
 	m = updated.(tui.Model)
 	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	_ = updated
+	m = updated.(tui.Model)
 
 	if selected != "embed-1" {
 		t.Fatalf("expected selected model, got %q", selected)

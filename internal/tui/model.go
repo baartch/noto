@@ -1286,6 +1286,11 @@ func formatSettingsValue(value string, maxWidth int) string {
 	return string(runes[:maxRunes]) + "..."
 }
 
+// EmbeddingModel returns the currently selected embeddings model in the UI.
+func (m Model) EmbeddingModel() string {
+	return m.embeddingModel
+}
+
 func newSettingsList(width int) list.Model {
 	delegate := settingsDelegate{}
 	l := list.New([]list.Item{}, delegate, width, 0)
@@ -1514,7 +1519,6 @@ func (m *Model) refreshSettingsValues() {
 	if m.execCtx.ProfileSlug != "" {
 		if settings, err := profile.ReadSettings(m.execCtx.ProfileSlug); err == nil {
 			m.memoryTokenBudget = settings.MemoryTokenBudget
-			m.embeddingModel = settings.EmbeddingModel
 		}
 	}
 	if m.execCtx.ProfileID != "" && m.execCtx.DB != nil {
@@ -1526,6 +1530,7 @@ func (m *Model) refreshSettingsValues() {
 		cfgRepo := store.NewProviderConfigRepo(m.execCtx.DB)
 		if cfg, err := cfgRepo.GetActive(ctx, m.execCtx.ProfileID); err == nil {
 			m.providerEndpoint = cfg.Endpoint
+			m.embeddingModel = cfg.EmbeddingsModel
 			if pass, err := security.MachinePassphrase(); err == nil {
 				if dec, err := security.Decrypt(cfg.CredentialRef, pass); err == nil {
 					m.providerAPIKey = dec

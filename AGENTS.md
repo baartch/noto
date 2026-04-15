@@ -1,6 +1,6 @@
 # noto Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-04-14
+Auto-generated from all feature plans. Last updated: 2026-04-15
 
 ## Active Technologies
 - Go 1.26+
@@ -13,6 +13,8 @@ Auto-generated from all feature plans. Last updated: 2026-04-14
 - Profile storage: `~/.noto/profiles/<profile>/memory.db`, `~/.noto/profiles/<profile>/memory.vec`, profile metadata files
 - Go 1.26+ + Cobra CLI, Bubble Tea v2, Bubbles v2, Lip Gloss v2, modernc.org/sqlite, internal/vector/hnsw (008-note-extraction-strategy)
 - Profile-local SQLite database (`~/.noto/profiles/<profile>/memory.db`) and vector index (`~/.noto/profiles/<profile>/memory.vec`) (008-note-extraction-strategy)
+- Go 1.26 + Cobra, Bubble Tea v2, Bubbles v2, Lip Gloss v2, modernc.org/sqlite (008-note-extraction-strategy)
+- Profile-local SQLite (`~/.noto/profiles/<profile>/memory.db`) and vector index (`~/.noto/profiles/<profile>/memory.vec`) (008-note-extraction-strategy)
 
 ## Project Structure
 
@@ -37,9 +39,9 @@ tests/
 Go 1.26+: Follow standard conventions
 
 ## Recent Changes
+- 008-note-extraction-strategy: Added Go 1.26 + Cobra, Bubble Tea v2, Bubbles v2, Lip Gloss v2, modernc.org/sqlite
 - 008-note-extraction-strategy: Added Go 1.26+ + Cobra CLI, Bubble Tea v2, Bubbles v2, Lip Gloss v2, modernc.org/sqlite, internal/vector/hnsw
 - 007-release-pipelines: Added Go 1.26 + Cobra, Bubble Tea/Bubbles, Lip Gloss, modernc.org/sqlite, golang.org/x/mod/semver (new)
-- 006-settings-dialog: Added Go 1.26+ + Bubble Tea v2, Bubbles v2, Lip Gloss v2, Cobra
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

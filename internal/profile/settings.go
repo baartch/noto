@@ -10,7 +10,6 @@ import (
 // Settings describes mutable profile settings stored in profile.json.
 type Settings struct {
 	MemoryTokenBudget int
-	EmbeddingModel    string
 	UpdatedAt         time.Time
 }
 
@@ -22,7 +21,6 @@ func ReadSettings(slug string) (*Settings, error) {
 	}
 	return normalizeSettings(&Settings{
 		MemoryTokenBudget: meta.MemoryTokenBudget,
-		EmbeddingModel:    meta.EmbeddingModel,
 		UpdatedAt:         meta.UpdatedAt,
 	}), nil
 }
@@ -38,7 +36,6 @@ func WriteSettings(slug string, s *Settings) error {
 	}
 	settings := normalizeSettings(s)
 	meta.MemoryTokenBudget = settings.MemoryTokenBudget
-	meta.EmbeddingModel = settings.EmbeddingModel
 	meta.UpdatedAt = time.Now().UTC()
 	return WriteMetadata(meta)
 }

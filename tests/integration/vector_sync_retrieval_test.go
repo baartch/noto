@@ -107,6 +107,25 @@ func (s *stubEmbedder) Embed(_ context.Context, _ provider.EmbeddingRequest) (*p
 	return &provider.EmbeddingResponse{Embedding: []float32{0.1, 0.2}, Model: "stub"}, nil
 }
 
+func TestVectorSync_EmbeddingsModelPropagates(t *testing.T) {
+	index := &stubIndexSync{}
+	manifest := &stubManifestRepo{}
+	profileID := "test-profile"
+	syncer := vector.NewSyncer(index, profileID, &stubEmbedder{}, "embed-model-1").WithManifest(manifest)
+
+	ctx := context.Background()
+	notes := []vector.MemoryNoteRecord{{ID: "n1", Content: "First note content"}}
+	if err := syncer.SyncNotes(ctx, notes); err != nil {
+		t.Fatalf("SyncNotes: %v", err)
+	}
+	if len(manifest.entries) != 1 {
+		t.Fatalf("expected 1 manifest entry, got %d", len(manifest.entries))
+	}
+	if manifest.entries[0].EmbeddingModel != "embed-model-1" {
+		t.Fatalf("expected embedding model to propagate, got %q", manifest.entries[0].EmbeddingModel)
+	}
+}
+
 type stubManifestRepo struct {
 	entries []*vector.ManifestEntry
 }

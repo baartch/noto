@@ -1,16 +1,16 @@
 # Research: note-extraction-strategy
 
-## Decision: Use existing profile SQLite + vector index for note storage and deduplication
+## Decision 1: Embeddings model persistence
+**Decision**: Move embeddings model persistence to provider_config in the profile SQLite DB.
+**Rationale**: Aligns with provider-scoped settings and enables immediate Settings menu refresh from DB.
+**Alternatives considered**: Keep in profile.json (current approach) — rejected because it diverges from provider_config usage and makes settings refresh indirect.
 
-**Rationale**: The project already stores profile memory in a local SQLite database with a vector index file; leveraging these keeps data local and enables fast similarity checks for deduplication and retrieval.
+## Decision 2: Provider_config schema cleanup
+**Decision**: Remove columns that are not referenced in code paths (after verification).
+**Rationale**: Simplifies configuration storage and reduces unused schema surface.
+**Alternatives considered**: Leave columns in place — rejected due to explicit requirement to drop unused columns.
 
-**Alternatives considered**:
-- Store notes in flat files with in-memory search (rejected: slower deduplication, higher memory usage).
-- Rely solely on keyword search without vectors (rejected: lower relevance for semantic matching).
-
-## Decision: Require explicit embeddings model selection
-
-**Rationale**: Embeddings models often differ from chat models; requiring a dedicated selection avoids accidental mismatches and ensures consistent vector indexing/retrieval.
-
-**Alternatives considered**:
-- Default to the chat model when no embedding model is selected (rejected: unclear behavior, potential cost/quality surprises).
+## Decision 3: Settings list refresh behavior
+**Decision**: Refresh Settings list immediately after embeddings model selection.
+**Rationale**: UX requirement for instant feedback; aligns with existing model/extractor flows.
+**Alternatives considered**: Deferred refresh on menu reopen — rejected for stale display.

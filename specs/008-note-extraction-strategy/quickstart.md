@@ -1,20 +1,16 @@
 # Quickstart: note-extraction-strategy
 
 ## Goal
-
-Validate note extraction, deduplication, footer notifications, and embeddings model selection end-to-end in a local profile.
+Validate provider_config persistence for embeddings model and Settings list refresh behavior.
 
 ## Steps
 
-1. Start the app with a test profile.
-2. In Settings, select a dedicated embeddings model.
-3. Run a chat that includes a clear note-worthy fact.
-4. Verify the note is stored once and the footer notification appears for ~3 seconds.
-5. Repeat the fact with different wording and confirm no duplicate is stored.
-6. Ask a related follow-up and confirm relevant notes are retrieved.
-
-## Validation Notes (2026-04-15)
-
-- Verified dedupe prevented storing repeated facts.
-- Footer displayed “note(s) saved” for ~3 seconds after capture.
-- Action items were stored as separate notes when present.
+1. Configure provider:
+   ```bash
+   noto provider set --key sk-... --model gpt-4o-mini
+   ```
+2. Open the TUI settings menu.
+3. Change "Model Embeddings" to a different model.
+4. Confirm the Settings list immediately shows the new embeddings model.
+5. Restart the app and verify the embeddings model remains selected.
+6. Validate UX consistency: settings list reflects the updated model without reopening the menu.
