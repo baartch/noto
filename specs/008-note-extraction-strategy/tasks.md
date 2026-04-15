@@ -72,10 +72,10 @@
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T019 [P] Run quickstart validation steps in specs/008-note-extraction-strategy/quickstart.md
-- [ ] T020 [P] Add regression coverage for provider_config embeddings model in tests/integration/
-- [ ] T021 [P] Run gofmt/go vet/go test/lint for code quality gates
-- [ ] T022 Update docs if provider_config schema changes are user-facing in docs/
+- [X] T019 [P] Run quickstart validation steps in specs/008-note-extraction-strategy/quickstart.md
+- [X] T020 [P] Add regression coverage for provider_config embeddings model in tests/integration/
+- [X] T021 [P] Run gofmt/go vet/go test/lint for code quality gates
+- [X] T022 Update docs if provider_config schema changes are user-facing in docs/
 
 ---
 

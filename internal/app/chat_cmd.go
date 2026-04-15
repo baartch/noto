@@ -229,9 +229,6 @@ func runChat(_ *cobra.Command, _ []string) error {
 			if sess != nil {
 				sess.SetEmbeddingModel(modelID)
 			}
-			if prog != nil {
-				prog.Send(tui.EmbeddingModelUpdated(modelID))
-			}
 			return nil
 		}
 		extractorModelSelectedFn = func(modelID string) error {
@@ -375,9 +372,6 @@ func runChat(_ *cobra.Command, _ []string) error {
 					embeddingModel = modelID
 					if sess != nil {
 						sess.SetEmbeddingModel(modelID)
-					}
-					if prog != nil {
-						prog.Send(tui.EmbeddingModelUpdated(modelID))
 					}
 					return nil
 				}

@@ -13,11 +13,11 @@ var ErrProviderConfigNotFound = errors.New("store: provider config not found")
 
 // ProviderConfig is the data model for a per-profile provider configuration.
 type ProviderConfig struct {
-	ID             string
-	ProfileID      string
-	ProviderType   string
-	Endpoint       string
-	Model          string // default/fallback model set at provider-set time (optional)
+	ID              string
+	ProfileID       string
+	ProviderType    string
+	Endpoint        string
+	Model           string // default/fallback model set at provider-set time (optional)
 	ActiveModel     string // currently selected model (set via /model)
 	ExtractorModel  string // optional faster model for memory extraction
 	EmbeddingsModel string // selected embeddings model

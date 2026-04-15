@@ -116,11 +116,6 @@ type editorFinishedMsg struct {
 }
 type statsUpdatedMsg struct{ formatted string }
 
-type embeddingModelUpdatedMsg struct{ model string }
-
-// EmbeddingModelUpdated updates the UI after embeddings model changes.
-func EmbeddingModelUpdated(model string) tea.Msg { return embeddingModelUpdatedMsg{model: model} }
-
 type profilesAction interface {
 	Label() string
 	Apply(ctx context.Context, svc *profile.Service, selected string) (*store.Profile, error)
@@ -715,12 +710,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statsUpdatedMsg:
 		m.tokenStatus = msg.formatted
 
-	case embeddingModelUpdatedMsg:
-		m.embeddingModel = msg.model
-		m.embeddingModelMissing = msg.model == ""
-		m.applySettingsValues()
-		m.syncSettingsList()
-
 	case profileSwitchedMsg:
 		m.profileName = msg.profileName
 		m.activeModel = msg.activeModel
@@ -1297,6 +1286,7 @@ func formatSettingsValue(value string, maxWidth int) string {
 	return string(runes[:maxRunes]) + "..."
 }
 
+// EmbeddingModel returns the currently selected embeddings model in the UI.
 func (m Model) EmbeddingModel() string {
 	return m.embeddingModel
 }

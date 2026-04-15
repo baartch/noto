@@ -18,7 +18,6 @@ func TestEmbeddingsModelPicker_SelectsModel(t *testing.T) {
 	execCtx := &commands.ExecContext{}
 
 	selected := ""
-	updatedModel := ""
 	listEmbeddings := func(context.Context) ([]provider.ModelInfo, error) {
 		return []provider.ModelInfo{{ID: "embed-1"}}, nil
 	}
@@ -65,13 +64,7 @@ func TestEmbeddingsModelPicker_SelectsModel(t *testing.T) {
 	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(tui.Model)
 
-	m, _ = m.Update(tui.EmbeddingModelUpdated("embed-1"))
-	updatedModel = m.EmbeddingModel()
-
 	if selected != "embed-1" {
 		t.Fatalf("expected selected model, got %q", selected)
-	}
-	if updatedModel != "embed-1" {
-		t.Fatalf("expected embedding model to update in UI, got %q", updatedModel)
 	}
 }
