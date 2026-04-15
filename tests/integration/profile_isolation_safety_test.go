@@ -7,12 +7,13 @@ import (
 	"noto/internal/profile"
 	"noto/internal/store"
 	"noto/internal/vector"
+	"noto/tests/integration/testutil"
 )
 
 // TestProfileIsolation_NotesBelongToCorrectProfile verifies that notes from one profile
 // are not visible from another profile's query.
 func TestProfileIsolation_NotesBelongToCorrectProfile(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 	ctx := context.Background()
 
@@ -58,7 +59,7 @@ func TestProfileIsolation_NotesBelongToCorrectProfile(t *testing.T) {
 
 // TestProfileIsolation_CacheIsolated verifies cache entries are scoped to a profile.
 func TestProfileIsolation_CacheIsolated(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 	ctx := context.Background()
 
@@ -91,7 +92,7 @@ func TestProfileIsolation_CacheIsolated(t *testing.T) {
 
 // TestProfileIsolation_DeleteCascades verifies that deleting a profile removes its notes.
 func TestProfileIsolation_DeleteCascades(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 	ctx := context.Background()
 
@@ -124,7 +125,7 @@ func TestProfileIsolation_DeleteCascades(t *testing.T) {
 
 // TestProfileIsolation_VectorManifestEntries verifies manifest entries stay profile-scoped.
 func TestProfileIsolation_VectorManifestEntries(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 	ctx := context.Background()
 

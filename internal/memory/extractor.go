@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"noto/internal/provider"
 	"noto/internal/store"
+	"noto/internal/vector"
 )
 
 // ExtractionResult holds the notes extracted from a single exchange.
@@ -31,11 +31,6 @@ type extractedItem struct {
 	Category   string `json:"category"` // fact | progress | blocker | action_item | other
 	Content    string `json:"content"`
 	Importance int    `json:"importance"` // 1-10
-}
-
-type dedupeResult struct {
-	IsNew  bool   `json:"is_new"`
-	Reason string `json:"reason"`
 }
 
 const extractionPrompt = `Extract memory-worthy facts from this conversation exchange.
@@ -61,17 +56,6 @@ Exchange:
 User: %s
 Assistant: %s`
 
-const dedupePrompt = `You are a memory deduplication assistant. Given a candidate note and a list of existing notes, decide if the candidate is NEW.
-Reply ONLY with JSON: {"is_new": true|false, "reason": "short reason"}
-
-Consider paraphrases as duplicates (same meaning, different wording). Only mark true if the candidate adds new information.
-
-Existing notes:
-%s
-
-Candidate note:
-%s`
-
 // CacheInvalidator invalidates cached memory retrieval context.
 type CacheInvalidator interface {
 	InvalidateAll(ctx context.Context, profileID string) error
@@ -82,15 +66,31 @@ type Extractor struct {
 	noteRepo    *store.MemoryNoteRepo
 	adapter     provider.Adapter // nil disables extraction
 	invalidator CacheInvalidator
+	deduper     vector.Deduper
+	logHook     CaptureLogHook
 }
 
 // NewExtractor creates an Extractor. Pass nil adapter to disable LLM extraction.
 func NewExtractor(noteRepo *store.MemoryNoteRepo, adapter provider.Adapter, invalidator CacheInvalidator) *Extractor {
-	return &Extractor{noteRepo: noteRepo, adapter: adapter, invalidator: invalidator}
+	return &Extractor{noteRepo: noteRepo, adapter: adapter, invalidator: invalidator, logHook: NoopCaptureLogHook{}}
+}
+
+// WithDeduper configures the deduper.
+func (e *Extractor) WithDeduper(deduper vector.Deduper) *Extractor {
+	e.deduper = deduper
+	return e
+}
+
+// WithLogHook configures capture logging.
+func (e *Extractor) WithLogHook(hook CaptureLogHook) *Extractor {
+	if hook != nil {
+		e.logHook = hook
+	}
+	return e
 }
 
 // ExtractTurn analyses a single user→assistant exchange and persists any notes.
-func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID, userMsg, assistantMsg string) (*ExtractionResult, error) {
+func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID string, sourceMessageIDs []string, userMsg, assistantMsg string) (*ExtractionResult, error) {
 	if e.adapter == nil {
 		return &ExtractionResult{}, nil
 	}
@@ -106,55 +106,22 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID, 
 	items := resp.Notes
 
 	if resp.Action == "update" && resp.TargetID != "" {
-		if updated, err := e.updateNote(ctx, profileID, resp.TargetID, items); err == nil && updated {
+		if updated, err := e.updateNote(ctx, profileID, resp.TargetID, items, sourceMessageIDs); err == nil && updated {
 			return &ExtractionResult{Notes: []*store.MemoryNote{}, Updated: 1}, nil
 		}
 	}
 
-	// Semantic de-duplication: filter out notes that are already known.
-	filtered := items
-	if len(items) > 0 && len(existing) > 0 {
-		filtered = e.filterNewNotes(ctx, items, existing)
-	}
-	if len(filtered) == 0 {
-		return &ExtractionResult{}, nil
-	}
-
-	var notes []*store.MemoryNote
-	for _, item := range filtered {
-		if strings.TrimSpace(item.Content) == "" {
-			continue
-		}
-		if item.Importance < 1 {
-			item.Importance = 5
-		}
-		cat := store.MemoryCategory(item.Category)
-		switch cat {
-		case store.CategoryFact, store.CategoryProgress,
-			store.CategoryBlocker, store.CategoryActionItem, store.CategoryOther:
-		default:
-			cat = store.CategoryOther
-		}
-		note := &store.MemoryNote{
-			ID:               fmt.Sprintf("mn-%x", time.Now().UnixNano()),
-			ProfileID:        profileID,
-			ConversationID:   conversationID,
-			Category:         cat,
-			Content:          item.Content,
-			Importance:       item.Importance,
-			SourceMessageIDs: "[]",
-		}
-		if err := e.noteRepo.Create(ctx, note); err != nil {
-			return nil, fmt.Errorf("memory: save note: %w", err)
-		}
-		notes = append(notes, note)
+	processor := NewProcessor(e.noteRepo, e.deduper, e.logHook)
+	notes, updated, err := processor.Process(ctx, profileID, conversationID, items, sourceMessageIDs)
+	if err != nil {
+		return nil, err
 	}
 
 	if len(notes) > 0 && e.invalidator != nil {
 		_ = e.invalidator.InvalidateAll(ctx, profileID)
 	}
 
-	return &ExtractionResult{Notes: notes}, nil
+	return &ExtractionResult{Notes: notes, Updated: updated}, nil
 }
 
 // llmExtract calls the model and parses the JSON response. Never returns an error
@@ -182,7 +149,6 @@ func (e *Extractor) llmExtract(ctx context.Context, userMsg, assistantMsg string
 	return payload
 }
 
-// filterNewNotes uses an LLM-based semantic check to remove duplicates.
 func formatExistingNotes(existing []*store.MemoryNote) string {
 	if len(existing) == 0 {
 		return "(none)"
@@ -197,55 +163,7 @@ func formatExistingNotes(existing []*store.MemoryNote) string {
 	return strings.Join(lines, "\n")
 }
 
-func (e *Extractor) filterNewNotes(ctx context.Context, items []extractedItem, existing []*store.MemoryNote) []extractedItem {
-	// Limit to last 50 notes to keep prompt bounded.
-	if len(existing) > 50 {
-		existing = existing[len(existing)-50:]
-	}
-
-	existingLines := make([]string, 0, len(existing))
-	for _, n := range existing {
-		existingLines = append(existingLines, fmt.Sprintf("- (%s) %s", n.Category, n.Content))
-	}
-	existingBlock := strings.Join(existingLines, "\n")
-	if existingBlock == "" {
-		return items
-	}
-
-	var out []extractedItem
-	for _, item := range items {
-		if strings.TrimSpace(item.Content) == "" {
-			continue
-		}
-		prompt := fmt.Sprintf(dedupePrompt, existingBlock, item.Content)
-		resp, err := e.adapter.Complete(ctx, provider.CompletionRequest{
-			Messages:    []provider.Message{{Role: "user", Content: prompt}},
-			Temperature: 0.0,
-		})
-		if err != nil {
-			// If dedupe fails, keep the note (fail-open) so we don't lose data.
-			out = append(out, item)
-			continue
-		}
-		raw := strings.TrimSpace(resp.Content)
-		raw = strings.TrimPrefix(raw, "```json")
-		raw = strings.TrimPrefix(raw, "```")
-		raw = strings.TrimSuffix(raw, "```")
-		raw = strings.TrimSpace(raw)
-
-		var result dedupeResult
-		if err := json.Unmarshal([]byte(raw), &result); err != nil {
-			out = append(out, item)
-			continue
-		}
-		if result.IsNew {
-			out = append(out, item)
-		}
-	}
-	return out
-}
-
-func (e *Extractor) updateNote(ctx context.Context, profileID, targetID string, items []extractedItem) (bool, error) {
+func (e *Extractor) updateNote(ctx context.Context, profileID, targetID string, items []extractedItem, sourceMessageIDs []string) (bool, error) {
 	if len(items) == 0 {
 		return false, nil
 	}
@@ -271,6 +189,11 @@ func (e *Extractor) updateNote(ctx context.Context, profileID, targetID string, 
 		note.Category = store.CategoryOther
 	}
 
+	if sourceMessageIDs != nil {
+		if merged, changed, err := mergeSourceMessageIDs(note.SourceMessageIDs, sourceMessageIDs); err == nil && changed {
+			note.SourceMessageIDs = merged
+		}
+	}
 	if err := e.noteRepo.Update(ctx, note); err != nil {
 		return false, err
 	}

@@ -7,10 +7,11 @@ import (
 	"noto/internal/memory"
 	"noto/internal/profile"
 	"noto/internal/store"
+	"noto/tests/integration/testutil"
 )
 
 func TestMemoryContinuity_ExtractTurn_NoLLM_SavesNothing(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 	ctx := context.Background()
 
@@ -19,7 +20,7 @@ func TestMemoryContinuity_ExtractTurn_NoLLM_SavesNothing(t *testing.T) {
 
 	// With nil adapter, ExtractTurn should return no notes (no LLM = no extraction).
 	extractor := memory.NewExtractor(noteRepo, nil, nil)
-	result, err := extractor.ExtractTurn(ctx, p.ID, "", "hello", "hi there")
+	result, err := extractor.ExtractTurn(ctx, p.ID, "", nil, "hello", "hi there")
 	if err != nil {
 		t.Fatalf("ExtractTurn: %v", err)
 	}
@@ -29,7 +30,7 @@ func TestMemoryContinuity_ExtractTurn_NoLLM_SavesNothing(t *testing.T) {
 }
 
 func TestMemoryContinuity_ManualNote_AppearsInRetrieval(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 	ctx := context.Background()
 
@@ -65,7 +66,7 @@ func TestMemoryContinuity_ManualNote_AppearsInRetrieval(t *testing.T) {
 }
 
 func TestMemoryContinuity_PersistAcrossSessions(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 	ctx := context.Background()
 

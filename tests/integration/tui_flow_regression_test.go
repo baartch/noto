@@ -12,6 +12,7 @@ import (
 	"noto/internal/profile"
 	"noto/internal/store"
 	"noto/internal/tui"
+	"noto/tests/integration/testutil"
 )
 
 func TestTUIModel_HandlesWindowResize(t *testing.T) {
@@ -23,13 +24,17 @@ func TestTUIModel_HandlesWindowResize(t *testing.T) {
 		"Profile",
 		"",
 		"",
+		"",
 		"cache: n/a",
 		"tokens: n/a",
 		true,
+		false,
 		dispatcher,
 		execCtx,
 		nil,
 		nil,
+		nil,
+		func(string) error { return nil },
 		func(string) error { return nil },
 		nil,
 		func(string) tea.Cmd { return nil },
@@ -54,13 +59,17 @@ func TestTUIModel_TogglesHelp(t *testing.T) {
 		"Profile",
 		"",
 		"",
+		"",
 		"cache: n/a",
 		"tokens: n/a",
+		false,
 		false,
 		dispatcher,
 		execCtx,
 		nil,
 		nil,
+		nil,
+		func(string) error { return nil },
 		func(string) error { return nil },
 		nil,
 		func(string) tea.Cmd { return nil },
@@ -90,13 +99,17 @@ func TestTUIModel_OpenSettingsShortcut(t *testing.T) {
 		"Profile",
 		"",
 		"",
+		"",
 		"cache: n/a",
 		"tokens: n/a",
+		false,
 		false,
 		dispatcher,
 		execCtx,
 		nil,
 		nil,
+		nil,
+		func(string) error { return nil },
 		func(string) error { return nil },
 		nil,
 		func(string) tea.Cmd { return nil },
@@ -119,7 +132,7 @@ func TestTUIModel_OpenSettingsShortcut(t *testing.T) {
 
 func newSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext) {
 	t.Helper()
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	t.Cleanup(closeDB)
 
 	repo := store.NewProfileRepo(db)
@@ -151,10 +164,11 @@ func newSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext) {
 
 	execCtx := &commands.ExecContext{ProfileID: p.ID, ProfileSlug: p.Slug, DB: db}
 	model := tui.New(
-		"Profile", "", "", "cache: n/a", "tokens: n/a", false,
+		"Profile", "", "", "", "cache: n/a", "tokens: n/a", false, false,
 		chat.NewDispatcher(registry),
 		execCtx,
-		nil, nil,
+		nil, nil, nil,
+		func(string) error { return nil },
 		func(string) error { return nil },
 		nil,
 		func(string) tea.Cmd { return nil },
@@ -176,9 +190,9 @@ func TestTUISettingsEditor_SaveAndCancel(t *testing.T) {
 	m = updated.(tui.Model)
 
 	// Navigate down until we land on a value entry and enter it
-	// Sorted order: Memory Token Budget, Model, Model Extractor, Provider, System Prompt, Themes
-	// System Prompt is index 4 (0-based) — navigate down 4 times from top
-	for range 4 {
+	// Sorted order: Memory Token Budget, Model, Model Extractor, Model Embeddings, Provider, System Prompt, Themes
+	// System Prompt is index 5 (0-based) — navigate down 5 times from top
+	for range 5 {
 		updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 		m = updated.(tui.Model)
 	}
@@ -220,7 +234,7 @@ func TestTUISettingsEditor_InvalidNumber(t *testing.T) {
 }
 
 func TestSettingsSubmenuNavigation_EscBehavior(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 
 	repo := store.NewProfileRepo(db)
@@ -236,13 +250,17 @@ func TestSettingsSubmenuNavigation_EscBehavior(t *testing.T) {
 		"Profile",
 		"",
 		"",
+		"",
 		"cache: n/a",
 		"tokens: n/a",
+		false,
 		false,
 		chat.NewDispatcher(commands.NewRegistry()),
 		execCtx,
 		nil,
 		nil,
+		nil,
+		func(string) error { return nil },
 		func(string) error { return nil },
 		nil,
 		func(string) tea.Cmd { return nil },
@@ -257,9 +275,9 @@ func TestSettingsSubmenuNavigation_EscBehavior(t *testing.T) {
 	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	m = updated.(tui.Model)
 
-	// Sorted: Memory Token Budget(0), Model(1), Model Extractor(2), Profiles(3), Provider(4), System Prompt(5), Themes(6)
-	// Navigate to Provider (index 4)
-	for range 4 {
+	// Sorted: Memory Token Budget(0), Model(1), Model Extractor(2), Model Embeddings(3), Profiles(4), Provider(5), System Prompt(6), Themes(7)
+	// Navigate to Provider (index 5)
+	for range 5 {
 		updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 		m = updated.(tui.Model)
 	}
@@ -292,9 +310,10 @@ func TestSettingsEntries_AreSortedAlphabetically(t *testing.T) {
 		{Label: "Token Budget"},
 		{Label: "Model Extractor"},
 		{Label: "Model"},
+		{Label: "Model Embeddings"},
 	}
 	tui.SortSettingsEntries(entries)
-	if entries[0].Label != "Model" || entries[1].Label != "Model Extractor" || entries[2].Label != "Token Budget" {
-		t.Fatalf("entries not sorted alphabetically, got: %s, %s, %s", entries[0].Label, entries[1].Label, entries[2].Label)
+	if entries[0].Label != "Model" || entries[1].Label != "Model Embeddings" || entries[2].Label != "Model Extractor" || entries[3].Label != "Token Budget" {
+		t.Fatalf("entries not sorted alphabetically, got: %s, %s, %s, %s", entries[0].Label, entries[1].Label, entries[2].Label, entries[3].Label)
 	}
 }

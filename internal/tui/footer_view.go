@@ -38,6 +38,9 @@ func (m *Model) renderFooter() string {
 	if m.extractorFallback {
 		leftParts = append(leftParts, yellow.Render("Extractor model missing — using main model."))
 	}
+	if m.embeddingModelMissing {
+		leftParts = append(leftParts, yellow.Render("Embeddings model missing — memory disabled."))
+	}
 
 	left := strings.Join(leftParts, dim.Render("  "))
 

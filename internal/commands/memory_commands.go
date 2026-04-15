@@ -12,12 +12,21 @@ import (
 
 // RegisterMemoryCommands registers memory-related commands into r.
 func RegisterMemoryCommands(r *Registry) error {
-	return r.Register(&Command{
+	if err := r.Register(&Command{
 		Path:        "memory edit",
 		Usage:       "memory edit <note-id> <content>",
 		Description: "Edit a memory note",
 		Scope:       ScopeProfile,
 		Handler:     memoryEditHandler,
+	}); err != nil {
+		return err
+	}
+	return r.Register(&Command{
+		Path:        "memory list",
+		Usage:       "memory list",
+		Description: "List captured memory notes",
+		Scope:       ScopeProfile,
+		Handler:     memoryListHandler,
 	})
 }
 
@@ -66,6 +75,50 @@ func memoryEditHandler(ctx *ExecContext, args []string) error {
 	}
 	if _, err := fmt.Fprintf(ctx.Output, "Updated note %s\n", noteID); err != nil {
 		return err
+	}
+	return nil
+}
+
+func memoryListHandler(ctx *ExecContext, _ []string) error {
+	if ctx.ProfileSlug == "" || ctx.ProfileID == "" {
+		return errors.New("no active profile")
+	}
+
+	var db *store.DB
+	if ctx.DB != nil {
+		db = ctx.DB
+	} else {
+		path, err := config.ProfileDBPath(ctx.ProfileSlug)
+		if err != nil {
+			return err
+		}
+		opened, err := store.OpenProfile(path)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = opened.Close() }()
+		db = opened
+	}
+
+	repo := store.NewMemoryNoteRepo(db)
+	notes, err := repo.ListByProfile(context.Background(), ctx.ProfileID)
+	if err != nil {
+		return err
+	}
+	if len(notes) == 0 {
+		_, err := fmt.Fprintln(ctx.Output, "No memory notes stored.")
+		return err
+	}
+	for _, note := range notes {
+		if _, err := fmt.Fprintf(ctx.Output, "- %s [%s] %s\n", note.ID, note.Category, note.Content); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(ctx.Output, "  importance: %d\n", note.Importance); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(ctx.Output, "  sources: %s\n", note.SourceMessageIDs); err != nil {
+			return err
+		}
 	}
 	return nil
 }

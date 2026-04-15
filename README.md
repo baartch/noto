@@ -15,10 +15,14 @@ noto profile select "My Profile"
 
 ```bash
 noto provider set \
-  --endpoint https://openrouter.ai/api/v1/chat/completions \
+  --endpoint https://openrouter.ai/api/v1 \
   --key <YOUR_OPENROUTER_API_KEY> \
   --model openai/gpt-4o-mini
 ```
+
+### 3) Select an embeddings model
+
+In Settings (ctrl+j), pick **Model Embeddings** to enable memory retrieval.
 
 Then start a chat session:
 

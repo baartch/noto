@@ -12,6 +12,7 @@ import (
 	"noto/internal/profile"
 	"noto/internal/store"
 	"noto/internal/tui"
+	"noto/tests/integration/testutil"
 )
 
 func asModel(t *testing.T, updated tea.Model) tui.Model {
@@ -30,7 +31,7 @@ func asModel(t *testing.T, updated tea.Model) tui.Model {
 func openProfilesSubmenu(t *testing.T, m tui.Model) tui.Model {
 	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	m = asModel(t, updated)
-	for range 3 {
+	for range 4 {
 		updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 		m = asModel(t, updated)
 	}
@@ -40,7 +41,7 @@ func openProfilesSubmenu(t *testing.T, m tui.Model) tui.Model {
 
 func newProfileSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext, *profile.Service) {
 	t.Helper()
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	t.Cleanup(closeDB)
 
 	repo := store.NewProfileRepo(db)
@@ -56,10 +57,11 @@ func newProfileSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext, *p
 
 	execCtx := &commands.ExecContext{ProfileID: p.ID, ProfileSlug: p.Slug, DB: db}
 	m := tui.New(
-		p.Name, "", "", "cache: n/a", "tokens: n/a", false,
+		p.Name, "", "", "", "cache: n/a", "tokens: n/a", false, false,
 		chat.NewDispatcher(commands.NewRegistry()),
 		execCtx,
-		nil, nil,
+		nil, nil, nil,
+		func(string) error { return nil },
 		func(string) error { return nil },
 		svc,
 		func(string) tea.Cmd { return nil },

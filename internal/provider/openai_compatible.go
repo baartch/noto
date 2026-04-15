@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -36,8 +38,15 @@ func (a *OpenAICompatible) ProviderType() string { return "openai_compatible" }
 func (a *OpenAICompatible) Embed(ctx context.Context, req EmbeddingRequest) (*EmbeddingResponse, error) {
 	endpoint := a.cfg.Endpoint
 	if endpoint == "" {
-		endpoint = "https://api.openai.com/v1/embeddings"
+		endpoint = "https://api.openai.com/v1"
 	}
+	endpoint = strings.TrimSuffix(endpoint, "/embeddings")
+	endpoint = strings.TrimSuffix(endpoint, "/embeddings/models")
+	endpoint = strings.TrimSuffix(endpoint, "/chat/completions")
+	endpoint = strings.TrimSuffix(endpoint, "/completions")
+	endpoint = strings.TrimSuffix(endpoint, "/responses")
+	endpoint = strings.TrimRight(endpoint, "/")
+	endpoint += "/embeddings"
 
 	model := req.Model
 	if model == "" {
@@ -78,9 +87,16 @@ func (a *OpenAICompatible) Embed(ctx context.Context, req EmbeddingRequest) (*Em
 		return nil, fmt.Errorf("provider: unexpected status %d: %s", resp.StatusCode, string(data))
 	}
 
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("provider: read embedding response: %w", err)
+	}
+	if os.Getenv("DEBUG") != "" {
+		fmt.Fprintf(os.Stderr, "embeddings response status=%d body=%s\n", resp.StatusCode, string(bodyBytes))
+	}
 	var apiResp openAIEmbeddingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return nil, fmt.Errorf("provider: decode embedding response: %w", err)
+	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
+		return nil, fmt.Errorf("provider: decode embedding response: %w: %s", err, string(bodyBytes))
 	}
 	if len(apiResp.Data) == 0 {
 		return nil, errors.New("provider: no embedding data in response")
@@ -108,20 +124,30 @@ func (a *OpenAICompatible) SetModel(model string) { a.cfg.Model = model }
 func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
 	endpoint := a.cfg.Endpoint
 	if endpoint == "" {
-		endpoint = "https://api.openai.com/v1/chat/completions"
+		endpoint = "https://api.openai.com/v1"
 	}
+	endpoint = strings.TrimSuffix(endpoint, "/chat/completions")
+	endpoint = strings.TrimSuffix(endpoint, "/completions")
+	endpoint = strings.TrimSuffix(endpoint, "/responses")
+	endpoint = strings.TrimSuffix(endpoint, "/embeddings")
+	endpoint = strings.TrimSuffix(endpoint, "/embeddings/models")
+	endpoint = strings.TrimRight(endpoint, "/")
+	endpoint += "/responses"
 
 	model := req.Model
 	if model == "" {
 		model = a.cfg.Model
 	}
-	payload := openAIRequest{
-		Model:       model,
-		MaxTokens:   req.MaxTokens,
-		Temperature: req.Temperature,
+	payload := openAIResponsesRequest{
+		Model:           model,
+		MaxOutputTokens: req.MaxTokens,
+		Temperature:     req.Temperature,
 	}
 	for _, m := range req.Messages {
-		payload.Messages = append(payload.Messages, openAIMessage(m))
+		payload.Input = append(payload.Input, openAIResponsesMessage{
+			Role:    m.Role,
+			Content: []openAIResponsesContent{{Type: "input_text", Text: m.Content}},
+		})
 	}
 
 	body, err := json.Marshal(payload)
@@ -154,21 +180,29 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 		return nil, fmt.Errorf("provider: unexpected status %d: %s", resp.StatusCode, string(data))
 	}
 
-	var apiResp openAIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return nil, fmt.Errorf("provider: decode response: %w", err)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("provider: read response: %w", err)
+	}
+	var apiResp openAIResponsesResponse
+	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
+		return nil, fmt.Errorf("provider: decode response: %w: %s", err, string(bodyBytes))
 	}
 
-	if len(apiResp.Choices) == 0 {
-		return nil, errors.New("provider: no choices in response")
+	if apiResp.Error != nil {
+		return nil, fmt.Errorf("provider: responses error %s: %s", apiResp.Error.Code, apiResp.Error.Message)
+	}
+	content := extractResponseText(apiResp.Output)
+	if content == "" {
+		return nil, errors.New("provider: no content in response")
 	}
 
 	modelName := apiResp.Model
 	if modelName == "" {
 		modelName = a.cfg.Model
 	}
-	promptTokens := apiResp.Usage.PromptTokens
-	completionTokens := apiResp.Usage.CompletionTokens
+	promptTokens := apiResp.Usage.InputTokens
+	completionTokens := apiResp.Usage.OutputTokens
 	if completionTokens == 0 && apiResp.Usage.TotalTokens > 0 {
 		completionTokens = apiResp.Usage.TotalTokens - promptTokens
 	}
@@ -179,7 +213,7 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 	info := modelInfo(modelName)
 
 	return &CompletionResponse{
-		Content:          apiResp.Choices[0].Message.Content,
+		Content:          content,
 		Model:            modelName,
 		PromptTokens:     promptTokens,
 		CompletionTokens: completionTokens,
@@ -191,28 +225,43 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 
 // ---- wire types (unexported) ------------------------------------------------
 
-type openAIMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+type openAIResponsesContent struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
 }
 
-type openAIRequest struct {
-	Model       string          `json:"model"`
-	Messages    []openAIMessage `json:"messages"`
-	MaxTokens   int             `json:"max_tokens,omitempty"`
-	Temperature float64         `json:"temperature,omitempty"`
+type openAIResponsesMessage struct {
+	Role    string                   `json:"role"`
+	Content []openAIResponsesContent `json:"content"`
 }
 
-type openAIResponse struct {
-	Model   string `json:"model"`
-	Choices []struct {
-		Message openAIMessage `json:"message"`
-	} `json:"choices"`
-	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
+type openAIResponsesRequest struct {
+	Model            string                   `json:"model"`
+	Input            []openAIResponsesMessage `json:"input"`
+	MaxOutputTokens  int                      `json:"max_output_tokens,omitempty"`
+	Temperature      float64                  `json:"temperature,omitempty"`
+	TopP             float64                  `json:"top_p,omitempty"`
+	FrequencyPenalty float64                  `json:"frequency_penalty,omitempty"`
+	PresencePenalty  float64                  `json:"presence_penalty,omitempty"`
+}
+
+type openAIResponsesUsage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
+	TotalTokens  int `json:"total_tokens"`
+}
+
+type openAIResponsesResponse struct {
+	Model  string `json:"model"`
+	Status string `json:"status"`
+	Error  *struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+	Output []struct {
+		Content []openAIResponsesContent `json:"content"`
+	} `json:"output"`
+	Usage openAIResponsesUsage `json:"usage"`
 }
 
 type openAIEmbeddingRequest struct {
@@ -225,4 +274,19 @@ type openAIEmbeddingResponse struct {
 	Data  []struct {
 		Embedding []float64 `json:"embedding"`
 	} `json:"data"`
+}
+
+func extractResponseText(outputs []struct {
+	Content []openAIResponsesContent `json:"content"`
+}) string {
+	for _, output := range outputs {
+		for _, content := range output.Content {
+			if content.Type == "output_text" || content.Type == "text" || content.Type == "input_text" || content.Type == "" {
+				if content.Text != "" {
+					return content.Text
+				}
+			}
+		}
+	}
+	return ""
 }

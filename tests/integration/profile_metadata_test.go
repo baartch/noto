@@ -8,10 +8,11 @@ import (
 
 	"noto/internal/profile"
 	"noto/internal/store"
+	"noto/tests/integration/testutil"
 )
 
 func TestProfileMetadata_CreateWritesFile(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 
 	ctx := context.Background()
@@ -46,7 +47,7 @@ func TestProfileMetadata_CreateWritesFile(t *testing.T) {
 }
 
 func TestProfileMetadata_PersistedInProfileDir(t *testing.T) {
-	db, closeDB := tempDB(t)
+	db, closeDB := testutil.TempDB(t)
 	defer closeDB()
 
 	ctx := context.Background()

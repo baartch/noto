@@ -77,6 +77,7 @@ func (s *Service) Create(ctx context.Context, name string) (*store.Profile, erro
 		SystemPromptPath:  DefaultSystemPromptRelPath(),
 		SystemPromptDB:    true,
 		MemoryTokenBudget: config.DefaultMemoryTokenBudget,
+		EmbeddingModel:    "",
 	}); err != nil {
 		return nil, err
 	}
@@ -170,6 +171,7 @@ func (s *Service) Rename(ctx context.Context, oldName, newName string) (*store.P
 		SystemPromptPath:  DefaultSystemPromptRelPath(),
 		SystemPromptDB:    true,
 		MemoryTokenBudget: config.DefaultMemoryTokenBudget,
+		EmbeddingModel:    "",
 	}); err != nil {
 		return nil, err
 	}
