@@ -128,6 +128,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 	if providerCfg != nil && decryptedKey != "" {
 		activeModel = providerCfg.EffectiveModel()
 		extractorModel = providerCfg.ExtractorModel
+		embeddingModel = providerCfg.EmbeddingsModel
 		if extractorModel == "" {
 			extractorModel = activeModel
 			extractorFallback = true
@@ -220,16 +221,17 @@ func runChat(_ *cobra.Command, _ []string) error {
 			return nil
 		}
 		embeddingModelSelectedFn = func(modelID string) error {
-			settings, err := profilepkg.ReadSettings(activeProfile.Slug)
-			if err != nil {
-				return err
-			}
-			settings.EmbeddingModel = modelID
-			if err := profilepkg.WriteSettings(activeProfile.Slug, settings); err != nil {
+			if err := cfgRepo.SetEmbeddingsModel(ctx, activeProfile.ID, modelID); err != nil {
 				return err
 			}
 			embeddingModelMissing = modelID == ""
 			embeddingModel = modelID
+			if sess != nil {
+				sess.SetEmbeddingModel(modelID)
+			}
+			if prog != nil {
+				prog.Send(tui.EmbeddingModelUpdated(modelID))
+			}
 			return nil
 		}
 		extractorModelSelectedFn = func(modelID string) error {
@@ -272,6 +274,8 @@ func runChat(_ *cobra.Command, _ []string) error {
 
 			providerCfg, decryptedKey := loadProviderConfig(ctx, profileDB, p.ID)
 			activeModel = ""
+			extractorModel = ""
+			embeddingModel = ""
 			cacheStatus = "cache: n/a"
 			providerFn = nil
 			listModelsFn = nil
@@ -364,16 +368,17 @@ func runChat(_ *cobra.Command, _ []string) error {
 					return nil
 				}
 				embeddingModelSelectedFn = func(modelID string) error {
-					settings, err := profilepkg.ReadSettings(p.Slug)
-					if err != nil {
-						return err
-					}
-					settings.EmbeddingModel = modelID
-					if err := profilepkg.WriteSettings(p.Slug, settings); err != nil {
+					if err := cfgRepo.SetEmbeddingsModel(ctx, p.ID, modelID); err != nil {
 						return err
 					}
 					embeddingModelMissing = modelID == ""
 					embeddingModel = modelID
+					if sess != nil {
+						sess.SetEmbeddingModel(modelID)
+					}
+					if prog != nil {
+						prog.Send(tui.EmbeddingModelUpdated(modelID))
+					}
 					return nil
 				}
 				extractorModelSelectedFn = func(modelID string) error {

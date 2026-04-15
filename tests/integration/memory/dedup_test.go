@@ -27,3 +27,17 @@ func TestVectorDedupResult(t *testing.T) {
 		t.Fatalf("unexpected dedup result: %+v", res)
 	}
 }
+
+func TestVectorDedupResult_NonDuplicate(t *testing.T) {
+	deduper := &stubDeduper{result: vector.DedupResult{IsDuplicate: false, MatchID: "", Score: 0.12}}
+	res, err := deduper.CheckDuplicate(context.Background(), "profile", "note content")
+	if err != nil {
+		t.Fatalf("CheckDuplicate error: %v", err)
+	}
+	if res.IsDuplicate {
+		t.Fatalf("expected non-duplicate result, got %+v", res)
+	}
+	if res.MatchID != "" {
+		t.Fatalf("expected empty match id, got %q", res.MatchID)
+	}
+}

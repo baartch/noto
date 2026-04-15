@@ -5,16 +5,16 @@
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Confirm existing provider_config schema usage in internal/store/migrations/profile/*.sql
-- [ ] T002 [P] Review embedding model persistence in internal/profile/settings.go
-- [ ] T003 [P] Review settings UI bindings in internal/tui/model.go
+- [X] T001 Confirm existing provider_config schema usage in internal/store/migrations/profile/*.sql
+- [X] T002 [P] Review embedding model persistence in internal/profile/settings.go
+- [X] T003 [P] Review settings UI bindings in internal/tui/model.go
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T004 Add provider_config embeddings_model column migration in internal/store/migrations/profile/
-- [ ] T005 Remove unused columns from new profile schema in internal/store/migrations/profile/ (no drop migration needed)
+- [X] T004 Add provider_config embeddings_model column migration in internal/store/migrations/profile/
+- [X] T005 Remove unused columns from new profile schema in internal/store/migrations/profile/ (no drop migration needed)
 
 ---
 
@@ -25,11 +25,11 @@
 
 ### Tests for migration stability
 
-- [ ] T006 [P] Add regression test for duplicate note detection in tests/integration/
+- [X] T006 [P] Add regression test for duplicate note detection in tests/integration/
 
 ### Validation for migration stability
 
-- [ ] T007 Validate note capture flow still passes after provider_config migration in internal/memory/ (update if needed)
+- [X] T007 Validate note capture flow still passes after provider_config migration in internal/memory/ (update if needed)
 
 ---
 
@@ -40,12 +40,12 @@
 
 ### Tests for User Story 2
 
-- [ ] T008 [P] [US2] Add integration test for embeddings model retrieval flow in tests/integration/
+- [X] T008 [P] [US2] Add integration test for embeddings model retrieval flow in tests/integration/
 
 ### Implementation for User Story 2
 
-- [ ] T009 [US2] Update provider_config usage for embeddings model in internal/app/chat_cmd.go
-- [ ] T010 [US2] Wire embeddings model into vector indexing in internal/vector/sync.go (Syncer) and internal/vector/index.go (manifest header)
+- [X] T009 [US2] Update provider_config usage for embeddings model in internal/app/chat_cmd.go
+- [X] T010 [US2] Wire embeddings model into vector indexing in internal/vector/sync.go (Syncer) and internal/vector/index.go (manifest header)
 
 ---
 
@@ -56,17 +56,17 @@
 
 ### Tests for User Story 3
 
-- [ ] T011 [P] [US3] Add UI regression test for settings list refresh in tests/integration/
+- [X] T011 [P] [US3] Add UI regression test for settings list refresh in tests/integration/
 
 ### Implementation for User Story 3
 
-- [ ] T012 [P] [US3] Extend store.ProviderConfig with embeddings model in internal/store/provider_config_repo.go
-- [ ] T013 [US3] Update provider_config upsert/select to include embeddings_model in internal/store/provider_config_repo.go
-- [ ] T014 [US3] Migrate profile embedding model to provider_config in internal/profile/settings.go
-- [ ] T015 [US3] Load embeddings model from provider_config in internal/tui/model.go
-- [ ] T016 [US3] Persist embeddings model selection via provider_config in internal/tui/model.go
-- [ ] T017 [US3] Refresh settings list immediately after embeddings model picker selection in internal/tui/model.go
-- [ ] T018 [US3] Add UX validation checklist for settings refresh in specs/008-note-extraction-strategy/quickstart.md
+- [X] T012 [P] [US3] Extend store.ProviderConfig with embeddings model in internal/store/provider_config_repo.go
+- [X] T013 [US3] Update provider_config upsert/select to include embeddings_model in internal/store/provider_config_repo.go
+- [X] T014 [US3] Migrate profile embedding model to provider_config in internal/profile/settings.go
+- [X] T015 [US3] Load embeddings model from provider_config in internal/tui/model.go
+- [X] T016 [US3] Persist embeddings model selection via provider_config in internal/tui/model.go
+- [X] T017 [US3] Refresh settings list immediately after embeddings model picker selection in internal/tui/model.go
+- [X] T018 [US3] Add UX validation checklist for settings refresh in specs/008-note-extraction-strategy/quickstart.md
 
 ---
 

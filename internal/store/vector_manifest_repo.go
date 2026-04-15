@@ -140,6 +140,23 @@ func (r *VectorManifestRepo) SetManifestStatus(ctx context.Context, profileID st
 	return nil
 }
 
+// SetManifestEmbeddingModel updates the embedding model field for a profile manifest.
+func (r *VectorManifestRepo) SetManifestEmbeddingModel(ctx context.Context, profileID, model string) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE vector_index_manifest
+		SET embedding_model = ?, updated_at = datetime('now')
+		WHERE profile_id = ?
+	`, model, profileID)
+	if err != nil {
+		return fmt.Errorf("store: set manifest embedding model: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrManifestNotFound
+	}
+	return nil
+}
+
 // UpsertVectorEntry inserts or updates a vector index entry.
 func (r *VectorManifestRepo) UpsertVectorEntry(ctx context.Context, e *VectorEntry) error {
 	if e.ProfileID == "" {

@@ -116,6 +116,11 @@ type editorFinishedMsg struct {
 }
 type statsUpdatedMsg struct{ formatted string }
 
+type embeddingModelUpdatedMsg struct{ model string }
+
+// EmbeddingModelUpdated updates the UI after embeddings model changes.
+func EmbeddingModelUpdated(model string) tea.Msg { return embeddingModelUpdatedMsg{model: model} }
+
 type profilesAction interface {
 	Label() string
 	Apply(ctx context.Context, svc *profile.Service, selected string) (*store.Profile, error)
@@ -710,6 +715,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statsUpdatedMsg:
 		m.tokenStatus = msg.formatted
 
+	case embeddingModelUpdatedMsg:
+		m.embeddingModel = msg.model
+		m.embeddingModelMissing = msg.model == ""
+		m.applySettingsValues()
+		m.syncSettingsList()
+
 	case profileSwitchedMsg:
 		m.profileName = msg.profileName
 		m.activeModel = msg.activeModel
@@ -1286,6 +1297,10 @@ func formatSettingsValue(value string, maxWidth int) string {
 	return string(runes[:maxRunes]) + "..."
 }
 
+func (m Model) EmbeddingModel() string {
+	return m.embeddingModel
+}
+
 func newSettingsList(width int) list.Model {
 	delegate := settingsDelegate{}
 	l := list.New([]list.Item{}, delegate, width, 0)
@@ -1514,7 +1529,6 @@ func (m *Model) refreshSettingsValues() {
 	if m.execCtx.ProfileSlug != "" {
 		if settings, err := profile.ReadSettings(m.execCtx.ProfileSlug); err == nil {
 			m.memoryTokenBudget = settings.MemoryTokenBudget
-			m.embeddingModel = settings.EmbeddingModel
 		}
 	}
 	if m.execCtx.ProfileID != "" && m.execCtx.DB != nil {
@@ -1526,6 +1540,7 @@ func (m *Model) refreshSettingsValues() {
 		cfgRepo := store.NewProviderConfigRepo(m.execCtx.DB)
 		if cfg, err := cfgRepo.GetActive(ctx, m.execCtx.ProfileID); err == nil {
 			m.providerEndpoint = cfg.Endpoint
+			m.embeddingModel = cfg.EmbeddingsModel
 			if pass, err := security.MachinePassphrase(); err == nil {
 				if dec, err := security.Decrypt(cfg.CredentialRef, pass); err == nil {
 					m.providerAPIKey = dec

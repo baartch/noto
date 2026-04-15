@@ -27,7 +27,6 @@ type Metadata struct {
 	SystemPromptPath  string    `json:"system_prompt_path"`
 	SystemPromptDB    bool      `json:"system_prompt_db"`
 	MemoryTokenBudget int       `json:"memory_token_budget"`
-	EmbeddingModel    string    `json:"embedding_model"`
 }
 
 // DefaultSystemPromptRelPath returns the prompt path relative to the profile directory.

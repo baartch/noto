@@ -101,8 +101,15 @@ func NewSession(
 	if err != nil {
 		return nil, fmt.Errorf("session: read settings: %w", err)
 	}
+	embeddingModel := ""
+	if db != nil {
+		cfgRepo := store.NewProviderConfigRepo(db)
+		if cfg, err := cfgRepo.GetActive(ctx, profileID); err == nil {
+			embeddingModel = cfg.EmbeddingsModel
+		}
+	}
 	var retrievalEmbedder vector.Embedder
-	if settings.EmbeddingModel != "" {
+	if embeddingModel != "" {
 		retrievalEmbedder = adapter
 	}
 	ret := memory.NewRetrieval(
@@ -114,7 +121,7 @@ func NewSession(
 			logger.Infof("vector index issue: %v", err)
 		}),
 		memory.WithTokenBudget(settings.MemoryTokenBudget),
-		memory.WithVectorRetrieval(vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)), profileID, retrievalEmbedder, settings.EmbeddingModel),
+		memory.WithVectorRetrieval(vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)), profileID, retrievalEmbedder, embeddingModel),
 	)
 	rc, err := ret.Assemble(ctx, profileID, baseSystemPrompt)
 	if err != nil {
@@ -166,8 +173,8 @@ func NewSession(
 		vectorIndex:       vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)),
 		memoryTokenBudget: settings.MemoryTokenBudget,
 		extractorFallback: extractorAdapter == nil && adapter != nil,
-		embeddingModel:    settings.EmbeddingModel,
-		missingEmbedding:  settings.EmbeddingModel == "",
+		embeddingModel:    embeddingModel,
+		missingEmbedding:  embeddingModel == "",
 	}
 	if profileSlug != "" {
 		s.startBackupTicker()
@@ -461,6 +468,33 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 func (s *Session) SetModel(model string) {
 	if a, ok := s.adapter.(interface{ SetModel(string) }); ok {
 		a.SetModel(model)
+	}
+}
+
+// SetEmbeddingModel updates the embeddings model used for vector operations.
+func (s *Session) SetEmbeddingModel(model string) {
+	s.embeddingModel = model
+	s.missingEmbedding = model == ""
+	if s.vectorIndex != nil {
+		if fileIndex, ok := s.vectorIndex.(*vector.FileIndex); ok {
+			fileIndex.WithProfile(s.profileID)
+			_ = fileIndex.Load()
+		}
+	}
+	if s.db != nil {
+		manifestRepo := store.NewVectorManifestRepo(s.db)
+		if err := manifestRepo.SetManifestEmbeddingModel(context.Background(), s.profileID, model); err != nil {
+			_ = manifestRepo.UpsertManifest(context.Background(), &store.VectorManifest{
+				ID:                 fmt.Sprintf("vm-%x", time.Now().UnixNano()),
+				ProfileID:          s.profileID,
+				IndexPath:          s.vectorIndexPath,
+				IndexFormatVersion: "1",
+				EmbeddingModel:     model,
+				EmbeddingDim:       0,
+				SourceStateVersion: "",
+				Status:             store.VectorManifestReady,
+			})
+		}
 	}
 }
 
