@@ -1,28 +1,27 @@
 # Data Model: note-extraction-strategy
 
-## Note
+## provider_config (profile DB)
 
-- **id**: Unique identifier
-- **content**: Canonical note text
-- **value_score**: Importance score used to decide storage
-- **source_context**: Conversation excerpt or message reference
-- **created_at**: Timestamp
-- **updated_at**: Timestamp
+| Field | Type | Notes |
+| --- | --- | --- |
+| id | TEXT | Primary key |
+| profile_id | TEXT | Profile owner |
+| provider_type | TEXT | Provider identifier (e.g., openai_compatible) |
+| endpoint | TEXT | Provider endpoint URL |
+| model | TEXT | Default/fallback model |
+| active_model | TEXT | Selected chat model |
+| extractor_model | TEXT | Model for note extraction |
+| embeddings_model | TEXT | Selected embeddings model |
+| credential_ref | TEXT | Encrypted API key |
+| is_active | INTEGER | 0/1 |
+| created_at | DATETIME | Created timestamp |
+| updated_at | DATETIME | Updated timestamp |
 
-## NoteCandidate
+## Derived constraints
 
-- **content**: Extracted candidate text
-- **value_score**: Computed importance score
-- **duplicate_of**: Reference to existing Note id if duplicate detected
-- **evidence**: Supporting context snippets
+- Only one active provider_config per profile (is_active = 1).
+- embeddings_model must be explicitly set before vector indexing operations.
 
-## NoteRetrievalResult
+## Schema cleanup
 
-- **note_id**: Referenced Note id
-- **relevance_score**: Similarity/relevance score
-- **rank**: Position in ranked results
-
-## EmbeddingsModelSetting
-
-- **model_id**: Selected embeddings model identifier
-- **profile_id**: Profile that owns the setting
+- Remove provider_config columns that are no longer referenced in application code.
