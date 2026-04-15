@@ -315,6 +315,7 @@ func New(
 	profileName string,
 	activeModel string,
 	extractorModel string,
+	embeddingModel string,
 	cacheStatus string,
 	tokenStatus string,
 	extractorFallback bool,
@@ -361,7 +362,7 @@ func New(
 		openSettings:  key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j", "settings")),
 		profileNew:    key.NewBinding(key.WithKeys("ctrl+n"), key.WithHelp("ctrl+n", "new profile")),
 		profileRename: key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "rename profile")),
-		profileDelete: key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "delete profile")),
+		profileDelete: key.NewBinding(key.WithKeys("ctrl+k"), key.WithHelp("ctrl+k", "delete profile")),
 	}
 	helpModel := help.New()
 	helpModel.Styles.ShortKey = helpShortStyle
@@ -382,16 +383,6 @@ func New(
 		inputHistory = []string{}
 	}
 
-	if execCtx != nil && execCtx.ProfileSlug != "" {
-		if settings, err := profile.ReadSettings(execCtx.ProfileSlug); err == nil {
-			if settings.EmbeddingModel != "" {
-				embeddingModelMissing = false
-			} else {
-				embeddingModelMissing = true
-			}
-		}
-	}
-
 	return Model{
 		profileName:            profileName,
 		activeModel:            activeModel,
@@ -407,7 +398,7 @@ func New(
 		embeddingModelMissing:  embeddingModelMissing,
 		listEmbeddings:         listEmbeddings,
 		embeddingModelSelected: embeddingModelSelected,
-		embeddingModel:         "",
+		embeddingModel:         embeddingModel,
 		keys:                   keys,
 		help:                   helpModel,
 		helpKeys:               helpKeys,
@@ -450,138 +441,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.viewport.SetWidth(msg.Width)
 			m.viewport.SetHeight(vpH)
-		}
-
-	// ---- picker items loaded ------------------------------------------------
-	case modelsLoadedMsg:
-		if m.picker != nil && (m.pickerKind == pickerKindModel || m.pickerKind == pickerKindExtractorModel || m.pickerKind == pickerKindEmbeddingsModel) {
-			m.picker.loading = false
-			if msg.err != nil {
-				m.picker.err = msg.err
-			} else {
-				m.picker.setItems(msg.items)
-			}
-		}
-
-	case backupsLoadedMsg:
-		if m.picker != nil && m.pickerKind == pickerKindBackup {
-			m.picker.loading = false
-			if msg.err != nil {
-				m.picker.err = msg.err
-			} else {
-				m.picker.setItems(msg.items)
-			}
-		}
-
-	// ---- notes badge --------------------------------------------------------
-	case notesSavedMsg:
-		saved := msg.saved
-		updated := msg.updated
-		switch {
-		case saved > 0 && updated > 0:
-			m.notesIndicator = fmt.Sprintf("📝 %d saved, %d updated", saved, updated)
-		case saved > 0:
-			m.notesIndicator = fmt.Sprintf("📝 %d note(s) saved", saved)
-		case updated > 0:
-			m.notesIndicator = fmt.Sprintf("📝 %d note(s) updated", updated)
-		default:
-			m.notesIndicator = ""
-		}
-		if saved+updated > 0 {
-			cmds = append(cmds, tea.Tick(3*time.Second, func(_ time.Time) tea.Msg {
-				return clearNotesIndicatorMsg{}
-			}))
-		}
-
-	case notesSavingMsg:
-		m.notesIndicator = "📝 validating…"
-
-	case clearNotesIndicatorMsg:
-		m.notesIndicator = ""
-
-	// ---- editor finished ----------------------------------------------------
-	case editorFinishedMsg:
-		if msg.err != nil {
-			m.err = msg.err
-		} else if msg.onSave != nil {
-			if err := msg.onSave(); err != nil {
-				m.err = err
-			} else {
-				m.messages = append(m.messages, chatMessage{role: "command", content: "System prompt updated.", timestamp: time.Now()})
-				m.syncViewport()
-			}
-		}
-
-	// ---- stats update -------------------------------------------------------
-	case statsUpdatedMsg:
-		m.tokenStatus = msg.formatted
-
-	case profileSwitchedMsg:
-		m.profileName = msg.profileName
-		m.activeModel = msg.activeModel
-		m.extractorModel = msg.extractorModel
-		m.extractorFallback = msg.extractorFallback
-		m.embeddingModelMissing = msg.embeddingModelMissing
-		m.cacheStatus = msg.cacheStatus
-		m.tokenStatus = msg.tokenStatus
-		m.provider = msg.provider
-		m.listModels = msg.listModels
-		m.listEmbeddings = msg.listEmbeddings
-		m.modelSelected = msg.modelSelected
-		m.embeddingModelSelected = msg.embeddingModelSelected
-		m.extractorModelSelected = msg.extractorModelSelected
-		m.embeddingModelMissing = msg.embeddingModelMissing
-		m.embeddingModel = msg.embeddingModel
-		m.settingsMenu = msg.settings
-		m.embeddingModel = msg.embeddingModel
-		m.memoryTokenBudget = 0
-		m.systemPrompt = ""
-		m.settingsEditEntry = nil
-		m.settingsEditing = false
-		m.settingsErr = ""
-		m.history = msg.history
-		m.historyIndex = len(msg.history)
-		m.historyDraft = ""
-		m.messages = []chatMessage{{role: "command", content: "Switched to profile: " + msg.profileName, timestamp: time.Now()}}
-		m.err = nil
-		m.clearSuggestions()
-		m.input.SetValue("")
-		m.refreshSettingsValues()
-		m.syncSettingsList()
-		m.syncViewport()
-
-	case profileSwitchFailedMsg:
-		m.err = msg.err
-		m.syncViewport()
-
-	case spinnerTickMsg:
-		if m.pending {
-			m.spinnerIndex = (m.spinnerIndex + 1) % len(spinnerFrames)
-			m.updatePendingSpinner()
-			m.syncViewport()
-			cmds = append(cmds, tea.Tick(120*time.Millisecond, func(time.Time) tea.Msg { return spinnerTickMsg{} }))
-		}
-
-	// ---- provider reply -----------------------------------------------------
-	case providerReplyMsg:
-		if msg.err != nil {
-			m.err = msg.err
-			m.clearPending()
-			m.pending = false
-		} else {
-			m.resolvePending(msg.content)
-			m.pending = false
-		}
-		m.syncViewport()
-
-	// ---- picker: forward all non-key messages (e.g. FilterMatchesMsg) --------
-	default:
-		if m.picker != nil {
-			updated, cmd := m.picker.list.Update(msg)
-			m.picker.list = updated
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
 		}
 
 	// ---- keyboard -----------------------------------------------------------
@@ -785,6 +644,136 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = nil
 			m.recordHistory(val)
 			return m.handleSubmit(val, cmds)
+		}
+
+	// ---- picker items loaded ------------------------------------------------
+	case modelsLoadedMsg:
+		if m.picker != nil && (m.pickerKind == pickerKindModel || m.pickerKind == pickerKindExtractorModel || m.pickerKind == pickerKindEmbeddingsModel) {
+			m.picker.loading = false
+			if msg.err != nil {
+				m.picker.err = msg.err
+			} else {
+				m.picker.setItems(msg.items)
+			}
+		}
+
+	case backupsLoadedMsg:
+		if m.picker != nil && m.pickerKind == pickerKindBackup {
+			m.picker.loading = false
+			if msg.err != nil {
+				m.picker.err = msg.err
+			} else {
+				m.picker.setItems(msg.items)
+			}
+		}
+
+	// ---- notes badge --------------------------------------------------------
+	case notesSavedMsg:
+		saved := msg.saved
+		updated := msg.updated
+		switch {
+		case saved > 0 && updated > 0:
+			m.notesIndicator = fmt.Sprintf("📝 %d saved, %d updated", saved, updated)
+		case saved > 0:
+			m.notesIndicator = fmt.Sprintf("📝 %d note(s) saved", saved)
+		case updated > 0:
+			m.notesIndicator = fmt.Sprintf("📝 %d note(s) updated", updated)
+		default:
+			m.notesIndicator = ""
+		}
+		if saved+updated > 0 {
+			cmds = append(cmds, tea.Tick(3*time.Second, func(_ time.Time) tea.Msg {
+				return clearNotesIndicatorMsg{}
+			}))
+		}
+
+	case notesSavingMsg:
+		m.notesIndicator = "📝 validating…"
+
+	case clearNotesIndicatorMsg:
+		m.notesIndicator = ""
+
+	// ---- editor finished ----------------------------------------------------
+	case editorFinishedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+		} else if msg.onSave != nil {
+			if err := msg.onSave(); err != nil {
+				m.err = err
+			} else {
+				m.messages = append(m.messages, chatMessage{role: "command", content: "System prompt updated.", timestamp: time.Now()})
+				m.syncViewport()
+			}
+		}
+
+	// ---- stats update -------------------------------------------------------
+	case statsUpdatedMsg:
+		m.tokenStatus = msg.formatted
+
+	case profileSwitchedMsg:
+		m.profileName = msg.profileName
+		m.activeModel = msg.activeModel
+		m.extractorModel = msg.extractorModel
+		m.extractorFallback = msg.extractorFallback
+		m.embeddingModelMissing = msg.embeddingModelMissing
+		m.cacheStatus = msg.cacheStatus
+		m.tokenStatus = msg.tokenStatus
+		m.provider = msg.provider
+		m.listModels = msg.listModels
+		m.listEmbeddings = msg.listEmbeddings
+		m.modelSelected = msg.modelSelected
+		m.embeddingModelSelected = msg.embeddingModelSelected
+		m.extractorModelSelected = msg.extractorModelSelected
+		m.embeddingModel = msg.embeddingModel
+		m.settingsMenu = msg.settings
+		m.memoryTokenBudget = 0
+		m.systemPrompt = ""
+		m.settingsEditEntry = nil
+		m.settingsEditing = false
+		m.settingsErr = ""
+		m.history = msg.history
+		m.historyIndex = len(msg.history)
+		m.historyDraft = ""
+		m.messages = []chatMessage{{role: "command", content: "Switched to profile: " + msg.profileName, timestamp: time.Now()}}
+		m.err = nil
+		m.clearSuggestions()
+		m.input.SetValue("")
+		m.refreshSettingsValues()
+		m.syncSettingsList()
+		m.syncViewport()
+
+	case profileSwitchFailedMsg:
+		m.err = msg.err
+		m.syncViewport()
+
+	case spinnerTickMsg:
+		if m.pending {
+			m.spinnerIndex = (m.spinnerIndex + 1) % len(spinnerFrames)
+			m.updatePendingSpinner()
+			m.syncViewport()
+			cmds = append(cmds, tea.Tick(120*time.Millisecond, func(time.Time) tea.Msg { return spinnerTickMsg{} }))
+		}
+
+	// ---- provider reply -----------------------------------------------------
+	case providerReplyMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			m.clearPending()
+			m.pending = false
+		} else {
+			m.resolvePending(msg.content)
+			m.pending = false
+		}
+		m.syncViewport()
+
+	// ---- picker: forward all non-key messages (e.g. FilterMatchesMsg) --------
+	default:
+		if m.picker != nil {
+			updated, cmd := m.picker.list.Update(msg)
+			m.picker.list = updated
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
 	}
 
@@ -1402,7 +1391,6 @@ func (m Model) handleSettingsSave() (tea.Model, tea.Cmd) {
 	entry := *m.settingsEditEntry
 	if m.profilesAction != nil && entry.ID == settingsIDProfiles {
 		action := m.profilesAction
-		val = strings.TrimSpace(m.settingsEditor.Value())
 		if val == "" {
 			m.settingsErr = "value must not be empty"
 			return m, nil
@@ -1573,16 +1561,13 @@ func applyToMenu(menu *SettingsMenu, m *Model) {
 			entries[i].Value = obfuscateKey(m.providerAPIKey)
 		}
 		if entries[i].ID == settingsIDModel {
-			entries[i].Value = ""
-			entries[i].Active = false
+			entries[i].Value = m.activeModel
 		}
 		if entries[i].ID == settingsIDExtractorModel {
-			entries[i].Value = ""
-			entries[i].Active = false
+			entries[i].Value = m.extractorModel
 		}
 		if entries[i].ID == settingsIDEmbeddingsModel {
-			entries[i].Value = ""
-			entries[i].Active = false
+			entries[i].Value = m.embeddingModel
 		}
 		if entries[i].Submenu != nil {
 			applyToMenu(entries[i].Submenu, m)

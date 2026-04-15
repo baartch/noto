@@ -403,7 +403,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 		embeddingModel = sess.EmbeddingModel()
 	}
 	m := tui.New(
-		activeProfile.Name, activeModel, extractorModel,
+		activeProfile.Name, activeModel, extractorModel, embeddingModel,
 		cacheStatus, "tokens: n/a", extractorFallback, embeddingModelMissing,
 		dispatcher, execCtx,
 		providerFn, listModelsFn, listEmbeddingsFn, modelSelectedFn, embeddingModelSelectedFn,

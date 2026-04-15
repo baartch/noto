@@ -20,6 +20,7 @@ func TestTUIModel_UsesBubblesComponents(t *testing.T) {
 		"Profile",
 		"",
 		"",
+		"",
 		"cache: n/a",
 		"tokens: n/a",
 		false,

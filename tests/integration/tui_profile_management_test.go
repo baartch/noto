@@ -57,7 +57,7 @@ func newProfileSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext, *p
 
 	execCtx := &commands.ExecContext{ProfileID: p.ID, ProfileSlug: p.Slug, DB: db}
 	m := tui.New(
-		p.Name, "", "", "cache: n/a", "tokens: n/a", false, false,
+		p.Name, "", "", "", "cache: n/a", "tokens: n/a", false, false,
 		chat.NewDispatcher(commands.NewRegistry()),
 		execCtx,
 		nil, nil, nil,
