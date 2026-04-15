@@ -382,6 +382,16 @@ func New(
 		inputHistory = []string{}
 	}
 
+	if execCtx != nil && execCtx.ProfileSlug != "" {
+		if settings, err := profile.ReadSettings(execCtx.ProfileSlug); err == nil {
+			if settings.EmbeddingModel != "" {
+				embeddingModelMissing = false
+			} else {
+				embeddingModelMissing = true
+			}
+		}
+	}
+
 	return Model{
 		profileName:            profileName,
 		activeModel:            activeModel,
@@ -1571,8 +1581,8 @@ func applyToMenu(menu *SettingsMenu, m *Model) {
 			entries[i].Active = false
 		}
 		if entries[i].ID == settingsIDEmbeddingsModel {
-			entries[i].Value = m.embeddingModel
-			entries[i].Active = entries[i].Value != ""
+			entries[i].Value = ""
+			entries[i].Active = false
 		}
 		if entries[i].Submenu != nil {
 			applyToMenu(entries[i].Submenu, m)

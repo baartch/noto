@@ -341,9 +341,10 @@ func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote
 		fileIndex.WithProfile(s.profileID)
 		if err := fileIndex.Load(); err != nil {
 			if errors.Is(err, vector.ErrIndexNotFound) || errors.Is(err, vector.ErrIndexCorrupted) {
-				return nil
+				// No existing index; proceed to create a fresh one.
+			} else {
+				return err
 			}
-			return err
 		}
 	}
 

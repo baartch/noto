@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -89,6 +90,9 @@ func (a *OpenAICompatible) Embed(ctx context.Context, req EmbeddingRequest) (*Em
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("provider: read embedding response: %w", err)
+	}
+	if os.Getenv("DEBUG") != "" {
+		fmt.Fprintf(os.Stderr, "embeddings response status=%d body=%s\n", resp.StatusCode, string(bodyBytes))
 	}
 	var apiResp openAIEmbeddingResponse
 	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {

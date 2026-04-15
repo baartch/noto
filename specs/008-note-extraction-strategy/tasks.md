@@ -112,11 +112,11 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T038 [P] Run quickstart.md validation steps and capture any deltas in specs/008-note-extraction-strategy/quickstart.md
-- [ ] T039 [P] Verify footer timing/placement matches existing TUI notification patterns in internal/tui/
-- [ ] T040 [P] Update docs/ or README.md with note extraction, embeddings model selector, and Responses API behavior
-- [ ] T041 [P] Measure retrieval latency against 2s target in tests/integration/memory/retrieval_perf_test.go
-- [ ] T042 Run gofmt/go vet/make lint for feature scope and resolve issues
+- [X] T038 [P] Run quickstart.md validation steps and capture any deltas in specs/008-note-extraction-strategy/quickstart.md
+- [X] T039 [P] Verify footer timing/placement matches existing TUI notification patterns in internal/tui/
+- [X] T040 [P] Update docs/ or README.md with note extraction, embeddings model selector, and Responses API behavior
+- [X] T041 [P] Measure retrieval latency against 2s target in tests/integration/memory/retrieval_perf_test.go
+- [X] T042 Run gofmt/go vet/make lint for feature scope and resolve issues
 
 ---
 
