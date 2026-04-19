@@ -354,6 +354,14 @@ func New(
 		key.WithKeys("alt+enter"),
 		key.WithHelp("alt+enter", "insert newline"),
 	)
+	ti.KeyMap.WordForward = key.NewBinding(
+		key.WithKeys("alt+right", "alt+f", "ctrl+right"),
+		key.WithHelp("ctrl+right", "word forward"),
+	)
+	ti.KeyMap.WordBackward = key.NewBinding(
+		key.WithKeys("alt+left", "alt+b", "ctrl+left"),
+		key.WithHelp("ctrl+left", "word backward"),
+	)
 	keys := keyMap{
 		quit:          key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "quit")),
 		openModel:     key.NewBinding(key.WithKeys("ctrl+l"), key.WithHelp("ctrl+l", "model picker")),
@@ -375,6 +383,9 @@ func New(
 			keys.openSettings,
 			keys.openModel,
 			keys.clearInput,
+			ti.KeyMap.InsertNewline,
+			ti.KeyMap.WordBackward,
+			ti.KeyMap.WordForward,
 			keys.quit,
 		},
 	}
@@ -441,6 +452,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.viewport.SetWidth(msg.Width)
 			m.viewport.SetHeight(vpH)
+		}
+
+	// ---- clipboard ----------------------------------------------------------
+	case tea.PasteMsg:
+		if m.settingsOpen && m.settingsEditing {
+			var cmd tea.Cmd
+			m.settingsEditor, cmd = m.settingsEditor.Update(msg)
+			return m, cmd
 		}
 
 	// ---- keyboard -----------------------------------------------------------
@@ -633,8 +652,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-		case msg.Key().Code == tea.KeyEnter:
-			// Send on Enter (newline handled by textarea only via Alt+Enter)
+		case msg.Key().Code == tea.KeyEnter && msg.Key().Mod == 0:
+			// Send on Enter (newline handled by textarea via Alt+Enter)
 			val := strings.TrimSpace(m.input.Value())
 			if val == "" {
 				return m, nil
