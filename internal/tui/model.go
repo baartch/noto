@@ -454,6 +454,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.SetHeight(vpH)
 		}
 
+	// ---- clipboard ----------------------------------------------------------
+	case tea.PasteMsg:
+		if m.settingsOpen && m.settingsEditing {
+			var cmd tea.Cmd
+			m.settingsEditor, cmd = m.settingsEditor.Update(msg)
+			return m, cmd
+		}
+
 	// ---- keyboard -----------------------------------------------------------
 	case tea.KeyPressMsg:
 		if m.picker != nil {
