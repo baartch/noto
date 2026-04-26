@@ -37,8 +37,8 @@ func newScrollModelWithHistory() tui.Model {
 
 func TestMouseWheel_InputZoneNavigatesInputHistory(t *testing.T) {
 	m := newScrollModelWithHistory()
-	// input line is near bottom; y=37 is inside input zone for height 40
-	updated, _ := m.Update(tea.MouseWheelMsg{X: 2, Y: 37, Button: tea.MouseWheelUp})
+	// textarea lines are near bottom; y=36 is inside input zone for height 40
+	updated, _ := m.Update(tea.MouseWheelMsg{X: 2, Y: 36, Button: tea.MouseWheelUp})
 	m = updated.(tui.Model)
 	view := m.View().Content
 	if !strings.Contains(view, "five") && !strings.Contains(view, "four") {

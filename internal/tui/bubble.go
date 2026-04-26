@@ -170,10 +170,7 @@ func renderConversationBoundary(ts time.Time, width int) string {
 	labelW := utf8.RuneCountInString(label)
 	lineRun := "─"
 
-	remaining := width - labelW
-	if remaining < 4 {
-		remaining = 4
-	}
+	remaining := max(width-labelW, 4)
 	left := remaining / 2
 	right := remaining - left
 

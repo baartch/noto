@@ -174,7 +174,7 @@ func (r *MessageRepo) ListOlderByConversationBefore(ctx context.Context, convers
 	return out, nil
 }
 
-// ListRecentUserMessages returns recent user message contents for a profile.
+// ListRecentByProfile returns recent profile-scoped messages across conversations in chronological order.
 func (r *MessageRepo) ListRecentByProfile(ctx context.Context, profileID string, limit int) ([]*Message, error) {
 	if limit <= 0 {
 		return []*Message{}, nil
@@ -213,6 +213,7 @@ func (r *MessageRepo) ListRecentByProfile(ctx context.Context, profileID string,
 	return out, nil
 }
 
+// ListOlderByProfileBefore returns older profile-scoped messages before the given timestamp in chronological order.
 func (r *MessageRepo) ListOlderByProfileBefore(ctx context.Context, profileID string, beforeCreatedAt time.Time, limit int) ([]*Message, error) {
 	if limit <= 0 {
 		return []*Message{}, nil

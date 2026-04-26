@@ -2154,12 +2154,23 @@ func (m *Model) scrollZoneForY(y int) scrollZone {
 	if y < 0 || m.height <= 0 {
 		return scrollZoneOutside
 	}
-	inputLineY := m.height - lipgloss.Height(m.renderFooter()) - 2
+
+	footerH := lipgloss.Height(m.renderFooter())
+	inputH := lipgloss.Height(strings.TrimRight(m.input.View(), "\n"))
+	if inputH <= 0 {
+		inputH = 1
+	}
+
+	// Input occupies lines above the footer; extend one row upward to cover
+	// divider/renderer variance across terminals.
+	inputStartY := m.height - footerH - inputH - 2
+	inputEndY := max(m.height-footerH-3, inputStartY)
+
+	if y >= inputStartY && y <= inputEndY {
+		return scrollZoneInput
+	}
 	if y >= 0 && y < m.viewport.Height() {
 		return scrollZoneMessages
-	}
-	if y == inputLineY || y == inputLineY+1 {
-		return scrollZoneInput
 	}
 	return scrollZoneOutside
 }

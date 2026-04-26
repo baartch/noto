@@ -34,14 +34,14 @@ func newInputHistoryModel(hist []string) tui.Model {
 func TestInputHistory_FirstScrollLoadsWindow(t *testing.T) {
 	hist := []string{"a", "b", "c", "d", "e", "f"}
 	m := newInputHistoryModel(hist)
-	updated, _ := m.Update(tea.MouseWheelMsg{X: 2, Y: 37, Button: tea.MouseWheelUp})
+	updated, _ := m.Update(tea.MouseWheelMsg{X: 2, Y: 36, Button: tea.MouseWheelUp})
 	_ = updated.(tui.Model)
 }
 
 func TestInputHistory_ClearsAfterSend(t *testing.T) {
 	hist := []string{"a", "b", "c", "d", "e", "f"}
 	m := newInputHistoryModel(hist)
-	updated, _ := m.Update(tea.MouseWheelMsg{X: 2, Y: 37, Button: tea.MouseWheelUp})
+	updated, _ := m.Update(tea.MouseWheelMsg{X: 2, Y: 36, Button: tea.MouseWheelUp})
 	m = updated.(tui.Model)
 	updated, _ = m.Update(tea.KeyPressMsg{Text: "x", Code: 'x'})
 	m = updated.(tui.Model)
