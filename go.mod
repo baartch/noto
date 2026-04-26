@@ -8,6 +8,7 @@ require (
 	charm.land/glamour/v2 v2.0.0
 	charm.land/lipgloss/v2 v2.0.2
 	github.com/spf13/cobra v1.10.2
+	golang.org/x/mod v0.34.0
 	modernc.org/sqlite v1.48.2
 )
 
