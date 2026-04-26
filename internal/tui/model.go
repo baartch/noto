@@ -489,6 +489,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.ready {
 			m.viewport = viewport.New(viewport.WithWidth(msg.Width), viewport.WithHeight(vpH))
 			m.viewport.SetContent(m.renderHistory())
+			m.viewport.GotoBottom()
 			m.ready = true
 		} else {
 			m.viewport.SetWidth(msg.Width)
