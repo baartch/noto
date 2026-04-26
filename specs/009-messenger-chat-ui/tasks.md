@@ -103,19 +103,19 @@
 
 ### Tests for User Story 3
 
-- [ ] T033 [P] [US3] Add unit tests for conversation lazy-load cursor and has-older transitions in `tests/unit/tui/conversation_paging_test.go`
-- [ ] T034 [P] [US3] Add integration test for top-boundary lazy-load prepend behavior in `tests/integration/tui_conversation_lazyload_test.go`
-- [ ] T035 [P] [US3] Add integration test for anchor preservation after prepend in `tests/integration/tui_conversation_anchor_test.go`
-- [ ] T036 [P] [US3] Add integration test for no-op at absolute history top in `tests/integration/tui_conversation_lazyload_test.go`
-- [ ] T037 [P] [US3] Add contract test for conversation paging rules from UI contract in `tests/contract/tui_conversation_scroll_contract_test.go`
+- [X] T033 [P] [US3] Add unit tests for conversation lazy-load cursor and has-older transitions in `tests/unit/tui/conversation_paging_test.go`
+- [X] T034 [P] [US3] Add integration test for top-boundary lazy-load prepend behavior in `tests/integration/tui_conversation_lazyload_test.go`
+- [X] T035 [P] [US3] Add integration test for anchor preservation after prepend in `tests/integration/tui_conversation_anchor_test.go`
+- [X] T036 [P] [US3] Add integration test for no-op at absolute history top in `tests/integration/tui_conversation_lazyload_test.go`
+- [X] T037 [P] [US3] Add contract test for conversation paging rules from UI contract in `tests/contract/tui_conversation_scroll_contract_test.go`
 
 ### Implementation for User Story 3
 
-- [ ] T038 [US3] Implement top-boundary detection and lazy-load trigger in messages viewport in `internal/tui/model.go`
-- [ ] T039 [US3] Integrate older-message paged query into TUI loading flow in `internal/tui/model.go`
-- [ ] T040 [US3] Prepend older messages while preserving viewport visual anchor in `internal/tui/model.go`
-- [ ] T041 [US3] Stop additional fetches when no older messages remain in `internal/tui/model.go`
-- [ ] T042 [US3] Ensure new send/assistant reply snaps viewport back to bottom after mid-history browsing in `internal/tui/model.go`
+- [X] T038 [US3] Implement top-boundary detection and lazy-load trigger in messages viewport in `internal/tui/model.go`
+- [X] T039 [US3] Integrate older-message paged query into TUI loading flow in `internal/tui/model.go`
+- [X] T040 [US3] Prepend older messages while preserving viewport visual anchor in `internal/tui/model.go`
+- [X] T041 [US3] Stop additional fetches when no older messages remain in `internal/tui/model.go`
+- [X] T042 [US3] Ensure new send/assistant reply snaps viewport back to bottom after mid-history browsing in `internal/tui/model.go`
 
 **Checkpoint**: All user stories are independently functional.
 

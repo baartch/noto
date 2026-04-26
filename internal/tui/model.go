@@ -230,6 +230,8 @@ type Model struct {
 
 	conversationHistoryWindow conversationHistoryWindow
 	inputHistoryWindow        inputHistoryWindow
+	allMessages               []chatMessage
+	messageLoadInProgress     bool
 
 	// picker overlay
 	picker             *pickerState
@@ -679,6 +681,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case msg.Key().Code == tea.KeyPgUp:
 			var vpCmd tea.Cmd
 			m.viewport, vpCmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+			m.maybeLoadOlderConversationHistory()
 			return m, vpCmd
 
 		case msg.Key().Code == tea.KeyPgDown:
@@ -804,6 +807,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			mapped := m.mapStoreMessagesToChatMessages(msg.startupMessages)
 			m.loadInitialConversationHistory(mapped)
 			m.messages = m.conversationHistoryWindow.messages
+		} else {
+			m.loadInitialConversationHistory(nil)
 		}
 		m.setHistoryError(msg.startupHistoryErr)
 		m.err = nil
@@ -1011,33 +1016,56 @@ func (m *Model) clearSuggestions() {
 func (m *Model) loadInitialConversationHistory(messages []chatMessage) {
 	if len(messages) == 0 {
 		m.conversationHistoryWindow = conversationHistoryWindow{messages: m.messages, hasOlder: false, loadedCnt: len(m.messages)}
+		m.allMessages = append([]chatMessage(nil), m.messages...)
 		return
 	}
+	m.allMessages = append([]chatMessage(nil), messages...)
 	if len(messages) > conversationInitialLoadSize {
 		messages = messages[len(messages)-conversationInitialLoadSize:]
 		m.conversationHistoryWindow.hasOlder = true
 	} else {
 		m.conversationHistoryWindow.hasOlder = false
 	}
-	m.conversationHistoryWindow.messages = messages
+	m.conversationHistoryWindow.messages = append([]chatMessage(nil), messages...)
 	m.conversationHistoryWindow.loadedCnt = len(messages)
 }
 
-func (m *Model) loadOlderConversationHistoryBatch(older []chatMessage) {
-	if len(older) == 0 {
+func (m *Model) loadOlderConversationHistoryBatch() {
+	if m.messageLoadInProgress || !m.conversationHistoryWindow.hasOlder {
+		return
+	}
+	m.messageLoadInProgress = true
+	defer func() { m.messageLoadInProgress = false }()
+
+	loaded := len(m.conversationHistoryWindow.messages)
+	total := len(m.allMessages)
+	if loaded >= total {
 		m.conversationHistoryWindow.hasOlder = false
 		return
 	}
-	batch := older
-	if len(batch) > conversationLazyBatchSize {
-		batch = batch[len(batch)-conversationLazyBatchSize:]
+	remaining := total - loaded
+	batch := conversationLazyBatchSize
+	if remaining < batch {
+		batch = remaining
 	}
-	combined := make([]chatMessage, 0, len(batch)+len(m.messages))
-	combined = append(combined, batch...)
-	combined = append(combined, m.messages...)
-	m.messages = combined
+	start := total - loaded - batch
+	if start < 0 {
+		start = 0
+	}
+	older := m.allMessages[start : start+batch]
+
+	anchor := m.viewport.YOffset()
+	combined := make([]chatMessage, 0, len(older)+len(m.conversationHistoryWindow.messages))
+	combined = append(combined, older...)
+	combined = append(combined, m.conversationHistoryWindow.messages...)
 	m.conversationHistoryWindow.messages = combined
 	m.conversationHistoryWindow.loadedCnt = len(combined)
+	m.conversationHistoryWindow.hasOlder = len(combined) < total
+	m.messages = combined
+	if m.ready {
+		m.viewport.SetContent(m.renderHistory())
+		m.viewport.SetYOffset(anchor + len(older))
+	}
 }
 
 func (m *Model) resetInputHistoryWindow() {
@@ -1066,6 +1094,13 @@ func (m *Model) loadInitialInputHistoryBatch() {
 	m.history = entries
 	m.historyBaseFrom = start
 	m.historyIndex = len(m.history)
+}
+
+func (m *Model) maybeLoadOlderConversationHistory() {
+	if !m.ready || !m.viewport.AtTop() {
+		return
+	}
+	m.loadOlderConversationHistoryBatch()
 }
 
 func (m *Model) setHistoryError(err error) {
@@ -2005,12 +2040,14 @@ func (m *Model) resolvePending(content string) {
 		}
 	}
 	m.messages = append(m.messages, chatMessage{role: "assistant", content: content, timestamp: time.Now()})
+	m.allMessages = append([]chatMessage(nil), m.messages...)
 }
 
 func (m *Model) clearPending() {
 	for i := len(m.messages) - 1; i >= 0; i-- {
 		if m.messages[i].role == "pending" {
 			m.messages = append(m.messages[:i], m.messages[i+1:]...)
+			m.allMessages = append([]chatMessage(nil), m.messages...)
 			return
 		}
 	}
@@ -2068,6 +2105,7 @@ func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 		if mouse.Button == tea.MouseWheelUp {
 			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+			m.maybeLoadOlderConversationHistory()
 			return m, cmd
 		}
 		if mouse.Button == tea.MouseWheelDown {
@@ -2097,6 +2135,12 @@ func (m *Model) syncViewport() {
 	}
 	m.viewport.SetContent(m.renderHistory())
 	m.viewport.GotoBottom()
+	m.conversationHistoryWindow.messages = append([]chatMessage(nil), m.messages...)
+	m.conversationHistoryWindow.loadedCnt = len(m.messages)
+	if len(m.allMessages) == 0 || len(m.messages) >= len(m.allMessages) {
+		m.allMessages = append([]chatMessage(nil), m.messages...)
+		m.conversationHistoryWindow.hasOlder = false
+	}
 }
 
 // renderHistory renders all chat messages using styled bubbles.
