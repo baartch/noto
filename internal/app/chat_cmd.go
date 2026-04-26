@@ -269,6 +269,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			if err != nil {
 				return tui.ProfileSwitchFailed(err)
 			}
+			execCtx.DB = profileDB
 
 			providerCfg, decryptedKey := loadProviderConfig(ctx, profileDB, p.ID)
 			activeModel = ""
