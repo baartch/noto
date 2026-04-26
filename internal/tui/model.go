@@ -417,6 +417,9 @@ func New(
 			keys.openSettings,
 			keys.openModel,
 			keys.clearInput,
+			key.NewBinding(key.WithKeys("wheel"), key.WithHelp("wheel", "scroll messages/input by cursor zone")),
+			key.NewBinding(key.WithKeys("pgup/pgdn"), key.WithHelp("pgup/pgdn", "scroll messages")),
+			key.NewBinding(key.WithKeys("end"), key.WithHelp("end", "jump to latest message")),
 			ti.KeyMap.InsertNewline,
 			ti.KeyMap.WordBackward,
 			ti.KeyMap.WordForward,
@@ -682,14 +685,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case msg.Key().Code == tea.KeyPgUp:
 			var vpCmd tea.Cmd
-			m.viewport, vpCmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+			for range conversationWheelStepLines {
+				m.viewport, vpCmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+			}
 			m.maybeLoadOlderConversationHistory()
 			return m, vpCmd
 
 		case msg.Key().Code == tea.KeyPgDown:
 			var vpCmd tea.Cmd
-			m.viewport, vpCmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+			for range conversationWheelStepLines {
+				m.viewport, vpCmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+			}
 			return m, vpCmd
+
+		case msg.Key().Code == tea.KeyEnd:
+			m.viewport.GotoBottom()
+			return m, nil
 
 		case msg.Key().Code == tea.KeyTab:
 			if len(m.suggestions) > 0 {
