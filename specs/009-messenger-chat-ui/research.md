@@ -1,41 +1,34 @@
-# Research: Messenger Chat UI History Scrolling
+# Research: Cross-Conversation History Scrolling
 
-## Decision 1: Use cursor-position-based scroll-zone routing
-
-- **Decision**: Route mouse wheel events to `messages` or `input` zone strictly by mouse cursor location.
-- **Rationale**: This directly resolves current UX friction where textarea consumes wheel events before history scrolls. It aligns with user mental model and existing TUI zoning behavior.
+## Decision 1: History source spans all conversations in active profile
+- **Decision**: Use profile-scoped message history across active + archived conversations when scrolling backward.
+- **Rationale**: Matches clarified requirement to scroll through all history regardless of conversation.
 - **Alternatives considered**:
-  - Focus-based routing only: rejected because cursor hover intent is explicit and was requested.
-  - Hybrid overflow routing (current behavior): rejected due to inconsistent interaction.
+  - Current-conversation only: rejected; does not satisfy clarification.
+  - Current + previous conversation only: rejected; partial history.
 
-## Decision 2: Conversation startup load and lazy-load policy
-
-- **Decision**: Load latest 10 conversation messages on startup; lazy-load older messages in fixed batches of 10 when scrolling upward at the top boundary.
-- **Rationale**: Preserves continuity while bounding startup work and memory usage; matches current feature requirements and success criteria.
+## Decision 2: Conversation boundary rendering model
+- **Decision**: Insert synthetic boundary rows between message groups when conversation ID changes, showing conversation start date.
+- **Rationale**: Provides clear context transition with minimal visual noise (thin divider + date).
 - **Alternatives considered**:
-  - Load full conversation on startup: rejected for performance/memory risk on long histories.
-  - Smaller startup batch (3 or 5): rejected because user asked to continue from recent context immediately.
+  - No separators: rejected; poor context when crossing conversation boundaries.
+  - Full header cards: rejected; too visually heavy for terminal chat flow.
 
-## Decision 3: Input-history lazy-load policy (clarified)
-
-- **Decision**: Do not preload input-history into memory. On first input-history scroll, load 3 latest entries; lazy-load older entries in batches of 3; cap loaded input-history entries to 12; clear in-memory input-history cache after send.
-- **Rationale**: Input-history scroll is infrequently used, so conservative loading reduces overhead while preserving usability.
+## Decision 3: Pagination strategy across conversations
+- **Decision**: Keep a unified chronologically sorted message stream for the active profile and lazy-load in fixed batches of 10 older items.
+- **Rationale**: Preserves existing lazy-load expectations while extending to cross-conversation history.
 - **Alternatives considered**:
-  - Preload input history at startup: rejected as unnecessary overhead.
-  - Larger batch/cap values: rejected as higher memory cost with little user benefit.
+  - Per-conversation paging with nested cursors: rejected as unnecessary complexity.
+  - Full preload of profile history: rejected due to startup/memory overhead.
 
-## Decision 4: Preserve viewport anchor when prepending history
-
-- **Decision**: When older messages are prepended, keep the previously visible first message in view (no jump).
-- **Rationale**: Prevents disorientation during incremental back-scroll and supports predictable history browsing.
+## Decision 4: Failure behavior during back-scroll fetches
+- **Decision**: Treat paging failures as non-fatal; keep currently loaded messages and show inline non-blocking error.
+- **Rationale**: Aligns with existing resilience requirements and avoids interrupting user workflow.
 - **Alternatives considered**:
-  - Snap-to-top after prepend: rejected due to disruptive UX.
-  - Snap-to-bottom after prepend: rejected because it defeats backward browsing.
+  - Hard-fail interaction on paging error: rejected as poor UX.
 
-## Decision 5: Failure handling for history fetches
-
-- **Decision**: Treat conversation/input history load failures as non-fatal; keep UI interactive and surface an inline error indicator.
-- **Rationale**: Availability and UX consistency are prioritized for local TUI; failures should degrade gracefully.
+## Decision 5: Boundary date format
+- **Decision**: Render boundary date in local readable format `YYYY-MM-DD HH:MM` (conversation start time).
+- **Rationale**: Compact and unambiguous in terminal width constraints.
 - **Alternatives considered**:
-  - Hard-fail startup on history read error: rejected as too disruptive.
-  - Silent failure without visibility: rejected because it harms diagnosability.
+  - Relative time only: rejected; becomes ambiguous for older conversations.

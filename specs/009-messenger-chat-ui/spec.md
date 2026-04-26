@@ -10,12 +10,13 @@
 ### Session 2026-04-26
 
 - Q: What should the input-history loading policy be? → A: No preload; first scroll loads 3; lazy-load by 3 up to 12; clear loaded input-history after send.
+- Q: What cross-conversation history scope should backward scrolling include? → A: Scroll back through all conversations in the active profile (active + archived), ordered by message time, with a thin separator at each conversation boundary showing that conversation’s start date.
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Conversation Continuity on Startup (Priority: P1)
 
-When the user opens noto, they immediately see the most recent messages from their last conversation — not a blank screen. The last 10 messages (or fewer if the history is shorter) are displayed in the messages area, newest at the bottom, so the user can read context and continue right where they left off.
+When the user opens noto, they immediately see the most recent messages from their profile conversation history — not a blank screen. The last 10 messages (or fewer if the history is shorter) are displayed in the messages area, newest at the bottom, so the user can read context and continue right where they left off. As users scroll upward, older messages continue across older conversations in the same profile.
 
 **Why this priority**: This is the foundation of the feature. Without it, every session feels like starting from scratch — the user has no context on open, and all other scrolling improvements are irrelevant if there is nothing to scroll through.
 
@@ -54,7 +55,7 @@ When the user moves the mouse cursor into the messages area and scrolls the mous
 
 ### User Story 3 - Lazy Loading Older Messages by Scrolling (Priority: P3)
 
-When the user has scrolled to the top of the currently loaded messages and continues scrolling up (or presses Page Up), the next batch of older messages is loaded from history and prepended to the view — allowing the user to browse their full conversation history without loading everything at once.
+When the user has scrolled to the top of the currently loaded messages and continues scrolling up (or presses Page Up), the next batch of older messages is loaded from history and prepended to the view — allowing the user to browse their full profile history across all conversations without loading everything at once. When crossing a conversation boundary, a thin separator line with that conversation’s start date is shown.
 
 **Why this priority**: Builds on P1 and P2. Without lazy loading, very long conversation histories would either be truncated or cause slow startup. Lazy loading keeps startup fast while still making all history reachable.
 
@@ -62,10 +63,11 @@ When the user has scrolled to the top of the currently loaded messages and conti
 
 **Acceptance Scenarios**:
 
-1. **Given** there are more messages in history than the currently displayed batch, **When** the user scrolls up to the top of the loaded messages, **Then** the next batch of older messages is loaded and prepended above the existing ones.
-2. **Given** all available messages are already loaded, **When** the user scrolls up at the top, **Then** no new messages are fetched and scroll position stays at the top.
-3. **Given** a batch is being loaded, **When** the user continues scrolling, **Then** the scroll position is preserved so the previously visible messages remain on screen after the new batch is prepended.
-4. **Given** the user is mid-history and sends a new message, **When** the reply arrives, **Then** the view scrolls back to the bottom to show the latest exchange.
+1. **Given** there are more messages in profile history than the currently displayed batch, **When** the user scrolls up to the top of the loaded messages, **Then** the next batch of older messages is loaded and prepended above the existing ones.
+2. **Given** scrolling reaches a message that belongs to an older conversation, **When** the boundary is rendered, **Then** a thin separator line with that conversation’s start date is shown before that conversation’s messages.
+3. **Given** all available messages across all conversations in the active profile are already loaded, **When** the user scrolls up at the top, **Then** no new messages are fetched and scroll position stays at the top.
+4. **Given** a batch is being loaded, **When** the user continues scrolling, **Then** the scroll position is preserved so the previously visible messages remain on screen after the new batch is prepended.
+5. **Given** the user is mid-history and sends a new message, **When** the reply arrives, **Then** the view scrolls back to the bottom to show the latest exchange.
 
 ---
 
@@ -81,7 +83,7 @@ When the user has scrolled to the top of the currently loaded messages and conti
 
 ### Functional Requirements
 
-- **FR-001**: On startup, the system MUST load and display the last 10 messages (user and assistant turns) from the most recent conversation for the active profile, ordered oldest-to-newest with the newest at the bottom.
+- **FR-001**: On startup, the system MUST load and display the last 10 messages (user and assistant turns) from the active profile history, ordered oldest-to-newest with the newest at the bottom.
 - **FR-002**: The messages area MUST be scrolled to the bottom on initial render so the most recent message is immediately visible.
 - **FR-003**: When the mouse cursor is positioned inside the messages viewport, mouse wheel scroll events MUST scroll the conversation history only and MUST NOT affect the input area's state.
 - **FR-004**: When the mouse cursor is positioned inside the input textarea, mouse wheel scroll events MUST cycle the input command history only and MUST NOT scroll the conversation history.
@@ -92,20 +94,22 @@ When the user has scrolled to the top of the currently loaded messages and conti
 - **FR-005**: Scrolling up/down with the mouse wheel in the messages area MUST navigate older/newer messages respectively.
 - **FR-005a**: Pressing Page Up MUST always scroll the messages history area toward older messages, regardless of mouse cursor position.
 - **FR-005b**: Pressing Page Down MUST always scroll the messages history area toward newer messages, regardless of mouse cursor position.
-- **FR-006**: When the user reaches the top of the currently loaded messages and triggers an upward scroll, the system MUST fetch the next older batch of messages and prepend them to the view.
+- **FR-006**: When the user reaches the top of the currently loaded messages and triggers an upward scroll, the system MUST fetch the next older batch of messages from the active profile history (including older conversations) and prepend them to the view.
 - **FR-007**: The lazy-load batch size MUST be small and fixed (default: 10 messages per batch) to bound memory use and render time.
 - **FR-008**: After prepending a new batch of older messages, the viewport MUST maintain the user's visual position so previously visible messages remain on screen (no jump).
+- **FR-008a**: When the loaded history crosses from one conversation to an older conversation, the system MUST render a thin separator line containing that older conversation’s start date at the boundary.
 - **FR-009**: When the user sends a new message or receives a reply, the view MUST scroll to the bottom automatically.
 - **FR-009a**: After a message is sent, the system MUST clear in-memory loaded input-history entries.
-- **FR-010**: When the active profile changes (e.g., via profile switch), the messages area MUST clear and reload the last 10 messages for the new profile.
+- **FR-010**: When the active profile changes (e.g., via profile switch), the messages area MUST clear and reload the last 10 messages for the new profile history.
 - **FR-011**: If message history is unavailable or empty on startup, the messages area MUST render empty without an error blocking use.
 - **FR-012**: The user message bubbles MUST be visually right-aligned (as in a typical messenger app) and assistant message bubbles MUST be visually left-aligned.
 
 ### Key Entities *(include if feature involves data)*
 
-- **ConversationHistory**: A time-ordered sequence of `chatMessage` entries belonging to a specific profile, sourced from the persistent message store. Has a cursor position indicating how much has been loaded.
+- **ConversationHistory**: A time-ordered sequence of `chatMessage` entries belonging to a specific profile, sourced from the persistent message store across all conversations in that profile. Has a cursor position indicating how much has been loaded.
+- **ConversationBoundary**: A visual separator inserted between messages from different conversations. Contains a thin divider and the older conversation’s start date.
 - **ScrollZone**: One of two named regions of the TUI — `messages` (the conversation viewport) and `input` (the text entry area). Mouse events are dispatched to the zone under the cursor.
-- **LazyLoadCursor**: A pointer (e.g., offset or oldest-loaded message timestamp) that tracks how far back in the history has been fetched, used to request the next batch.
+- **LazyLoadCursor**: A pointer (e.g., offset or oldest-loaded message timestamp) that tracks how far back in profile history has been fetched, used to request the next batch.
 
 ## Success Criteria *(mandatory)*
 
@@ -115,14 +119,15 @@ When the user has scrolled to the top of the currently loaded messages and conti
 - **SC-002**: A user can scroll the mouse wheel while hovering over the messages area without any unintended change to the input field text or command history.
 - **SC-003**: A user can scroll the mouse wheel while hovering over the input area to cycle command history without the messages area moving.
 - **SC-003a**: Input-history loading behavior matches policy: first scroll loads 3 entries, subsequent backward lazy-loads are in batches of 3, and no more than 12 entries are loaded per compose session.
-- **SC-004**: A user with a conversation of 50+ messages can scroll back through the full history from startup using only mouse wheel in the messages area or Page Up/Page Down keys.
+- **SC-004**: A user with profile history of 50+ messages spanning multiple conversations can scroll back through the full history from startup using only mouse wheel in the messages area or Page Up/Page Down keys.
+- **SC-004a**: Whenever scrolling crosses into an older conversation, the user sees a visible thin separator containing that conversation’s start date.
 - **SC-005**: No explicit startup performance measurement instrumentation is required for this feature; performance confidence is accepted based on bounded startup/lazy-load design and manual validation.
 - **SC-006**: After a profile switch, the messages area reflects the new profile's history within 1 second.
 
 ## Assumptions
 
 - The active conversation concept already exists in the data layer; messages are tied to a `conversation_id` which belongs to a profile. The feature reads from the existing store.
-- "Last 10 messages" refers to the 10 most recent non-system messages (user and assistant turns) in the most recently active conversation for the profile.
+- "Last 10 messages" refers to the 10 most recent non-system messages (user and assistant turns) in the active profile history, regardless of conversation boundaries.
 - The existing Bubble Tea viewport component tracks scroll position; the new behavior adds cursor-zone detection on top of it.
 - Mobile or touch-only input is out of scope; the feature targets desktop terminal use.
 - The visual messenger-style layout (right-aligned user bubbles, left-aligned assistant bubbles) is already implemented in the existing TUI code; this feature wires up the data loading and scroll routing, not a layout redesign.
