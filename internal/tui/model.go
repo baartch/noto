@@ -191,6 +191,14 @@ const (
 // ---- TUI model --------------------------------------------------------------
 
 // Model is the root Bubble Tea model for Noto.
+type scrollZone int
+
+const (
+	scrollZoneOutside scrollZone = iota
+	scrollZoneMessages
+	scrollZoneInput
+)
+
 type Model struct {
 	profileName string
 	activeModel string
@@ -451,7 +459,7 @@ func New(
 		historyErr:             "",
 	}
 	m.loadInitialConversationHistory(nil)
-	m.loadInitialInputHistoryBatch()
+	m.resetInputHistoryWindow()
 	return m
 }
 
@@ -487,6 +495,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.settingsEditor, cmd = m.settingsEditor.Update(msg)
 			return m, cmd
 		}
+
+	// ---- mouse --------------------------------------------------------------
+	case tea.MouseWheelMsg:
+		return m.handleMouseWheel(msg)
 
 	// ---- keyboard -----------------------------------------------------------
 	case tea.KeyPressMsg:
@@ -640,6 +652,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input.CursorEnd()
 				return m, nil
 			}
+			m.ensureInputHistoryLoaded()
 			if m.navigateHistory(-1) {
 				return m, nil
 			}
@@ -655,6 +668,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input.CursorEnd()
 				return m, nil
 			}
+			m.ensureInputHistoryLoaded()
 			if m.navigateHistory(1) {
 				return m, nil
 			}
@@ -662,9 +676,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport, vpCmd = m.viewport.Update(msg)
 			return m, vpCmd
 
-		case msg.Key().Code == tea.KeyPgUp, msg.Key().Code == tea.KeyPgDown:
+		case msg.Key().Code == tea.KeyPgUp:
 			var vpCmd tea.Cmd
-			m.viewport, vpCmd = m.viewport.Update(msg)
+			m.viewport, vpCmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+			return m, vpCmd
+
+		case msg.Key().Code == tea.KeyPgDown:
+			var vpCmd tea.Cmd
+			m.viewport, vpCmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 			return m, vpCmd
 
 		case msg.Key().Code == tea.KeyTab:
@@ -688,10 +707,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.clearSuggestions()
 			m.err = nil
 			m.recordHistory(val)
-			m.inputHistoryWindow = inputHistoryWindow{}
-			m.history = nil
-			m.historyBaseFrom = 0
-			m.historyIndex = 0
+			m.resetInputHistoryWindow()
 			return m.handleSubmit(val, cmds)
 		}
 
@@ -782,7 +798,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.settingsErr = ""
 		m.historyAll = append([]string(nil), msg.history...)
 		m.historyDraft = ""
-		m.loadInitialInputHistoryBatch()
+		m.resetInputHistoryWindow()
 		m.messages = []chatMessage{{role: "command", content: "Switched to profile: " + msg.profileName, timestamp: time.Now()}}
 		if len(msg.startupMessages) > 0 {
 			mapped := m.mapStoreMessagesToChatMessages(msg.startupMessages)
@@ -1024,6 +1040,13 @@ func (m *Model) loadOlderConversationHistoryBatch(older []chatMessage) {
 	m.conversationHistoryWindow.loadedCnt = len(combined)
 }
 
+func (m *Model) resetInputHistoryWindow() {
+	m.inputHistoryWindow = inputHistoryWindow{}
+	m.history = nil
+	m.historyBaseFrom = len(m.historyAll)
+	m.historyIndex = 0
+}
+
 func (m *Model) loadInitialInputHistoryBatch() {
 	if len(m.historyAll) == 0 {
 		m.inputHistoryWindow = inputHistoryWindow{}
@@ -1121,6 +1144,12 @@ func (m *Model) navigateHistory(delta int) bool {
 	m.input.SetValue(m.history[m.historyIndex])
 	m.input.CursorEnd()
 	return true
+}
+
+func (m *Model) ensureInputHistoryLoaded() {
+	if len(m.history) == 0 && len(m.historyAll) > 0 {
+		m.loadInitialInputHistoryBatch()
+	}
 }
 
 func (m *Model) loadOlderInputHistoryBatch() {
@@ -2015,6 +2044,51 @@ func (m *Model) SetStartupConversationHistory(messages []*store.Message, err err
 	if m.ready {
 		m.syncViewport()
 	}
+}
+
+func (m *Model) scrollZoneForY(y int) scrollZone {
+	if y < 0 || m.height <= 0 {
+		return scrollZoneOutside
+	}
+	inputLineY := m.height - lipgloss.Height(m.renderFooter()) - 2
+	if y >= 0 && y < m.viewport.Height() {
+		return scrollZoneMessages
+	}
+	if y == inputLineY || y == inputLineY+1 {
+		return scrollZoneInput
+	}
+	return scrollZoneOutside
+}
+
+func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	mouse := msg.Mouse()
+	zone := m.scrollZoneForY(mouse.Y)
+	switch zone {
+	case scrollZoneMessages:
+		if mouse.Button == tea.MouseWheelUp {
+			var cmd tea.Cmd
+			m.viewport, cmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+			return m, cmd
+		}
+		if mouse.Button == tea.MouseWheelDown {
+			var cmd tea.Cmd
+			m.viewport, cmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+			return m, cmd
+		}
+	case scrollZoneInput:
+		m.ensureInputHistoryLoaded()
+		if mouse.Button == tea.MouseWheelUp {
+			if m.navigateHistory(-1) {
+				return m, nil
+			}
+		}
+		if mouse.Button == tea.MouseWheelDown {
+			if m.navigateHistory(1) {
+				return m, nil
+			}
+		}
+	}
+	return m, nil
 }
 
 func (m *Model) syncViewport() {

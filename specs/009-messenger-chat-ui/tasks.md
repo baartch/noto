@@ -72,24 +72,24 @@
 
 ### Tests for User Story 2
 
-- [ ] T018 [P] [US2] Add unit tests for scroll-zone detection and dispatch in `tests/unit/tui/scroll_zone_routing_test.go`
-- [ ] T019 [P] [US2] Add unit tests for input-history lazy-load policy (0 preload, 3 first, +3, cap 12) in `tests/unit/tui/input_history_window_test.go`
-- [ ] T020 [P] [US2] Add integration test for wheel isolation (messages zone does not mutate input) in `tests/integration/tui_scroll_zone_isolation_test.go`
-- [ ] T021 [P] [US2] Add integration test for wheel isolation (input zone does not move messages viewport) in `tests/integration/tui_scroll_zone_isolation_test.go`
-- [ ] T022 [P] [US2] Add integration test that Page Up/Page Down always scroll messages history regardless of hover zone in `tests/integration/tui_pagekey_history_routing_test.go`
-- [ ] T023 [P] [US2] Add integration test for clear-in-memory-input-history after send in `tests/integration/tui_input_history_reset_test.go`
-- [ ] T024 [P] [US2] Add contract test for input-history policy rules from UI contract in `tests/contract/tui_input_history_contract_test.go`
+- [X] T018 [P] [US2] Add unit tests for scroll-zone detection and dispatch in `tests/unit/tui/scroll_zone_routing_test.go`
+- [X] T019 [P] [US2] Add unit tests for input-history lazy-load policy (0 preload, 3 first, +3, cap 12) in `tests/unit/tui/input_history_window_test.go`
+- [X] T020 [P] [US2] Add integration test for wheel isolation (messages zone does not mutate input) in `tests/integration/tui_scroll_zone_isolation_test.go`
+- [X] T021 [P] [US2] Add integration test for wheel isolation (input zone does not move messages viewport) in `tests/integration/tui_scroll_zone_isolation_test.go`
+- [X] T022 [P] [US2] Add integration test that Page Up/Page Down always scroll messages history regardless of hover zone in `tests/integration/tui_pagekey_history_routing_test.go`
+- [X] T023 [P] [US2] Add integration test for clear-in-memory-input-history after send in `tests/integration/tui_input_history_reset_test.go`
+- [X] T024 [P] [US2] Add contract test for input-history policy rules from UI contract in `tests/contract/tui_input_history_contract_test.go`
 
 ### Implementation for User Story 2
 
-- [ ] T025 [US2] Implement mouse hover zone calculation (`messages`/`input`/`outside`) in `internal/tui/model.go`
-- [ ] T026 [US2] Route mouse wheel events to zone-specific handlers only in `internal/tui/model.go`
-- [ ] T027 [US2] Ensure Page Up/Page Down always route to messages history scrolling, independent of hover zone, in `internal/tui/model.go`
-- [ ] T028 [US2] Remove overflow handoff behavior between textarea and message viewport in `internal/tui/model.go`
-- [ ] T029 [US2] Implement on-demand input-history first-load (latest 3) in `internal/tui/model.go`
-- [ ] T030 [US2] Implement incremental input-history backward lazy-load (+3) and cap enforcement (12) in `internal/tui/model.go`
-- [ ] T031 [US2] Preserve draft restoration and forward-navigation semantics with bounded window in `internal/tui/model.go`
-- [ ] T032 [US2] Clear in-memory input-history window immediately after send in `internal/tui/model.go`
+- [X] T025 [US2] Implement mouse hover zone calculation (`messages`/`input`/`outside`) in `internal/tui/model.go`
+- [X] T026 [US2] Route mouse wheel events to zone-specific handlers only in `internal/tui/model.go`
+- [X] T027 [US2] Ensure Page Up/Page Down always route to messages history scrolling, independent of hover zone, in `internal/tui/model.go`
+- [X] T028 [US2] Remove overflow handoff behavior between textarea and message viewport in `internal/tui/model.go`
+- [X] T029 [US2] Implement on-demand input-history first-load (latest 3) in `internal/tui/model.go`
+- [X] T030 [US2] Implement incremental input-history backward lazy-load (+3) and cap enforcement (12) in `internal/tui/model.go`
+- [X] T031 [US2] Preserve draft restoration and forward-navigation semantics with bounded window in `internal/tui/model.go`
+- [X] T032 [US2] Clear in-memory input-history window immediately after send in `internal/tui/model.go`
 
 **Checkpoint**: User Stories 1 and 2 both work independently.
 
