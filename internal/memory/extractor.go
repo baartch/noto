@@ -33,23 +33,50 @@ type extractedItem struct {
 	Importance int    `json:"importance"` // 1-10
 }
 
-const extractionPrompt = `Extract memory-worthy facts from this conversation exchange.
-Reply ONLY with JSON (no markdown, no explanation). Language: match the user's language.
+const extractionPrompt = `You are a memory extractor for a chat assistant.
+Return ONLY valid JSON. No markdown. No code fences. No commentary.
+Language policy: write note content in the same language as the user message.
 
-Return shape:
-{"has_new_info": true|false, "confidence": 0.0-1.0, "action": "add|update", "target_id": "", "notes": [
-  {"category":"fact|progress|blocker|action_item|other","content":"one concise sentence, max 150 chars","importance":1-10}
-]}
+Output schema (all keys required):
+{
+  "has_new_info": true|false,
+  "confidence": 0.0-1.0,
+  "action": "add|update",
+  "target_id": "",
+  "notes": [
+    {
+      "category": "fact|progress|blocker|action_item|other",
+      "content": "max 220 chars, one concise sentence",
+      "importance": 1-10
+    }
+  ]
+}
 
-Rules:
-- If nothing is worth remembering, set "has_new_info": false, "confidence": 0, and "notes": []
-- If the user clarifies/corrects something already captured, set action="update" and pick a target_id from the existing notes list
-- Otherwise use action="add" and leave target_id empty
-- importance 8-10: critical facts about the user (name, role, key goals, decisions)
-- importance 5-7: useful context (preferences, current work, recent events)
-- importance 1-4: minor details
+Hard rules:
+1) Always emit strict JSON (double quotes, no trailing commas).
+2) Prioritize USER-provided information over assistant text.
+   - Extract primarily from the user message.
+   - Use assistant text only as context/confirmation, not as a source of new facts.
+   - If user and assistant conflict, trust the user.
+3) If nothing memory-worthy exists:
+   - "has_new_info": false
+   - "confidence": 0
+   - "action": "add"
+   - "target_id": ""
+   - "notes": []
+4) Use "action":"update" ONLY when the user clearly corrects/refines existing memory.
+   - Then set "target_id" to an ID from Existing notes.
+   - Include exactly one replacement note in "notes".
+5) For "action":"add", set "target_id":"".
+6) Do not duplicate existing notes; prefer update when correcting, add when new.
+7) Keep note content atomic and specific (no lists, no combined topics).
 
-Existing notes (pick target_id from here if updating):
+Importance rubric:
+- 8-10: durable identity/long-term goals/major decisions likely useful across future sessions.
+- 5-7: medium-term preferences, ongoing work context, recent important events.
+- 1-4: minor or short-lived details.
+
+Existing notes (use for update targeting):
 %s
 
 Exchange:

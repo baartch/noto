@@ -22,13 +22,14 @@ const (
 
 // Message is the data model for a single conversation turn.
 type Message struct {
-	ID             string
-	ConversationID string
-	Role           MessageRole
-	Content        string
-	Provider       string
-	Model          string
-	CreatedAt      time.Time
+	ID                    string
+	ConversationID        string
+	ConversationStartedAt time.Time
+	Role                  MessageRole
+	Content               string
+	Provider              string
+	Model                 string
+	CreatedAt             time.Time
 }
 
 // MessageRepo manages CRUD operations for messages.
@@ -93,6 +94,162 @@ func (r *MessageRepo) CountByConversation(ctx context.Context, conversationID st
 		return 0, fmt.Errorf("store: count messages: %w", err)
 	}
 	return n, nil
+}
+
+// ListRecentByConversation returns the latest messages for a conversation in chronological order.
+func (r *MessageRepo) ListRecentByConversation(ctx context.Context, conversationID string, limit int) ([]*Message, error) {
+	if limit <= 0 {
+		return []*Message{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, conversation_id, role, content, provider, model, created_at
+		FROM messages
+		WHERE conversation_id = ?
+		ORDER BY created_at DESC
+		LIMIT ?
+	`, conversationID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: list recent by conversation: %w", err)
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	var out []*Message
+	for rows.Next() {
+		m := &Message{}
+		var role string
+		if err := rows.Scan(&m.ID, &m.ConversationID, &role, &m.Content, &m.Provider, &m.Model, &m.CreatedAt); err != nil {
+			return nil, fmt.Errorf("store: scan recent by conversation: %w", err)
+		}
+		m.Role = MessageRole(role)
+		out = append(out, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out, nil
+}
+
+// ListOlderByConversationBefore returns older messages than beforeCreatedAt for pagination.
+func (r *MessageRepo) ListOlderByConversationBefore(ctx context.Context, conversationID string, beforeCreatedAt time.Time, limit int) ([]*Message, error) {
+	if limit <= 0 {
+		return []*Message{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, conversation_id, role, content, provider, model, created_at
+		FROM messages
+		WHERE conversation_id = ? AND created_at < ?
+		ORDER BY created_at DESC
+		LIMIT ?
+	`, conversationID, beforeCreatedAt.UTC(), limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: list older by conversation: %w", err)
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	var out []*Message
+	for rows.Next() {
+		m := &Message{}
+		var role string
+		if err := rows.Scan(&m.ID, &m.ConversationID, &role, &m.Content, &m.Provider, &m.Model, &m.CreatedAt); err != nil {
+			return nil, fmt.Errorf("store: scan older by conversation: %w", err)
+		}
+		m.Role = MessageRole(role)
+		out = append(out, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out, nil
+}
+
+// ListRecentByProfile returns recent profile-scoped messages across conversations in chronological order.
+func (r *MessageRepo) ListRecentByProfile(ctx context.Context, profileID string, limit int) ([]*Message, error) {
+	if limit <= 0 {
+		return []*Message{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT m.id, m.conversation_id, c.started_at, m.role, m.content, m.provider, m.model, m.created_at
+		FROM messages m
+		JOIN conversations c ON m.conversation_id = c.id
+		WHERE c.profile_id = ?
+		ORDER BY m.created_at DESC
+		LIMIT ?
+	`, profileID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: list recent by profile: %w", err)
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	var out []*Message
+	for rows.Next() {
+		m := &Message{}
+		var role string
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.ConversationStartedAt, &role, &m.Content, &m.Provider, &m.Model, &m.CreatedAt); err != nil {
+			return nil, fmt.Errorf("store: scan recent by profile: %w", err)
+		}
+		m.Role = MessageRole(role)
+		out = append(out, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out, nil
+}
+
+// ListOlderByProfileBefore returns older profile-scoped messages before the given timestamp in chronological order.
+func (r *MessageRepo) ListOlderByProfileBefore(ctx context.Context, profileID string, beforeCreatedAt time.Time, limit int) ([]*Message, error) {
+	if limit <= 0 {
+		return []*Message{}, nil
+	}
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT m.id, m.conversation_id, c.started_at, m.role, m.content, m.provider, m.model, m.created_at
+		FROM messages m
+		JOIN conversations c ON m.conversation_id = c.id
+		WHERE c.profile_id = ? AND m.created_at < ?
+		ORDER BY m.created_at DESC
+		LIMIT ?
+	`, profileID, beforeCreatedAt.UTC(), limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: list older by profile: %w", err)
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	var out []*Message
+	for rows.Next() {
+		m := &Message{}
+		var role string
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.ConversationStartedAt, &role, &m.Content, &m.Provider, &m.Model, &m.CreatedAt); err != nil {
+			return nil, fmt.Errorf("store: scan older by profile: %w", err)
+		}
+		m.Role = MessageRole(role)
+		out = append(out, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out, nil
 }
 
 // ListRecentUserMessages returns recent user message contents for a profile.

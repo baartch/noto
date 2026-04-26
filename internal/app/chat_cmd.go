@@ -115,6 +115,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 	extractorFallback := false
 	cacheStatus := "cache: n/a"
 	inputHistory := loadInputHistory(ctx, profileDB, activeProfile.ID)
+	startupMessages, startupHistoryErr := loadStartupConversationMessages(ctx, profileDB, activeProfile.ID)
 	embeddingModelMissing := false
 	embeddingModel := ""
 
@@ -387,7 +388,8 @@ func runChat(_ *cobra.Command, _ []string) error {
 				}
 			}
 
-			return tui.ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, "tokens: n/a", extractorFallback, embeddingModelMissing, providerFn, listModelsFn, listEmbeddingsFn, modelSelectedFn, embeddingModelSelectedFn, extractorModelSelectedFn, tui.DefaultSettingsMenu(), inputHistory)
+			startupMessages, startupHistoryErr := loadStartupConversationMessages(ctx, profileDB, p.ID)
+			return tui.ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, "tokens: n/a", extractorFallback, embeddingModelMissing, providerFn, listModelsFn, listEmbeddingsFn, modelSelectedFn, embeddingModelSelectedFn, extractorModelSelectedFn, tui.DefaultSettingsMenu(), inputHistory, startupMessages, startupHistoryErr)
 		}
 	}
 	listBackupsFn := func(ctx context.Context) ([]string, error) {
@@ -412,6 +414,7 @@ func runChat(_ *cobra.Command, _ []string) error {
 		extractorModelSelectedFn,
 		inputHistory,
 	)
+	m.SetStartupConversationHistory(startupMessages, startupHistoryErr)
 	prog = tea.NewProgram(m)
 	if _, runErr := prog.Run(); runErr != nil {
 		return fmt.Errorf("chat: TUI error: %w", runErr)
@@ -432,6 +435,15 @@ func loadSystemPrompt(ctx context.Context, db *store.DB, profile *store.Profile)
 		return "You are Noto. A buddy who takes notes."
 	}
 	return strings.TrimSpace(prompt)
+}
+
+func loadStartupConversationMessages(ctx context.Context, db *store.DB, profileID string) ([]*store.Message, error) {
+	msgRepo := store.NewMessageRepo(db)
+	msgs, err := msgRepo.ListRecentByProfile(ctx, profileID, 10)
+	if err != nil {
+		return nil, fmt.Errorf("chat: load latest messages: %w", err)
+	}
+	return msgs, nil
 }
 
 // loadProviderConfig reads the active provider config and decrypts the API key.

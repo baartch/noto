@@ -67,7 +67,7 @@ func NotesSaving() tea.Msg { return notesSavingMsg{} }
 func StatsUpdated(formatted string) tea.Msg { return statsUpdatedMsg{formatted: formatted} }
 
 // ProfileSwitched updates the TUI state after switching profiles.
-func ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, tokenStatus string, extractorFallback, embeddingModelMissing bool, provider ProviderFunc, listModels ListModelsFunc, listEmbeddings ListEmbeddingsFunc, modelSelected ModelSelectedFunc, embeddingModelSelected EmbeddingModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, settings *SettingsMenu, history []string) profileSwitchedMsg {
+func ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, tokenStatus string, extractorFallback, embeddingModelMissing bool, provider ProviderFunc, listModels ListModelsFunc, listEmbeddings ListEmbeddingsFunc, modelSelected ModelSelectedFunc, embeddingModelSelected EmbeddingModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, settings *SettingsMenu, history []string, startupMessages []*store.Message, startupHistoryErr error) profileSwitchedMsg {
 	return profileSwitchedMsg{
 		profileName:            profileName,
 		activeModel:            activeModel,
@@ -85,6 +85,8 @@ func ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, c
 		extractorModelSelected: extractorModelSelected,
 		settings:               settings,
 		history:                history,
+		startupMessages:        startupMessages,
+		startupHistoryErr:      startupHistoryErr,
 	}
 }
 
@@ -164,6 +166,8 @@ type profileSwitchedMsg struct {
 	extractorModelSelected ExtractorModelSelectedFunc
 	settings               *SettingsMenu
 	history                []string
+	startupMessages        []*store.Message
+	startupHistoryErr      error
 }
 type profileSwitchFailedMsg struct{ err error }
 type spinnerTickMsg struct{}
@@ -186,6 +190,14 @@ const (
 
 // ---- TUI model --------------------------------------------------------------
 
+type scrollZone int
+
+const (
+	scrollZoneOutside scrollZone = iota
+	scrollZoneMessages
+	scrollZoneInput
+)
+
 // Model is the root Bubble Tea model for Noto.
 type Model struct {
 	profileName string
@@ -198,6 +210,7 @@ type Model struct {
 	width       int
 	height      int
 	err         error
+	historyErr  string
 	ready       bool
 	keys        keyMap
 	help        help.Model
@@ -209,9 +222,16 @@ type Model struct {
 	suggActive  bool
 
 	// input history
-	history      []string
-	historyIndex int
-	historyDraft string
+	history         []string
+	historyAll      []string
+	historyIndex    int
+	historyDraft    string
+	historyBaseFrom int
+
+	conversationHistoryWindow conversationHistoryWindow
+	inputHistoryWindow        inputHistoryWindow
+	allMessages               []chatMessage
+	messageLoadInProgress     bool
 
 	// picker overlay
 	picker             *pickerState
@@ -263,10 +283,24 @@ type Model struct {
 	embeddingModel         string
 }
 
+type conversationHistoryWindow struct {
+	messages  []chatMessage
+	hasOlder  bool
+	loadedCnt int
+}
+
+type inputHistoryWindow struct {
+	entries   []string
+	hasOlder  bool
+	loadedCnt int
+}
+
 type chatMessage struct {
-	role      string
-	content   string
-	timestamp time.Time
+	role                  string
+	content               string
+	timestamp             time.Time
+	conversationID        string
+	conversationStartedAt time.Time
 }
 
 type keyMap struct {
@@ -383,6 +417,9 @@ func New(
 			keys.openSettings,
 			keys.openModel,
 			keys.clearInput,
+			key.NewBinding(key.WithKeys("wheel"), key.WithHelp("wheel", "scroll messages/input by cursor zone")),
+			key.NewBinding(key.WithKeys("pgup/pgdn"), key.WithHelp("pgup/pgdn", "scroll messages")),
+			key.NewBinding(key.WithKeys("end"), key.WithHelp("end", "jump to latest message")),
 			ti.KeyMap.InsertNewline,
 			ti.KeyMap.WordBackward,
 			ti.KeyMap.WordForward,
@@ -394,15 +431,15 @@ func New(
 		inputHistory = []string{}
 	}
 
-	return Model{
+	m := Model{
 		profileName:            profileName,
 		activeModel:            activeModel,
 		cacheStatus:            cacheStatus,
 		tokenStatus:            tokenStatus,
 		input:                  ti,
 		suggCursor:             -1,
-		history:                inputHistory,
-		historyIndex:           len(inputHistory),
+		historyAll:             append([]string(nil), inputHistory...),
+		historyIndex:           0,
 		dispatcher:             dispatcher,
 		execCtx:                execCtx,
 		provider:               providerFn,
@@ -426,7 +463,11 @@ func New(
 		settingsList:           settingsList,
 		settingsEditor:         settingsEditor,
 		settingsErr:            "",
+		historyErr:             "",
 	}
+	m.loadInitialConversationHistory(nil)
+	m.resetInputHistoryWindow()
+	return m
 }
 
 // Init implements tea.Model.
@@ -448,6 +489,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.ready {
 			m.viewport = viewport.New(viewport.WithWidth(msg.Width), viewport.WithHeight(vpH))
 			m.viewport.SetContent(m.renderHistory())
+			m.viewport.GotoBottom()
 			m.ready = true
 		} else {
 			m.viewport.SetWidth(msg.Width)
@@ -461,6 +503,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.settingsEditor, cmd = m.settingsEditor.Update(msg)
 			return m, cmd
 		}
+
+	// ---- mouse --------------------------------------------------------------
+	case tea.MouseWheelMsg:
+		return m.handleMouseWheel(msg)
 
 	// ---- keyboard -----------------------------------------------------------
 	case tea.KeyPressMsg:
@@ -614,6 +660,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input.CursorEnd()
 				return m, nil
 			}
+			m.ensureInputHistoryLoaded()
 			if m.navigateHistory(-1) {
 				return m, nil
 			}
@@ -629,6 +676,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input.CursorEnd()
 				return m, nil
 			}
+			m.ensureInputHistoryLoaded()
 			if m.navigateHistory(1) {
 				return m, nil
 			}
@@ -636,10 +684,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport, vpCmd = m.viewport.Update(msg)
 			return m, vpCmd
 
-		case msg.Key().Code == tea.KeyPgUp, msg.Key().Code == tea.KeyPgDown:
+		case msg.Key().Code == tea.KeyPgUp:
 			var vpCmd tea.Cmd
-			m.viewport, vpCmd = m.viewport.Update(msg)
+			for range conversationWheelStepLines {
+				m.viewport, vpCmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+			}
+			m.maybeLoadOlderConversationHistory()
 			return m, vpCmd
+
+		case msg.Key().Code == tea.KeyPgDown:
+			var vpCmd tea.Cmd
+			for range conversationWheelStepLines {
+				m.viewport, vpCmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+			}
+			return m, vpCmd
+
+		case msg.Key().Code == tea.KeyEnd:
+			m.viewport.GotoBottom()
+			return m, nil
 
 		case msg.Key().Code == tea.KeyTab:
 			if len(m.suggestions) > 0 {
@@ -662,6 +724,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.clearSuggestions()
 			m.err = nil
 			m.recordHistory(val)
+			m.resetInputHistoryWindow()
 			return m.handleSubmit(val, cmds)
 		}
 
@@ -750,10 +813,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.settingsEditEntry = nil
 		m.settingsEditing = false
 		m.settingsErr = ""
-		m.history = msg.history
-		m.historyIndex = len(msg.history)
+		m.historyAll = append([]string(nil), msg.history...)
 		m.historyDraft = ""
+		m.resetInputHistoryWindow()
 		m.messages = []chatMessage{{role: "command", content: "Switched to profile: " + msg.profileName, timestamp: time.Now()}}
+		if len(msg.startupMessages) > 0 {
+			mapped := m.mapStoreMessagesToChatMessages(msg.startupMessages)
+			m.loadInitialConversationHistory(mapped)
+			m.messages = m.conversationHistoryWindow.messages
+		} else {
+			m.loadInitialConversationHistory(nil)
+		}
+		m.setHistoryError(msg.startupHistoryErr)
 		m.err = nil
 		m.clearSuggestions()
 		m.input.SetValue("")
@@ -956,6 +1027,179 @@ func (m *Model) clearSuggestions() {
 	m.suggActive = false
 }
 
+func (m *Model) loadInitialConversationHistory(messages []chatMessage) {
+	if len(messages) == 0 {
+		m.conversationHistoryWindow = conversationHistoryWindow{messages: m.messages, hasOlder: false, loadedCnt: len(m.messages)}
+		m.allMessages = append([]chatMessage(nil), m.messages...)
+		return
+	}
+	m.allMessages = append([]chatMessage(nil), messages...)
+	if len(messages) > conversationInitialLoadSize {
+		messages = messages[len(messages)-conversationInitialLoadSize:]
+		m.conversationHistoryWindow.hasOlder = true
+	} else {
+		// For profile-wide startup loads we only fetch the latest window first.
+		// If window is full-size, optimistically allow one older fetch attempt.
+		m.conversationHistoryWindow.hasOlder = len(messages) == conversationInitialLoadSize
+	}
+	m.conversationHistoryWindow.messages = append([]chatMessage(nil), messages...)
+	m.conversationHistoryWindow.loadedCnt = len(messages)
+}
+
+func (m *Model) loadOlderConversationHistoryBatch() {
+	if m.messageLoadInProgress || !m.conversationHistoryWindow.hasOlder {
+		return
+	}
+	m.messageLoadInProgress = true
+	defer func() { m.messageLoadInProgress = false }()
+
+	loaded := len(m.conversationHistoryWindow.messages)
+	total := len(m.allMessages)
+	if loaded >= total {
+		m.conversationHistoryWindow.hasOlder = false
+		return
+	}
+	remaining := total - loaded
+	batch := min(conversationLazyBatchSize, remaining)
+	start := max(total-loaded-batch, 0)
+	older := m.allMessages[start : start+batch]
+
+	anchor := m.viewport.YOffset()
+	beforeLines := m.viewport.TotalLineCount()
+	combined := make([]chatMessage, 0, len(older)+len(m.conversationHistoryWindow.messages))
+	combined = append(combined, older...)
+	combined = append(combined, m.conversationHistoryWindow.messages...)
+	m.conversationHistoryWindow.messages = combined
+	m.conversationHistoryWindow.loadedCnt = len(combined)
+	m.conversationHistoryWindow.hasOlder = len(combined) < total
+	m.messages = combined
+	if m.ready {
+		m.viewport.SetContent(m.renderHistory())
+		afterLines := m.viewport.TotalLineCount()
+		m.viewport.SetYOffset(anchor + max(0, afterLines-beforeLines))
+	}
+}
+
+func (m *Model) resetInputHistoryWindow() {
+	m.inputHistoryWindow = inputHistoryWindow{}
+	m.history = nil
+	m.historyBaseFrom = len(m.historyAll)
+	m.historyIndex = 0
+}
+
+func (m *Model) loadInitialInputHistoryBatch() {
+	if len(m.historyAll) == 0 {
+		m.inputHistoryWindow = inputHistoryWindow{}
+		m.history = nil
+		m.historyBaseFrom = 0
+		m.historyIndex = 0
+		return
+	}
+	start := max(len(m.historyAll)-inputFirstLoadSize, 0)
+	entries := append([]string(nil), m.historyAll[start:]...)
+	m.inputHistoryWindow.entries = entries
+	m.inputHistoryWindow.loadedCnt = len(entries)
+	m.inputHistoryWindow.hasOlder = start > 0
+	m.history = entries
+	m.historyBaseFrom = start
+	m.historyIndex = len(m.history)
+}
+
+func (m *Model) maybeLoadOlderConversationHistory() {
+	if !m.ready || !m.viewport.AtTop() {
+		return
+	}
+	if len(m.allMessages) > len(m.conversationHistoryWindow.messages) {
+		m.loadOlderConversationHistoryBatch()
+		return
+	}
+	m.loadOlderConversationHistoryFromStore()
+}
+
+func (m *Model) loadOlderConversationHistoryFromStore() {
+	if m.messageLoadInProgress || !m.conversationHistoryWindow.hasOlder {
+		return
+	}
+	if m.execCtx == nil || m.execCtx.DB == nil || m.execCtx.ProfileID == "" {
+		m.conversationHistoryWindow.hasOlder = false
+		return
+	}
+	if len(m.conversationHistoryWindow.messages) == 0 {
+		m.conversationHistoryWindow.hasOlder = false
+		return
+	}
+	before := m.conversationHistoryWindow.messages[0].timestamp
+	if before.IsZero() {
+		m.conversationHistoryWindow.hasOlder = false
+		return
+	}
+
+	m.messageLoadInProgress = true
+	defer func() { m.messageLoadInProgress = false }()
+
+	repo := store.NewMessageRepo(m.execCtx.DB)
+	older, err := repo.ListOlderByProfileBefore(context.Background(), m.execCtx.ProfileID, before, conversationLazyBatchSize)
+	if err != nil {
+		m.setHistoryError(err)
+		return
+	}
+	if len(older) == 0 {
+		m.conversationHistoryWindow.hasOlder = false
+		return
+	}
+
+	mapped := m.mapStoreMessagesToChatMessages(older)
+	anchor := m.viewport.YOffset()
+	beforeLines := m.viewport.TotalLineCount()
+	combined := make([]chatMessage, 0, len(mapped)+len(m.conversationHistoryWindow.messages))
+	combined = append(combined, mapped...)
+	combined = append(combined, m.conversationHistoryWindow.messages...)
+	m.conversationHistoryWindow.messages = combined
+	m.conversationHistoryWindow.loadedCnt = len(combined)
+	m.conversationHistoryWindow.hasOlder = len(mapped) == conversationLazyBatchSize
+	m.messages = combined
+	m.setHistoryError(nil)
+	if m.ready {
+		m.viewport.SetContent(m.renderHistory())
+		afterLines := m.viewport.TotalLineCount()
+		m.viewport.SetYOffset(anchor + max(0, afterLines-beforeLines))
+	}
+}
+
+func (m *Model) setHistoryError(err error) {
+	if err == nil {
+		m.historyErr = ""
+		return
+	}
+	m.historyErr = err.Error()
+}
+
+func (m *Model) mapStoreMessagesToChatMessages(messages []*store.Message) []chatMessage {
+	out := make([]chatMessage, 0, len(messages))
+	for _, sm := range messages {
+		if sm == nil {
+			continue
+		}
+		role := "command"
+		switch sm.Role {
+		case store.RoleUser:
+			role = "user"
+		case store.RoleAssistant:
+			role = "assistant"
+		case store.RoleSystem:
+			role = "command"
+		}
+		out = append(out, chatMessage{
+			role:                  role,
+			content:               sm.Content,
+			timestamp:             sm.CreatedAt,
+			conversationID:        sm.ConversationID,
+			conversationStartedAt: sm.ConversationStartedAt,
+		})
+	}
+	return out
+}
+
 func (m *Model) recordHistory(val string) {
 	if strings.TrimSpace(val) == "" {
 		return
@@ -963,13 +1207,20 @@ func (m *Model) recordHistory(val string) {
 	if len(m.history) == 0 || m.history[len(m.history)-1] != val {
 		m.history = append(m.history, val)
 	}
+	m.historyAll = append(m.historyAll, val)
 	m.historyIndex = len(m.history)
 	m.historyDraft = ""
+	m.inputHistoryWindow.entries = append([]string(nil), m.history...)
+	m.inputHistoryWindow.loadedCnt = len(m.inputHistoryWindow.entries)
+	m.inputHistoryWindow.hasOlder = m.historyBaseFrom > 0
 }
 
 func (m *Model) navigateHistory(delta int) bool {
 	if len(m.history) == 0 {
 		return false
+	}
+	if delta < 0 && m.historyIndex == 0 {
+		m.loadOlderInputHistoryBatch()
 	}
 	if m.historyIndex == 0 && delta < 0 {
 		return false
@@ -999,6 +1250,36 @@ func (m *Model) navigateHistory(delta int) bool {
 	m.input.SetValue(m.history[m.historyIndex])
 	m.input.CursorEnd()
 	return true
+}
+
+func (m *Model) ensureInputHistoryLoaded() {
+	if len(m.history) == 0 && len(m.historyAll) > 0 {
+		m.loadInitialInputHistoryBatch()
+	}
+}
+
+func (m *Model) loadOlderInputHistoryBatch() {
+	if !m.inputHistoryWindow.hasOlder || len(m.inputHistoryWindow.entries) >= inputHistoryMaxLoaded {
+		return
+	}
+	load := inputLazyBatchSize
+	remaining := inputHistoryMaxLoaded - len(m.inputHistoryWindow.entries)
+	if load > remaining {
+		load = remaining
+	}
+	start := max(m.historyBaseFrom-load, 0)
+	end := m.historyBaseFrom
+	if end <= start {
+		m.inputHistoryWindow.hasOlder = false
+		return
+	}
+	older := append([]string(nil), m.historyAll[start:end]...)
+	m.inputHistoryWindow.entries = append(older, m.inputHistoryWindow.entries...)
+	m.inputHistoryWindow.loadedCnt = len(m.inputHistoryWindow.entries)
+	m.historyBaseFrom = start
+	m.inputHistoryWindow.hasOlder = start > 0 && len(m.inputHistoryWindow.entries) < inputHistoryMaxLoaded
+	m.history = append([]string(nil), m.inputHistoryWindow.entries...)
+	m.historyIndex = load
 }
 
 // View implements tea.Model.
@@ -1031,6 +1312,9 @@ func (m Model) View() tea.View {
 	if m.err != nil {
 		errBlock = errStyle.Render("  ✗ "+m.err.Error()) + "\n"
 	}
+	if m.historyErr != "" {
+		errBlock += errStyle.Render("  ! "+m.historyErr) + "\n"
+	}
 
 	// ---- input bar ----
 	inputDivider := dividerStyle.Render(strings.Repeat("─", m.width))
@@ -1054,6 +1338,7 @@ func (m Model) View() tea.View {
 		inputLine + "\n" +
 		footer)
 	view.AltScreen = true
+	view.MouseMode = tea.MouseModeCellMotion
 	return view
 }
 
@@ -1824,12 +2109,14 @@ func (m *Model) resolvePending(content string) {
 		}
 	}
 	m.messages = append(m.messages, chatMessage{role: "assistant", content: content, timestamp: time.Now()})
+	m.allMessages = append([]chatMessage(nil), m.messages...)
 }
 
 func (m *Model) clearPending() {
 	for i := len(m.messages) - 1; i >= 0; i-- {
 		if m.messages[i].role == "pending" {
 			m.messages = append(m.messages[:i], m.messages[i+1:]...)
+			m.allMessages = append([]chatMessage(nil), m.messages...)
 			return
 		}
 	}
@@ -1847,13 +2134,98 @@ func (m *Model) updatePendingSpinner() {
 	}
 }
 
-// syncViewport rebuilds viewport content and scrolls to bottom.
+// SetStartupConversationHistory seeds the visible conversation history and optional non-fatal load error.
+func (m *Model) SetStartupConversationHistory(messages []*store.Message, err error) {
+	if err != nil {
+		m.setHistoryError(err)
+	}
+	if len(messages) == 0 {
+		return
+	}
+	chatMsgs := m.mapStoreMessagesToChatMessages(messages)
+	m.loadInitialConversationHistory(chatMsgs)
+	m.messages = m.conversationHistoryWindow.messages
+	m.setHistoryError(nil)
+	if m.ready {
+		m.syncViewport()
+	}
+}
+
+func (m *Model) scrollZoneForY(y int) scrollZone {
+	if y < 0 || m.height <= 0 {
+		return scrollZoneOutside
+	}
+
+	footerH := lipgloss.Height(m.renderFooter())
+	inputH := lipgloss.Height(strings.TrimRight(m.input.View(), "\n"))
+	if inputH <= 0 {
+		inputH = 1
+	}
+
+	// Input occupies lines above the footer; extend one row upward to cover
+	// divider/renderer variance across terminals.
+	inputStartY := m.height - footerH - inputH - 2
+	inputEndY := max(m.height-footerH-3, inputStartY)
+
+	if y >= inputStartY && y <= inputEndY {
+		return scrollZoneInput
+	}
+	if y >= 0 && y < m.viewport.Height() {
+		return scrollZoneMessages
+	}
+	return scrollZoneOutside
+}
+
+func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	mouse := msg.Mouse()
+	zone := m.scrollZoneForY(mouse.Y)
+	switch zone {
+	case scrollZoneOutside:
+		return m, nil
+	case scrollZoneMessages:
+		if mouse.Button == tea.MouseWheelUp {
+			var cmd tea.Cmd
+			for range conversationWheelStepLines {
+				m.viewport, cmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+			}
+			m.maybeLoadOlderConversationHistory()
+			return m, cmd
+		}
+		if mouse.Button == tea.MouseWheelDown {
+			var cmd tea.Cmd
+			for range conversationWheelStepLines {
+				m.viewport, cmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+			}
+			return m, cmd
+		}
+	case scrollZoneInput:
+		m.ensureInputHistoryLoaded()
+		if mouse.Button == tea.MouseWheelUp {
+			if m.navigateHistory(-1) {
+				return m, nil
+			}
+		}
+		if mouse.Button == tea.MouseWheelDown {
+			if m.navigateHistory(1) {
+				return m, nil
+			}
+		}
+	}
+	return m, nil
+}
+
 func (m *Model) syncViewport() {
 	if !m.ready {
 		return
 	}
 	m.viewport.SetContent(m.renderHistory())
 	m.viewport.GotoBottom()
+	m.conversationHistoryWindow.messages = append([]chatMessage(nil), m.messages...)
+	m.conversationHistoryWindow.loadedCnt = len(m.messages)
+	if len(m.allMessages) == 0 || len(m.messages) >= len(m.allMessages) {
+		m.allMessages = append([]chatMessage(nil), m.messages...)
+		m.conversationHistoryWindow.hasOlder = false
+	}
 }
 
 // renderHistory renders all chat messages using styled bubbles.
@@ -1868,7 +2240,18 @@ func (m *Model) renderHistory() string {
 	}
 
 	var sb strings.Builder
-	for _, msg := range m.messages {
+	for i, msg := range m.messages {
+		if i > 0 {
+			prev := m.messages[i-1]
+			if msg.conversationID != "" && prev.conversationID != "" && msg.conversationID != prev.conversationID {
+				boundaryAt := msg.conversationStartedAt
+				if boundaryAt.IsZero() {
+					boundaryAt = msg.timestamp
+				}
+				sb.WriteString(renderConversationBoundary(boundaryAt, termWidth))
+				sb.WriteString("\n\n")
+			}
+		}
 		ts := msg.timestamp
 		if ts.IsZero() {
 			ts = time.Now()

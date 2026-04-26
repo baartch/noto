@@ -40,6 +40,7 @@ var (
 	suggNormalStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	suggSelectStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("63")).Bold(true)
 	dividerStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
+	boundaryStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("237"))
 	promptStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	cursorStyleDef  = textarea.CursorStyle{Color: lipgloss.Color("63"), Shape: tea.CursorBlock, Blink: true}
 
