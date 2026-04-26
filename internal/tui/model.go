@@ -190,7 +190,6 @@ const (
 
 // ---- TUI model --------------------------------------------------------------
 
-// Model is the root Bubble Tea model for Noto.
 type scrollZone int
 
 const (
@@ -199,6 +198,7 @@ const (
 	scrollZoneInput
 )
 
+// Model is the root Bubble Tea model for Noto.
 type Model struct {
 	profileName string
 	activeModel string
@@ -1044,14 +1044,8 @@ func (m *Model) loadOlderConversationHistoryBatch() {
 		return
 	}
 	remaining := total - loaded
-	batch := conversationLazyBatchSize
-	if remaining < batch {
-		batch = remaining
-	}
-	start := total - loaded - batch
-	if start < 0 {
-		start = 0
-	}
+	batch := min(conversationLazyBatchSize, remaining)
+	start := max(total-loaded-batch, 0)
 	older := m.allMessages[start : start+batch]
 
 	anchor := m.viewport.YOffset()
@@ -1083,10 +1077,7 @@ func (m *Model) loadInitialInputHistoryBatch() {
 		m.historyIndex = 0
 		return
 	}
-	start := len(m.historyAll) - inputFirstLoadSize
-	if start < 0 {
-		start = 0
-	}
+	start := max(len(m.historyAll)-inputFirstLoadSize, 0)
 	entries := append([]string(nil), m.historyAll[start:]...)
 	m.inputHistoryWindow.entries = entries
 	m.inputHistoryWindow.loadedCnt = len(entries)
@@ -1123,6 +1114,8 @@ func (m *Model) mapStoreMessagesToChatMessages(messages []*store.Message) []chat
 			role = "user"
 		case store.RoleAssistant:
 			role = "assistant"
+		case store.RoleSystem:
+			role = "command"
 		}
 		out = append(out, chatMessage{role: role, content: sm.Content, timestamp: sm.CreatedAt})
 	}
@@ -1196,10 +1189,7 @@ func (m *Model) loadOlderInputHistoryBatch() {
 	if load > remaining {
 		load = remaining
 	}
-	start := m.historyBaseFrom - load
-	if start < 0 {
-		start = 0
-	}
+	start := max(m.historyBaseFrom-load, 0)
 	end := m.historyBaseFrom
 	if end <= start {
 		m.inputHistoryWindow.hasOlder = false
@@ -2065,7 +2055,6 @@ func (m *Model) updatePendingSpinner() {
 	}
 }
 
-// syncViewport rebuilds viewport content and scrolls to bottom.
 // SetStartupConversationHistory seeds the visible conversation history and optional non-fatal load error.
 func (m *Model) SetStartupConversationHistory(messages []*store.Message, err error) {
 	if err != nil {
@@ -2101,6 +2090,8 @@ func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	mouse := msg.Mouse()
 	zone := m.scrollZoneForY(mouse.Y)
 	switch zone {
+	case scrollZoneOutside:
+		return m, nil
 	case scrollZoneMessages:
 		if mouse.Button == tea.MouseWheelUp {
 			var cmd tea.Cmd

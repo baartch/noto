@@ -125,10 +125,10 @@
 
 **Purpose**: Finish quality gates, docs sync, and cross-story regression hardening.
 
-- [ ] T043 [P] Update feature validation procedure with any discovered nuances in `specs/009-messenger-chat-ui/quickstart.md`
-- [ ] T044 [P] Add/refresh regression coverage references in `specs/009-messenger-chat-ui/contracts/ui-scroll-behavior.md`
-- [ ] T045 Run full quality gates (`make fmt && make lint && make vet && make test`) and record outcomes in `specs/009-messenger-chat-ui/plan.md`
-- [ ] T046 Manually verify FR-012 baseline alignment (user messages right-aligned, assistant messages left-aligned) and record reviewer sign-off in `specs/009-messenger-chat-ui/plan.md`
+- [X] T043 [P] Update feature validation procedure with any discovered nuances in `specs/009-messenger-chat-ui/quickstart.md`
+- [X] T044 [P] Add/refresh regression coverage references in `specs/009-messenger-chat-ui/contracts/ui-scroll-behavior.md`
+- [X] T045 Run full quality gates (`make fmt && make lint && make vet && make test`) and record outcomes in `specs/009-messenger-chat-ui/plan.md`
+- [X] T046 Manually verify FR-012 baseline alignment (user messages right-aligned, assistant messages left-aligned) and record reviewer sign-off in `specs/009-messenger-chat-ui/plan.md`
 
 ---
 

@@ -85,7 +85,6 @@ func (r *ConversationRepo) ListByProfile(ctx context.Context, profileID string) 
 	return convs, rows.Err()
 }
 
-// Archive sets the conversation status to archived and records its end time.
 // GetMostRecentByProfile returns the most recently started conversation for a profile.
 func (r *ConversationRepo) GetMostRecentByProfile(ctx context.Context, profileID string) (*Conversation, error) {
 	row := r.db.QueryRowContext(ctx, `
@@ -98,6 +97,7 @@ func (r *ConversationRepo) GetMostRecentByProfile(ctx context.Context, profileID
 	return r.scanOne(row)
 }
 
+// Archive sets the conversation status to archived and records its end time.
 func (r *ConversationRepo) Archive(ctx context.Context, id string) error {
 	now := time.Now().UTC()
 	result, err := r.db.ExecContext(ctx, `

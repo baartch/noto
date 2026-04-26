@@ -29,6 +29,8 @@ Implement messenger-style history continuity and scroll behavior in the TUI by l
 
 Post-Phase-1 Re-check: ✅ No violations introduced by research/design artifacts.
 
+Manual FR-012 Baseline Verification (2026-04-26): ✅ Reviewer sign-off recorded — user bubbles remain right-aligned, assistant bubbles remain left-aligned; no layout changes introduced by this feature.
+
 ## Project Structure
 
 ### Documentation (this feature)
@@ -121,3 +123,4 @@ Completed artifacts:
 
 9. **Quality gates before merge**
    - Run `make fmt`, `make lint`, `make vet`, `make test`.
+   - Status (2026-04-26): ✅ passed (`make fmt && make lint && make vet && make test`).
