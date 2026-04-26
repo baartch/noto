@@ -1322,6 +1322,7 @@ func (m Model) View() tea.View {
 		inputLine + "\n" +
 		footer)
 	view.AltScreen = true
+	view.MouseMode = tea.MouseModeCellMotion
 	return view
 }
 
@@ -2157,13 +2158,17 @@ func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	case scrollZoneMessages:
 		if mouse.Button == tea.MouseWheelUp {
 			var cmd tea.Cmd
-			m.viewport, cmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+			for range conversationWheelStepLines {
+				m.viewport, cmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+			}
 			m.maybeLoadOlderConversationHistory()
 			return m, cmd
 		}
 		if mouse.Button == tea.MouseWheelDown {
 			var cmd tea.Cmd
-			m.viewport, cmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+			for range conversationWheelStepLines {
+				m.viewport, cmd = m.viewport.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+			}
 			return m, cmd
 		}
 	case scrollZoneInput:
