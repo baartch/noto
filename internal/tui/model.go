@@ -209,9 +209,14 @@ type Model struct {
 	suggActive  bool
 
 	// input history
-	history      []string
-	historyIndex int
-	historyDraft string
+	history         []string
+	historyAll      []string
+	historyIndex    int
+	historyDraft    string
+	historyBaseFrom int
+
+	conversationHistoryWindow conversationHistoryWindow
+	inputHistoryWindow        inputHistoryWindow
 
 	// picker overlay
 	picker             *pickerState
@@ -261,6 +266,18 @@ type Model struct {
 	extractorFallback      bool
 	embeddingModelMissing  bool
 	embeddingModel         string
+}
+
+type conversationHistoryWindow struct {
+	messages  []chatMessage
+	hasOlder  bool
+	loadedCnt int
+}
+
+type inputHistoryWindow struct {
+	entries   []string
+	hasOlder  bool
+	loadedCnt int
 }
 
 type chatMessage struct {
@@ -394,15 +411,15 @@ func New(
 		inputHistory = []string{}
 	}
 
-	return Model{
+	m := Model{
 		profileName:            profileName,
 		activeModel:            activeModel,
 		cacheStatus:            cacheStatus,
 		tokenStatus:            tokenStatus,
 		input:                  ti,
 		suggCursor:             -1,
-		history:                inputHistory,
-		historyIndex:           len(inputHistory),
+		historyAll:             append([]string(nil), inputHistory...),
+		historyIndex:           0,
 		dispatcher:             dispatcher,
 		execCtx:                execCtx,
 		provider:               providerFn,
@@ -427,6 +444,9 @@ func New(
 		settingsEditor:         settingsEditor,
 		settingsErr:            "",
 	}
+	m.loadInitialConversationHistory(nil)
+	m.loadInitialInputHistoryBatch()
+	return m
 }
 
 // Init implements tea.Model.
@@ -662,6 +682,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.clearSuggestions()
 			m.err = nil
 			m.recordHistory(val)
+			m.inputHistoryWindow = inputHistoryWindow{}
+			m.history = nil
+			m.historyBaseFrom = 0
+			m.historyIndex = 0
 			return m.handleSubmit(val, cmds)
 		}
 
@@ -750,9 +774,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.settingsEditEntry = nil
 		m.settingsEditing = false
 		m.settingsErr = ""
-		m.history = msg.history
-		m.historyIndex = len(msg.history)
+		m.historyAll = append([]string(nil), msg.history...)
 		m.historyDraft = ""
+		m.loadInitialInputHistoryBatch()
 		m.messages = []chatMessage{{role: "command", content: "Switched to profile: " + msg.profileName, timestamp: time.Now()}}
 		m.err = nil
 		m.clearSuggestions()
@@ -956,6 +980,59 @@ func (m *Model) clearSuggestions() {
 	m.suggActive = false
 }
 
+func (m *Model) loadInitialConversationHistory(messages []chatMessage) {
+	if len(messages) == 0 {
+		m.conversationHistoryWindow = conversationHistoryWindow{messages: m.messages, hasOlder: false, loadedCnt: len(m.messages)}
+		return
+	}
+	if len(messages) > conversationInitialLoadSize {
+		messages = messages[len(messages)-conversationInitialLoadSize:]
+		m.conversationHistoryWindow.hasOlder = true
+	} else {
+		m.conversationHistoryWindow.hasOlder = false
+	}
+	m.conversationHistoryWindow.messages = messages
+	m.conversationHistoryWindow.loadedCnt = len(messages)
+}
+
+func (m *Model) loadOlderConversationHistoryBatch(older []chatMessage) {
+	if len(older) == 0 {
+		m.conversationHistoryWindow.hasOlder = false
+		return
+	}
+	batch := older
+	if len(batch) > conversationLazyBatchSize {
+		batch = batch[len(batch)-conversationLazyBatchSize:]
+	}
+	combined := make([]chatMessage, 0, len(batch)+len(m.messages))
+	combined = append(combined, batch...)
+	combined = append(combined, m.messages...)
+	m.messages = combined
+	m.conversationHistoryWindow.messages = combined
+	m.conversationHistoryWindow.loadedCnt = len(combined)
+}
+
+func (m *Model) loadInitialInputHistoryBatch() {
+	if len(m.historyAll) == 0 {
+		m.inputHistoryWindow = inputHistoryWindow{}
+		m.history = nil
+		m.historyBaseFrom = 0
+		m.historyIndex = 0
+		return
+	}
+	start := len(m.historyAll) - inputFirstLoadSize
+	if start < 0 {
+		start = 0
+	}
+	entries := append([]string(nil), m.historyAll[start:]...)
+	m.inputHistoryWindow.entries = entries
+	m.inputHistoryWindow.loadedCnt = len(entries)
+	m.inputHistoryWindow.hasOlder = start > 0
+	m.history = entries
+	m.historyBaseFrom = start
+	m.historyIndex = len(m.history)
+}
+
 func (m *Model) recordHistory(val string) {
 	if strings.TrimSpace(val) == "" {
 		return
@@ -963,13 +1040,20 @@ func (m *Model) recordHistory(val string) {
 	if len(m.history) == 0 || m.history[len(m.history)-1] != val {
 		m.history = append(m.history, val)
 	}
+	m.historyAll = append(m.historyAll, val)
 	m.historyIndex = len(m.history)
 	m.historyDraft = ""
+	m.inputHistoryWindow.entries = append([]string(nil), m.history...)
+	m.inputHistoryWindow.loadedCnt = len(m.inputHistoryWindow.entries)
+	m.inputHistoryWindow.hasOlder = m.historyBaseFrom > 0
 }
 
 func (m *Model) navigateHistory(delta int) bool {
 	if len(m.history) == 0 {
 		return false
+	}
+	if delta < 0 && m.historyIndex == 0 {
+		m.loadOlderInputHistoryBatch()
 	}
 	if m.historyIndex == 0 && delta < 0 {
 		return false
@@ -999,6 +1083,33 @@ func (m *Model) navigateHistory(delta int) bool {
 	m.input.SetValue(m.history[m.historyIndex])
 	m.input.CursorEnd()
 	return true
+}
+
+func (m *Model) loadOlderInputHistoryBatch() {
+	if !m.inputHistoryWindow.hasOlder || len(m.inputHistoryWindow.entries) >= inputHistoryMaxLoaded {
+		return
+	}
+	load := inputLazyBatchSize
+	remaining := inputHistoryMaxLoaded - len(m.inputHistoryWindow.entries)
+	if load > remaining {
+		load = remaining
+	}
+	start := m.historyBaseFrom - load
+	if start < 0 {
+		start = 0
+	}
+	end := m.historyBaseFrom
+	if end <= start {
+		m.inputHistoryWindow.hasOlder = false
+		return
+	}
+	older := append([]string(nil), m.historyAll[start:end]...)
+	m.inputHistoryWindow.entries = append(older, m.inputHistoryWindow.entries...)
+	m.inputHistoryWindow.loadedCnt = len(m.inputHistoryWindow.entries)
+	m.historyBaseFrom = start
+	m.inputHistoryWindow.hasOlder = start > 0 && len(m.inputHistoryWindow.entries) < inputHistoryMaxLoaded
+	m.history = append([]string(nil), m.inputHistoryWindow.entries...)
+	m.historyIndex = load
 }
 
 // View implements tea.Model.

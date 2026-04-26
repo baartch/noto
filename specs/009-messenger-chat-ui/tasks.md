@@ -17,9 +17,9 @@
 
 **Purpose**: Establish constants, helper scaffolding, and baseline test harness updates for this feature.
 
-- [ ] T001 Create feature constants for conversation/input batch sizes and caps in `internal/tui/constants.go`
-- [ ] T002 [P] Define concrete TUI history state and helper method skeletons (`conversationHistoryWindow`, `inputHistoryWindow`, `loadInitialConversationHistory()`, `loadOlderConversationHistoryBatch()`, `loadInitialInputHistoryBatch()`) in `internal/tui/model.go`
-- [ ] T003 [P] Add concrete repository method signatures for conversation paging (`ListRecentByConversation`, `ListOlderByConversationBefore`) in `internal/store/message_repo.go`
+- [X] T001 Create feature constants for conversation/input batch sizes and caps in `internal/tui/constants.go`
+- [X] T002 [P] Define concrete TUI history state and helper method skeletons (`conversationHistoryWindow`, `inputHistoryWindow`, `loadInitialConversationHistory()`, `loadOlderConversationHistoryBatch()`, `loadInitialInputHistoryBatch()`) in `internal/tui/model.go`
+- [X] T003 [P] Add concrete repository method signatures for conversation paging (`ListRecentByConversation`, `ListOlderByConversationBefore`) in `internal/store/message_repo.go`
 
 ---
 
@@ -29,9 +29,9 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T004 Implement store query to fetch latest N conversation messages in `internal/store/message_repo.go`
-- [ ] T005 [P] Implement store query to fetch older messages before cursor (id/timestamp) in `internal/store/message_repo.go`
-- [ ] T006 Implement active-profile most-recent conversation resolution helper in `internal/store/conversation_repo.go`
+- [X] T004 Implement store query to fetch latest N conversation messages in `internal/store/message_repo.go`
+- [X] T005 [P] Implement store query to fetch older messages before cursor (id/timestamp) in `internal/store/message_repo.go`
+- [X] T006 Implement active-profile most-recent conversation resolution helper in `internal/store/conversation_repo.go`
 - [ ] T007 Add/adjust shared mapping utility from store message to TUI chat message in `internal/tui/model.go`
 - [ ] T008 Add shared non-fatal history error state + rendering hook in `internal/tui/model.go`
 
