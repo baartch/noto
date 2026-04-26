@@ -47,18 +47,18 @@
 
 ### Tests for User Story 1
 
-- [ ] T009 [P] [US1] Add unit tests for latest-window conversion/order rules in `tests/unit/tui/history_window_test.go`
-- [ ] T010 [P] [US1] Add integration test for startup loading latest 10 messages in `tests/integration/tui_startup_history_test.go`
-- [ ] T011 [P] [US1] Add integration test for profile-switch reload behavior in `tests/integration/tui_profile_switch_history_test.go`
-- [ ] T012 [P] [US1] Add integration test for non-fatal startup history read failure in `tests/integration/tui_history_failure_test.go`
+- [X] T009 [P] [US1] Add unit tests for latest-window conversion/order rules in `tests/unit/tui/history_window_test.go`
+- [X] T010 [P] [US1] Add integration test for startup loading latest 10 messages in `tests/integration/tui_startup_history_test.go`
+- [X] T011 [P] [US1] Add integration test for profile-switch reload behavior in `tests/integration/tui_profile_switch_history_test.go`
+- [X] T012 [P] [US1] Add integration test for non-fatal startup history read failure in `tests/integration/tui_history_failure_test.go`
 
 ### Implementation for User Story 1
 
 - [X] T013 [US1] Implement startup history load flow in `internal/tui/model.go`
 - [X] T014 [US1] Wire startup/profile-switch message retrieval via repositories in `internal/app/chat_cmd.go`
 - [X] T015 [US1] Ensure initial viewport position is bottom after load in `internal/tui/model.go`
-- [ ] T016 [US1] Implement empty-history rendering path without blocking input in `internal/tui/model.go`
-- [ ] T017 [US1] Implement non-fatal error indicator for load failures in `internal/tui/model.go`
+- [X] T016 [US1] Implement empty-history rendering path without blocking input in `internal/tui/model.go`
+- [X] T017 [US1] Implement non-fatal error indicator for load failures in `internal/tui/model.go`
 
 **Checkpoint**: User Story 1 should be independently functional and testable.
 
