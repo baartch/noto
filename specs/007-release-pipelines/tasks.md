@@ -19,7 +19,7 @@ description: "Task list for Release Publishing & Update Checks"
 ## Phase 2: Foundational (Blocking Prerequisites)
 
 - [ ] T003 Define GitHub repo constants/config in /home/andy/gitrepos/noto/internal/config/release.go (owner, repo, base URL)
-- [ ] T004 Implement update check client in /home/andy/gitrepos/noto/internal/update/checker.go (GitHub Releases API, semver compare, ignore pre-releases, timeout)
+- [ ] T004 Implement update check client in /home/andy/gitrepos/noto/internal/update/checker.go (GitHub Releases API, semver compare, ignore pre-releases, timeout; depends on T003 release config)
 - [ ] T005 [P] Add helper for async startup check in /home/andy/gitrepos/noto/internal/app/update_notice.go (non-blocking invocation)
 
 ---
@@ -41,6 +41,7 @@ description: "Task list for Release Publishing & Update Checks"
 - [ ] T009 [US1] Add fail-fast on build failure in /home/andy/gitrepos/noto/.github/workflows/release.yml
 - [ ] T010 [US1] Add ldflags version injection in /home/andy/gitrepos/noto/.github/workflows/release.yml
 - [ ] T011 [US1] Configure GitHub Release publish step in /home/andy/gitrepos/noto/.github/workflows/release.yml (notes + artifacts)
+- [ ] T028 [US1] Add semantic tag validation step in /home/andy/gitrepos/noto/.github/workflows/release.yml (fail publish unless tag matches `vMAJOR.MINOR.PATCH`)
 
 **Checkpoint**: User Story 1 release pipeline publishes multi-OS artifacts with release notes.
 
@@ -84,6 +85,8 @@ description: "Task list for Release Publishing & Update Checks"
 - [ ] T020 [US3] Implement `version` Cobra command in /home/andy/gitrepos/noto/internal/app/version_cmd.go
 - [ ] T021 [US3] Register version command in /home/andy/gitrepos/noto/internal/app/root.go
 - [ ] T022 [US3] Use version package in /home/andy/gitrepos/noto/internal/version/version.go for output formatting (dev fallback)
+- [ ] T029 [US3] Add TUI footer version rendering test in /home/andy/gitrepos/noto/internal/tui/footer_version_test.go (bottom-right placement)
+- [ ] T030 [US3] Render current version in TUI footer (bottom-right) in /home/andy/gitrepos/noto/internal/tui/model.go
 
 **Checkpoint**: `noto version` outputs semantic version string.
 
@@ -95,7 +98,8 @@ description: "Task list for Release Publishing & Update Checks"
 - [ ] T024 Validate quickstart steps in /home/andy/gitrepos/noto/specs/007-release-pipelines/quickstart.md
 - [ ] T025 Add UX consistency validation note for CLI/TUI update notice in /home/andy/gitrepos/noto/specs/007-release-pipelines/quickstart.md
 - [ ] T026 Add workflow validation checklist entry in /home/andy/gitrepos/noto/specs/007-release-pipelines/quickstart.md
-- [ ] T027 Ensure CI/lint/test parity notes in /home/andy/gitrepos/noto/.github/workflows/ci.yml (if needed)
+- [ ] T031 Add PR requirement-to-test traceability checklist section in /home/andy/gitrepos/noto/.github/pull_request_template.md (FR-to-test mapping table for changed FRs)
+- [ ] T032 Document traceability usage in /home/andy/gitrepos/noto/specs/007-release-pipelines/quickstart.md (how to map FR-001–FR-009 to tests in PR)
 
 ---
 
@@ -117,8 +121,8 @@ description: "Task list for Release Publishing & Update Checks"
 ### Parallel Opportunities
 
 - T001/T002 in parallel
-- T003/T004/T005 in parallel
-- US1 tasks T007-T011 are sequential in same file (no [P])
+- T003/T005 in parallel; T004 starts after T003 (requires release config constants)
+- US1 tasks T007-T011, T028 are sequential in same file (no [P])
 - US2 tests T012-T014 in parallel; implementation tasks T015-T018 mostly sequential (shared files)
 - US3 test T019 can run in parallel with US2 tests
 

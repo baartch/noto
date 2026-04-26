@@ -63,3 +63,36 @@
 ## Ambiguities & Conflicts
 
 - [ ] CHK031 Are terms like “clear update notice” defined with measurable display criteria? [Ambiguity, Spec §FR-005]
+
+## Requirement Completeness (Pass 2)
+
+- [ ] CHK032 Are requirements explicit that version visibility includes both `noto version` and TUI footer bottom-right placement? [Completeness, Spec §FR-007]
+- [ ] CHK033 Are requirements explicit that update checks ignore pre-release tags for all comparison paths? [Completeness, Spec §FR-008]
+- [ ] CHK034 Are semantic tag validation requirements defined for release publication gating (`vMAJOR.MINOR.PATCH`)? [Completeness, Spec §FR-003]
+
+## Requirement Clarity (Pass 2)
+
+- [ ] CHK035 Is “version metadata” clearly defined (minimum fields and where they appear)? [Clarity, Spec §FR-002]
+- [ ] CHK036 Is “non-blocking” defined with objective startup-behavior wording (e.g., startup continues on timeout/error)? [Clarity, Spec §FR-005, Spec §FR-006]
+- [ ] CHK037 Is “public release” clarified to remove ambiguity about draft/prerelease/private visibility? [Clarity, Spec §FR-001]
+
+## Requirement Consistency (Pass 2)
+
+- [ ] CHK038 Do FR-003 and FR-008 align on version precedence and pre-release handling without contradiction? [Consistency, Spec §FR-003, Spec §FR-008]
+- [ ] CHK039 Do User Story 3 acceptance scenarios align with FR-007 version visibility requirements for both CLI and TUI? [Consistency, Spec §User Story 3, Spec §FR-007]
+
+## Acceptance Criteria Quality (Pass 2)
+
+- [ ] CHK040 Is SC-006 accompanied by a defined measurement method for proving “100% of new/changed behaviors” coverage? [Measurability, Spec §SC-006]
+- [ ] CHK041 Is SC-003 accompanied by a defined measurement window/source so “90% of users” is objectively verifiable? [Measurability, Spec §SC-003]
+
+## Scenario & Edge Coverage (Pass 2)
+
+- [ ] CHK042 Are requirements defined for GitHub API failure classes (timeout, rate-limit, malformed response) beyond generic failure wording? [Coverage, Gap]
+- [ ] CHK043 Are requirements defined for release behavior when one artifact upload fails after others succeed (partial publish handling)? [Edge Case, Gap]
+- [ ] CHK044 Are requirements defined for current-version fallback behavior when build metadata is unavailable (dev/default build)? [Edge Case, Gap]
+
+## Dependencies & Assumptions (Pass 2)
+
+- [ ] CHK045 Are GitHub dependency assumptions constrained with explicit boundaries (hosted releases API availability and auth expectations)? [Assumption, Spec §Assumptions]
+- [ ] CHK046 Are assumptions about release notes generation source documented to avoid inconsistent release-note quality? [Dependency, Gap]

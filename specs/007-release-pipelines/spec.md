@@ -67,7 +67,7 @@ Team confirms versions follow a consistent, predictable scheme across releases.
 - **FR-004**: App MUST check for newer available versions on startup.
 - **FR-005**: App MUST notify the user in a non-blocking way when a newer version is available in both CLI and TUI modes.
 - **FR-006**: App MUST continue to start normally if the update check fails or is unavailable.
-- **FR-007**: Users MUST be able to identify current installed version within the app or CLI output.
+- **FR-007**: Users MUST be able to identify current installed version via `noto version` in CLI and in the TUI footer (bottom-right).
 - **FR-009**: Release publishing MUST fail if any platform build fails.
 
 ### Non-Functional Requirements _(mandatory)_
@@ -93,7 +93,7 @@ Team confirms versions follow a consistent, predictable scheme across releases.
 - **SC-003**: 90% of users with an outdated version see an update notice on first startup after release.
 - **SC-004**: Release notes present for 100% of new releases.
 - **SC-005**: 0 lint/format violations in CI for feature scope.
-- **SC-006**: 100% of new/changed behaviors have automated test coverage.
+- **SC-006**: Every new or changed functional requirement in scope (FR-001–FR-009) is mapped to at least one automated test (unit, contract, or integration), and this mapping is documented in the PR description/checklist.
 
 ## Clarifications
 
