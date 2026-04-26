@@ -1053,6 +1053,7 @@ func (m *Model) loadOlderConversationHistoryBatch() {
 	older := m.allMessages[start : start+batch]
 
 	anchor := m.viewport.YOffset()
+	beforeLines := m.viewport.TotalLineCount()
 	combined := make([]chatMessage, 0, len(older)+len(m.conversationHistoryWindow.messages))
 	combined = append(combined, older...)
 	combined = append(combined, m.conversationHistoryWindow.messages...)
@@ -1062,7 +1063,8 @@ func (m *Model) loadOlderConversationHistoryBatch() {
 	m.messages = combined
 	if m.ready {
 		m.viewport.SetContent(m.renderHistory())
-		m.viewport.SetYOffset(anchor + len(older))
+		afterLines := m.viewport.TotalLineCount()
+		m.viewport.SetYOffset(anchor + max(0, afterLines-beforeLines))
 	}
 }
 
@@ -1136,6 +1138,7 @@ func (m *Model) loadOlderConversationHistoryFromStore() {
 
 	mapped := m.mapStoreMessagesToChatMessages(older)
 	anchor := m.viewport.YOffset()
+	beforeLines := m.viewport.TotalLineCount()
 	combined := make([]chatMessage, 0, len(mapped)+len(m.conversationHistoryWindow.messages))
 	combined = append(combined, mapped...)
 	combined = append(combined, m.conversationHistoryWindow.messages...)
@@ -1146,7 +1149,8 @@ func (m *Model) loadOlderConversationHistoryFromStore() {
 	m.setHistoryError(nil)
 	if m.ready {
 		m.viewport.SetContent(m.renderHistory())
-		m.viewport.SetYOffset(anchor + len(mapped))
+		afterLines := m.viewport.TotalLineCount()
+		m.viewport.SetYOffset(anchor + max(0, afterLines-beforeLines))
 	}
 }
 
