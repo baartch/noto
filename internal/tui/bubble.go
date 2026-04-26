@@ -163,15 +163,21 @@ func padLines(content, pad string) string {
 }
 
 func renderConversationBoundary(ts time.Time, width int) string {
-	if width < 10 {
-		width = 10
+	if width < 20 {
+		width = 20
 	}
-	label := "-- " + ts.In(time.Local).Format("2006-01-02 15:04 MST") + " "
-	dashes := width - utf8.RuneCountInString(label)
-	if dashes < 3 {
-		dashes = 3
+	label := " " + ts.In(time.Local).Format("2006-01-02 15:04 MST") + " "
+	labelW := utf8.RuneCountInString(label)
+	lineRun := "─"
+
+	remaining := width - labelW
+	if remaining < 4 {
+		remaining = 4
 	}
-	line := label + strings.Repeat("-", dashes)
+	left := remaining / 2
+	right := remaining - left
+
+	line := strings.Repeat(lineRun, left) + label + strings.Repeat(lineRun, right)
 	return boundaryStyle.Render(line)
 }
 
