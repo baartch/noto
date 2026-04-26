@@ -4,8 +4,8 @@ import "testing"
 
 func TestNormalize(t *testing.T) {
 	cases := map[string]string{
-		"": "v0.0.0",
-		"1.2.3": "v1.2.3",
+		"":       "v0.0.0",
+		"1.2.3":  "v1.2.3",
 		"v2.0.0": "v2.0.0",
 	}
 	for in, want := range cases {

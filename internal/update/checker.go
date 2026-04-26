@@ -8,30 +8,35 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/mod/semver"
 	"noto/internal/config"
+
+	"golang.org/x/mod/semver"
 )
 
+// Result contains the outcome of an update check.
 type Result struct {
-	Current string
-	Latest  string
+	Current   string
+	Latest    string
 	HasUpdate bool
 }
 
+// Checker queries GitHub Releases and compares semantic versions.
 type Checker struct {
 	httpClient *http.Client
 }
 
+// NewChecker creates a Checker with a default 1s HTTP timeout.
 func NewChecker() *Checker {
 	return &Checker{httpClient: &http.Client{Timeout: 1 * time.Second}}
 }
 
 type release struct {
-	TagName string `json:"tag_name"`
-	Draft bool `json:"draft"`
-	Prerelease bool `json:"prerelease"`
+	TagName    string `json:"tag_name"`
+	Draft      bool   `json:"draft"`
+	Prerelease bool   `json:"prerelease"`
 }
 
+// Check returns whether a newer non-prerelease version is available.
 func (c *Checker) Check(ctx context.Context, current string) (Result, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, config.GitHubReleasesAPIURL, nil)
 	if err != nil {
@@ -42,7 +47,9 @@ func (c *Checker) Check(ctx context.Context, current string) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode >= 300 {
 		return Result{}, fmt.Errorf("update check failed: status %d", resp.StatusCode)
 	}

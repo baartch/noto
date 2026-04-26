@@ -21,7 +21,9 @@ func startUpdateCheckAsync(out io.Writer) {
 			return
 		}
 		if res.HasUpdate {
-			fmt.Fprintf(out, "Update available: %s (current %s)\n", res.Latest, res.Current)
+			if _, err := fmt.Fprintf(out, "Update available: %s (current %s)\n", res.Latest, res.Current); err != nil {
+				return
+			}
 		}
 	}()
 }

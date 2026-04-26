@@ -1,7 +1,8 @@
 package config
 
+// GitHub release constants used by update checks and release integration.
 const (
-	GitHubReleaseOwner   = "andy"
+	GitHubReleaseOwner   = "baartch"
 	GitHubReleaseRepo    = "noto"
-	GitHubReleasesAPIURL = "https://api.github.com/repos/andy/noto/releases"
+	GitHubReleasesAPIURL = "https://api.github.com/repos/baartch/noto/releases"
 )
