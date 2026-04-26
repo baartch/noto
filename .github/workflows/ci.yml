@@ -51,3 +51,6 @@ jobs:
         with:
           version: latest
           args: --timeout=5m
+
+      - name: actionlint
+        uses: raven-actions/actionlint@v2

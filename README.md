@@ -29,3 +29,14 @@ Then start a chat session:
 ```bash
 noto
 ```
+
+## Version and updates
+
+- Print current version:
+
+```bash
+noto version
+```
+
+- On startup, noto performs a non-blocking update check against GitHub Releases.
+- In TUI mode, the current version is shown in the footer.

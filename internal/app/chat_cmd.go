@@ -29,7 +29,7 @@ func chatCmd() *cobra.Command {
 	}
 }
 
-func runChat(_ *cobra.Command, _ []string) error {
+func runChat(cmd *cobra.Command, _ []string) error {
 	ctx := context.Background()
 
 	// Resolve or auto-create active profile.
@@ -403,6 +403,8 @@ func runChat(_ *cobra.Command, _ []string) error {
 		embeddingModelMissing = sess.EmbeddingModelMissingActive()
 		embeddingModel = sess.EmbeddingModel()
 	}
+	startUpdateCheckAsync(cmd.OutOrStdout())
+
 	m := tui.New(
 		activeProfile.Name, activeModel, extractorModel, embeddingModel,
 		cacheStatus, "tokens: n/a", extractorFallback, embeddingModelMissing,

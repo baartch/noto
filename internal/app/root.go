@@ -23,6 +23,7 @@ profile-isolated memory continuity backed by SQLite.`,
 	root.AddCommand(chatCmd())
 	root.AddCommand(promptCmd())
 	root.AddCommand(providerCmd())
+	root.AddCommand(versionCmd())
 
 	return root
 }

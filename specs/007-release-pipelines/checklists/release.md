@@ -8,50 +8,50 @@
 
 ## Requirement Completeness
 
-- [ ] CHK001 Are Linux/Windows/macOS artifact requirements explicitly enumerated? [Completeness, Spec §FR-001]
-- [ ] CHK002 Are release notes + version metadata requirements specified for every release? [Completeness, Spec §FR-002]
-- [ ] CHK003 Is semantic versioning required for all releases, not just examples? [Completeness, Spec §FR-003]
-- [ ] CHK004 Are startup update checks required for both CLI and TUI modes? [Completeness, Spec §FR-004, §FR-005]
-- [ ] CHK005 Is current-version visibility requirement specified for CLI/TUI output? [Completeness, Spec §FR-007]
-- [ ] CHK006 Is the “fail release if any platform build fails” requirement explicitly stated in requirements (not only edge cases)? [Gap, Spec §Edge Cases]
+- [x] CHK001 Are Linux/Windows/macOS artifact requirements explicitly enumerated? [Completeness, Spec §FR-001]
+- [x] CHK002 Are release notes + version metadata requirements specified for every release? [Completeness, Spec §FR-002]
+- [x] CHK003 Is semantic versioning required for all releases, not just examples? [Completeness, Spec §FR-003]
+- [x] CHK004 Are startup update checks required for both CLI and TUI modes? [Completeness, Spec §FR-004, §FR-005]
+- [x] CHK005 Is current-version visibility requirement specified for CLI/TUI output? [Completeness, Spec §FR-007]
+- [x] CHK006 Is the “fail release if any platform build fails” requirement explicitly stated in requirements (not only edge cases)? [Gap, Spec §Edge Cases]
 
 ## Requirement Clarity
 
 - [ ] CHK007 Is “non-blocking” update notice clarified with measurable behavior (async, no startup delay)? [Clarity, Spec §FR-005, §NFR-004]
-- [ ] CHK008 Are version comparison rules explicit (tag format, pre-release handling)? [Ambiguity, Spec §FR-003, §FR-004]
+- [x] CHK008 Are version comparison rules explicit (tag format, pre-release handling)? [Ambiguity, Spec §FR-003, §FR-004]
 - [ ] CHK009 Are artifact types and packaging formats (binary/zip/pkg) explicitly defined? [Gap, Spec §FR-001]
-- [ ] CHK010 Is “public release” defined with explicit visibility/repo scope? [Clarity, Spec §FR-001, §Assumptions]
+- [x] CHK010 Is “public release” defined with explicit visibility/repo scope? [Clarity, Spec §FR-001, §Assumptions]
 - [ ] CHK011 Are release notes content/format expectations defined? [Ambiguity, Spec §FR-002]
 
 ## Requirement Consistency
 
 - [ ] CHK012 Do performance targets align between NFR-004 (1s) and SC-002 (2s) without conflict? [Consistency, Spec §NFR-004, §SC-002]
-- [ ] CHK013 Do success criteria map cleanly to FRs (artifacts, notes, update notice)? [Consistency, Spec §SC-001, §SC-004, §SC-003, §FR-001, §FR-002, §FR-005]
-- [ ] CHK014 Do assumptions about GitHub hosting align with release requirements? [Consistency, Spec §Assumptions, §FR-001]
+- [x] CHK013 Do success criteria map cleanly to FRs (artifacts, notes, update notice)? [Consistency, Spec §SC-001, §SC-004, §SC-003, §FR-001, §FR-002, §FR-005]
+- [x] CHK014 Do assumptions about GitHub hosting align with release requirements? [Consistency, Spec §Assumptions, §FR-001]
 
 ## Acceptance Criteria Quality
 
-- [ ] CHK015 Are success criteria thresholds measurable and objective (percentages, timing)? [Acceptance Criteria, Spec §SC-001-006]
+- [x] CHK015 Are success criteria thresholds measurable and objective (percentages, timing)? [Acceptance Criteria, Spec §SC-001-006]
 - [ ] CHK016 Are acceptance scenarios provided for version visibility (FR-007)? [Gap, Spec §FR-007]
 - [ ] CHK017 Is SC-003 (update notice coverage) measurable with a defined observation method? [Ambiguity, Spec §SC-003]
 
 ## Scenario Coverage
 
-- [ ] CHK018 Are “no newer version” scenarios specified for startup behavior? [Coverage, Spec §User Story 2]
-- [ ] CHK019 Are update check failure/recovery scenarios fully specified? [Coverage, Spec §FR-006, §Edge Cases]
+- [x] CHK018 Are “no newer version” scenarios specified for startup behavior? [Coverage, Spec §User Story 2]
+- [x] CHK019 Are update check failure/recovery scenarios fully specified? [Coverage, Spec §FR-006, §Edge Cases]
 - [ ] CHK020 Are release pipeline failure scenarios beyond build failure covered (lint/test failure)? [Gap, Spec §NFR-001]
-- [ ] CHK021 Are versioning consistency checks captured as requirements, not just user story? [Coverage, Spec §User Story 3, §FR-003]
+- [x] CHK021 Are versioning consistency checks captured as requirements, not just user story? [Coverage, Spec §User Story 3, §FR-003]
 
 ## Edge Case Coverage
 
-- [ ] CHK022 Are offline/network-unavailable behaviors explicitly specified? [Edge Case, Spec §Edge Cases, §FR-006]
+- [x] CHK022 Are offline/network-unavailable behaviors explicitly specified? [Edge Case, Spec §Edge Cases, §FR-006]
 - [ ] CHK023 Are draft/pre-release handling rules specified for update checks? [Gap]
 - [ ] CHK024 Are rollback/abort requirements defined when partial release artifacts are produced? [Gap, Spec §Edge Cases]
 
 ## Non-Functional Requirements
 
-- [ ] CHK025 Are code quality requirements tied to explicit checks (format, lint, vet, tests)? [Clarity, Spec §NFR-001]
-- [ ] CHK026 Are testing requirements explicit about negative/error path coverage for update checks? [Clarity, Spec §NFR-002]
+- [x] CHK025 Are code quality requirements tied to explicit checks (format, lint, vet, tests)? [Clarity, Spec §NFR-001]
+- [x] CHK026 Are testing requirements explicit about negative/error path coverage for update checks? [Clarity, Spec §NFR-002]
 - [ ] CHK027 Are UX consistency requirements tied to specific existing patterns or definitions? [Gap, Spec §NFR-003]
 - [ ] CHK028 Are performance budgets measurable and tied to a specific percentile/threshold? [Clarity, Spec §NFR-004]
 
@@ -63,3 +63,76 @@
 ## Ambiguities & Conflicts
 
 - [ ] CHK031 Are terms like “clear update notice” defined with measurable display criteria? [Ambiguity, Spec §FR-005]
+
+## Requirement Completeness (Pass 2)
+
+- [x] CHK032 Are requirements explicit that version visibility includes both `noto version` and TUI footer bottom-right placement? [Completeness, Spec §FR-007]
+- [x] CHK033 Are requirements explicit that update checks ignore pre-release tags for all comparison paths? [Completeness, Spec §FR-008]
+- [ ] CHK034 Are semantic tag validation requirements defined for release publication gating (`vMAJOR.MINOR.PATCH`)? [Completeness, Spec §FR-003]
+
+## Requirement Clarity (Pass 2)
+
+- [ ] CHK035 Is “version metadata” clearly defined (minimum fields and where they appear)? [Clarity, Spec §FR-002]
+- [x] CHK036 Is “non-blocking” defined with objective startup-behavior wording (e.g., startup continues on timeout/error)? [Clarity, Spec §FR-005, Spec §FR-006]
+- [ ] CHK037 Is “public release” clarified to remove ambiguity about draft/prerelease/private visibility? [Clarity, Spec §FR-001]
+
+## Requirement Consistency (Pass 2)
+
+- [x] CHK038 Do FR-003 and FR-008 align on version precedence and pre-release handling without contradiction? [Consistency, Spec §FR-003, Spec §FR-008]
+- [ ] CHK039 Do User Story 3 acceptance scenarios align with FR-007 version visibility requirements for both CLI and TUI? [Consistency, Spec §User Story 3, Spec §FR-007]
+
+## Acceptance Criteria Quality (Pass 2)
+
+- [x] CHK040 Is SC-006 accompanied by a defined measurement method for proving “100% of new/changed behaviors” coverage? [Measurability, Spec §SC-006]
+- [ ] CHK041 Is SC-003 accompanied by a defined measurement window/source so “90% of users” is objectively verifiable? [Measurability, Spec §SC-003]
+
+## Scenario & Edge Coverage (Pass 2)
+
+- [ ] CHK042 Are requirements defined for GitHub API failure classes (timeout, rate-limit, malformed response) beyond generic failure wording? [Coverage, Gap]
+- [ ] CHK043 Are requirements defined for release behavior when one artifact upload fails after others succeed (partial publish handling)? [Edge Case, Gap]
+- [ ] CHK044 Are requirements defined for current-version fallback behavior when build metadata is unavailable (dev/default build)? [Edge Case, Gap]
+
+## Dependencies & Assumptions (Pass 2)
+
+- [ ] CHK045 Are GitHub dependency assumptions constrained with explicit boundaries (hosted releases API availability and auth expectations)? [Assumption, Spec §Assumptions]
+- [ ] CHK046 Are assumptions about release notes generation source documented to avoid inconsistent release-note quality? [Dependency, Gap]
+
+## Triage Status (2026-04-26)
+
+Legend:
+- **REQUIRED** = resolve now
+- **ACCEPTED-RISK** = valid but intentionally deferred
+- **OBSOLETE** = no longer applicable
+
+### OBSOLETE
+
+- CHK007 — references removed `NFR-004` (performance scope dropped)
+- CHK012 — references removed `NFR-004` / `SC-002`
+- CHK028 — performance-budget check no longer in scope
+
+### ACCEPTED-RISK (Deferred)
+
+- CHK009 — artifact packaging format specificity deferred
+- CHK011 — release notes content schema deferred
+- CHK017 — SC-003 measurement instrumentation detail deferred
+- CHK023 — draft/pre-release handling depth deferred
+- CHK024 — partial artifact rollback semantics deferred
+- CHK029 — GitHub API limits/auth policy detail deferred
+- CHK030 — hosting assumption validation depth deferred
+- CHK035 — version metadata field schema depth deferred
+- CHK037 — visibility semantics detail (draft/prerelease/private) deferred
+- CHK041 — SC-003 measurement source/window deferred
+- CHK042 — explicit GitHub API failure taxonomy deferred
+- CHK043 — atomic/partial publish semantics deferred
+- CHK045 — dependency boundary formalization deferred
+- CHK046 — release notes generation process formalization deferred
+
+### REQUIRED (Resolve Now)
+
+- CHK016 — add explicit acceptance scenario for FR-007 (CLI + TUI footer version visibility)
+- CHK020 — make release abort behavior explicit for lint/test gate failures
+- CHK027 — anchor UX consistency to a concrete pattern/source reference
+- CHK031 — define objective criteria for “clear update notice”
+- CHK034 — make semver tag validation explicit in spec (not only tasks)
+- CHK039 — align User Story 3 acceptance text with FR-007 (CLI + TUI)
+- CHK044 — specify fallback version behavior for dev/non-injected builds

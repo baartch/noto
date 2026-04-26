@@ -7,7 +7,7 @@
 
 ## Summary
 
-GitHub Actions release pipeline builds Linux/Windows/macOS artifacts, runs `make tidy fmt vet lint test` before publishing, and creates GitHub Releases with notes/version metadata. Add semantic versioning support in the binary (embedded build version), startup update check against GitHub Releases API with async/non-blocking notice in CLI/TUI, and expose current version via CLI.
+GitHub Actions release pipeline builds Linux/Windows/macOS artifacts, runs `make tidy fmt vet lint test` before publishing, and creates GitHub Releases with notes/version metadata. Add semantic versioning support in the binary (embedded build version), startup update check against GitHub Releases API with async/non-blocking notice in CLI/TUI, expose current version via CLI/TUI footer, and require PR requirement-to-test traceability for changed FRs.
 
 ## Technical Context
 
@@ -17,7 +17,6 @@ GitHub Actions release pipeline builds Linux/Windows/macOS artifacts, runs `make
 **Testing**: `go test ./...`, `go test ./tests/integration/...`, `go test ./tests/contract/...`  
 **Target Platform**: Linux/macOS/Windows CLI + TUI  
 **Project Type**: CLI/TUI desktop app  
-**Performance Goals**: Update check completes <1s p95 without blocking startup  
 **Constraints**: Offline-capable, non-blocking startup, GitHub-hosted releases, semantic versioning  
 **Scale/Scope**: Single-user local app; single binary per OS
 
@@ -26,9 +25,8 @@ GitHub Actions release pipeline builds Linux/Windows/macOS artifacts, runs `make
 _GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 
 - **Code Quality Gate**: Release workflow runs `make tidy fmt vet lint test` before publish; CI stays on PRs. Go format (`gofmt`), `go vet`, `golangci-lint` enforced.
-- **Testing Standards Gate**: Add tests for update check (success/no update/error) and CLI/TUI notice paths; release workflow runs full test suite; contract coverage for version output.
+- **Testing Standards Gate**: Add tests for update check (success/no update/error) and CLI/TUI notice paths; release workflow runs full test suite; contract coverage for version output; PRs include requirement-to-test traceability for changed FRs.
 - **UX Consistency Gate**: Reuse existing CLI/TUI notification styles; update notice is non-blocking and uses established messaging pattern.
-- **Performance Gate**: Update check async with timeout budget; measure via unit test timing + manual timing check to ensure <1s p95 startup impact.
 
 ## Project Structure
 
@@ -73,9 +71,8 @@ tests/
 ## Constitution Check (Post-Design)
 
 - **Code Quality Gate**: PASS — workflow includes `make tidy fmt vet lint test` before release; CI unchanged.
-- **Testing Standards Gate**: PASS — plan includes unit/contract tests for update check + version output.
+- **Testing Standards Gate**: PASS — plan includes unit/contract tests for update check + version output and requires PR requirement-to-test traceability.
 - **UX Consistency Gate**: PASS — update notice uses existing CLI/TUI messaging patterns.
-- **Performance Gate**: PASS — async check with timeout + validation steps.
 
 ## Complexity Tracking
 

@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+
+	"noto/internal/version"
 )
 
 // renderFooter draws the bottom status line.
@@ -44,11 +46,12 @@ func (m *Model) renderFooter() string {
 
 	left := strings.Join(leftParts, dim.Render("  "))
 
-	// Right: profile + model + help.
+	// Right: profile + model + version + help.
 	right := white.Render(m.profileName)
 	if m.activeModel != "" {
 		right = right + dim.Render("  ") + purple.Render("["+m.activeModel+"]")
 	}
+	right = right + dim.Render("  ") + dim.Render(version.String())
 	helpView := m.help.ShortHelpView(m.helpKeys.ShortHelp())
 	if helpView != "" {
 		right = right + dim.Render("  ") + helpView
