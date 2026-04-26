@@ -1,134 +1,137 @@
-# Tasks: Messenger Chat UI History Scrolling
+# Tasks: Messenger Chat UI History Scrolling (Cross-Conversation)
 
 **Input**: Design documents from `/specs/009-messenger-chat-ui/`
-**Prerequisites**: plan.md (required), spec.md (required), research.md, data-model.md, contracts/ui-scroll-behavior.md, quickstart.md
+**Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/ui-scroll-behavior.md, quickstart.md
 
-**Tests**: Include tests (explicitly required by plan/constitution) for unit, integration, and contract-level behavior.
+**Tests**: Required by constitution and plan; include unit/integration/contract coverage before implementation where applicable.
 
-**Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
+**Organization**: Tasks grouped by user story for independent implementation and testing.
 
 ## Format: `[ID] [P?] [Story] Description`
 
-- **[P]**: Can run in parallel (different files, no dependencies)
-- **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
-- Every task includes an exact file path
+- **[P]**: Task can run in parallel (separate files/no blocking dependency)
+- **[Story]**: User story label (`[US1]`, `[US2]`, `[US3]`) for story-phase tasks
+- Every task includes explicit file path
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Establish constants, helper scaffolding, and baseline test harness updates for this feature.
+**Purpose**: Prepare constants/types/render helpers for profile-wide history stream.
 
-- [X] T001 Create feature constants for conversation/input batch sizes and caps in `internal/tui/constants.go`
-- [X] T002 [P] Define concrete TUI history state and helper method skeletons (`conversationHistoryWindow`, `inputHistoryWindow`, `loadInitialConversationHistory()`, `loadOlderConversationHistoryBatch()`, `loadInitialInputHistoryBatch()`) in `internal/tui/model.go`
-- [X] T003 [P] Add concrete repository method signatures for conversation paging (`ListRecentByConversation`, `ListOlderByConversationBefore`) in `internal/store/message_repo.go`
+- [ ] T001 Create/update shared history constants for startup/lazy-load/input policy in `internal/tui/constants.go`
+- [ ] T002 [P] Add conversation boundary view helper (thin divider + date label) in `internal/tui/bubble.go`
+- [ ] T003 [P] Add/confirm history item typing scaffolding (`message` vs `boundary`) in `internal/tui/model.go`
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Core primitives required before user-story implementation.
+**Purpose**: Core data access and mapping needed by all user stories.
 
-**⚠️ CRITICAL**: No user story work can begin until this phase is complete.
+**⚠️ CRITICAL**: Complete before user-story work.
 
-- [X] T004 Implement store query to fetch latest N conversation messages in `internal/store/message_repo.go`
-- [X] T005 [P] Implement store query to fetch older messages before cursor (id/timestamp) in `internal/store/message_repo.go`
-- [X] T006 Implement active-profile most-recent conversation resolution helper in `internal/store/conversation_repo.go`
-- [X] T007 Add/adjust shared mapping utility from store message to TUI chat message in `internal/tui/model.go`
-- [X] T008 Add shared non-fatal history error state + rendering hook in `internal/tui/model.go`
+- [ ] T004 Implement profile-wide recent-message query across conversations (ordered by message time) in `internal/store/message_repo.go`
+- [ ] T005 [P] Implement profile-wide older-than-cursor paging query across conversations in `internal/store/message_repo.go`
+- [ ] T006 Implement conversation metadata fetch helper (for boundary start-date labels) in `internal/store/conversation_repo.go`
+- [ ] T007 [P] Add/adjust mapping utility from store messages to TUI history items in `internal/tui/model.go`
+- [ ] T008 Add shared non-fatal history loading error channel/state for paging failures in `internal/tui/model.go`
 
-**Checkpoint**: Foundation ready — user story implementation can now begin.
+**Checkpoint**: Foundational layer ready.
 
 ---
 
 ## Phase 3: User Story 1 - Conversation Continuity on Startup (Priority: P1) 🎯 MVP
 
-**Goal**: On open/profile switch, show latest 10 conversation messages and land at bottom with graceful failure behavior.
+**Goal**: Startup shows latest profile-wide history context (not limited to single conversation), bottom-positioned and resilient to failures.
 
-**Independent Test**: Restart app with existing conversation and verify latest 10 render immediately at bottom; empty/no-history and load-failure remain usable.
+**Independent Test**: Open app with multi-conversation profile and verify latest 10 messages appear at bottom; empty/failure remains usable.
 
 ### Tests for User Story 1
 
-- [X] T009 [P] [US1] Add unit tests for latest-window conversion/order rules in `tests/unit/tui/history_window_test.go`
-- [X] T010 [P] [US1] Add integration test for startup loading latest 10 messages in `tests/integration/tui_startup_history_test.go`
-- [X] T011 [P] [US1] Add integration test for profile-switch reload behavior in `tests/integration/tui_profile_switch_history_test.go`
-- [X] T012 [P] [US1] Add integration test for non-fatal startup history read failure in `tests/integration/tui_history_failure_test.go`
+- [ ] T009 [P] [US1] Add unit test for startup profile-wide latest-window selection in `tests/unit/tui/history_window_test.go`
+- [ ] T010 [P] [US1] Add integration test for startup loading latest 10 across conversations in `tests/integration/tui_startup_history_test.go`
+- [ ] T011 [P] [US1] Add integration test for profile-switch startup reload using new profile-wide source in `tests/integration/tui_profile_switch_history_test.go`
+- [ ] T012 [P] [US1] Add integration test for non-fatal startup load failure behavior in `tests/integration/tui_history_failure_test.go`
 
 ### Implementation for User Story 1
 
-- [X] T013 [US1] Implement startup history load flow in `internal/tui/model.go`
-- [X] T014 [US1] Wire startup/profile-switch message retrieval via repositories in `internal/app/chat_cmd.go`
-- [X] T015 [US1] Ensure initial viewport position is bottom after load in `internal/tui/model.go`
-- [X] T016 [US1] Implement empty-history rendering path without blocking input in `internal/tui/model.go`
-- [X] T017 [US1] Implement non-fatal error indicator for load failures in `internal/tui/model.go`
+- [ ] T013 [US1] Wire startup history source to profile-wide query in `internal/app/chat_cmd.go`
+- [ ] T014 [US1] Apply startup history window and bottom positioning in `internal/tui/model.go`
+- [ ] T015 [US1] Keep empty-state rendering non-blocking in `internal/tui/model.go`
+- [ ] T016 [US1] Surface startup history read failures as non-fatal inline feedback in `internal/tui/model.go`
 
-**Checkpoint**: User Story 1 should be independently functional and testable.
+**Checkpoint**: US1 functional and testable independently.
 
 ---
 
-## Phase 4: User Story 2 - Zone-Aware Mouse Wheel Scrolling (Priority: P2)
+## Phase 4: User Story 2 - Zone-Aware Scrolling + Input History Policy (Priority: P2)
 
-**Goal**: Route wheel input strictly by hover zone; add bounded input-history lazy loading and reset-after-send.
+**Goal**: Preserve strict wheel zone isolation and global Page key behavior while keeping input-history 3/3/12 policy.
 
-**Independent Test**: In messages area, wheel affects only history viewport; in input area, wheel affects only input-history window with 3/3/12 policy and reset after send.
+**Independent Test**: Wheel in messages/input affects only respective zone; PageUp/PageDown always messages; input-history policy preserved and reset after send.
 
 ### Tests for User Story 2
 
-- [X] T018 [P] [US2] Add unit tests for scroll-zone detection and dispatch in `tests/unit/tui/scroll_zone_routing_test.go`
-- [X] T019 [P] [US2] Add unit tests for input-history lazy-load policy (0 preload, 3 first, +3, cap 12) in `tests/unit/tui/input_history_window_test.go`
-- [X] T020 [P] [US2] Add integration test for wheel isolation (messages zone does not mutate input) in `tests/integration/tui_scroll_zone_isolation_test.go`
-- [X] T021 [P] [US2] Add integration test for wheel isolation (input zone does not move messages viewport) in `tests/integration/tui_scroll_zone_isolation_test.go`
-- [X] T022 [P] [US2] Add integration test that Page Up/Page Down always scroll messages history regardless of hover zone in `tests/integration/tui_pagekey_history_routing_test.go`
-- [X] T023 [P] [US2] Add integration test for clear-in-memory-input-history after send in `tests/integration/tui_input_history_reset_test.go`
-- [X] T024 [P] [US2] Add contract test for input-history policy rules from UI contract in `tests/contract/tui_input_history_contract_test.go`
+- [ ] T017 [P] [US2] Add/refresh unit tests for scroll-zone routing decisions in `tests/unit/tui/scroll_zone_routing_test.go`
+- [ ] T018 [P] [US2] Add/refresh unit tests for input-history lazy-load policy (no preload, 3/3/12) in `tests/unit/tui/input_history_window_test.go`
+- [ ] T019 [P] [US2] Add integration test for wheel isolation (messages zone) in `tests/integration/tui_scroll_zone_isolation_test.go`
+- [ ] T020 [P] [US2] Add integration test for wheel isolation (input zone) in `tests/integration/tui_scroll_zone_isolation_test.go`
+- [ ] T021 [P] [US2] Add integration test for global PageUp/PageDown routing in `tests/integration/tui_pagekey_history_routing_test.go`
+- [ ] T022 [P] [US2] Add integration test for in-memory input-history reset after send in `tests/integration/tui_input_history_reset_test.go`
+- [ ] T023 [P] [US2] Add contract test for input-history policy invariants in `tests/contract/tui_input_history_contract_test.go`
 
 ### Implementation for User Story 2
 
-- [X] T025 [US2] Implement mouse hover zone calculation (`messages`/`input`/`outside`) in `internal/tui/model.go`
-- [X] T026 [US2] Route mouse wheel events to zone-specific handlers only in `internal/tui/model.go`
-- [X] T027 [US2] Ensure Page Up/Page Down always route to messages history scrolling, independent of hover zone, in `internal/tui/model.go`
-- [X] T028 [US2] Remove overflow handoff behavior between textarea and message viewport in `internal/tui/model.go`
-- [X] T029 [US2] Implement on-demand input-history first-load (latest 3) in `internal/tui/model.go`
-- [X] T030 [US2] Implement incremental input-history backward lazy-load (+3) and cap enforcement (12) in `internal/tui/model.go`
-- [X] T031 [US2] Preserve draft restoration and forward-navigation semantics with bounded window in `internal/tui/model.go`
-- [X] T032 [US2] Clear in-memory input-history window immediately after send in `internal/tui/model.go`
+- [ ] T024 [US2] Ensure wheel routing remains zone-bound (`messages`/`input`) in `internal/tui/model.go`
+- [ ] T025 [US2] Ensure PageUp/PageDown route to messages history regardless of hover zone in `internal/tui/model.go`
+- [ ] T026 [US2] Preserve no-overflow-handoff behavior between input and messages in `internal/tui/model.go`
+- [ ] T027 [US2] Preserve on-demand input-history first-load (3) in `internal/tui/model.go`
+- [ ] T028 [US2] Preserve input-history +3 lazy-load and cap=12 in `internal/tui/model.go`
+- [ ] T029 [US2] Preserve draft restoration semantics for forward navigation in `internal/tui/model.go`
+- [ ] T030 [US2] Preserve reset of in-memory input-history window after send in `internal/tui/model.go`
 
-**Checkpoint**: User Stories 1 and 2 both work independently.
+**Checkpoint**: US1 and US2 independently functional.
 
 ---
 
-## Phase 5: User Story 3 - Lazy Loading Older Messages by Scrolling (Priority: P3)
+## Phase 5: User Story 3 - Cross-Conversation Lazy Loading + Boundaries (Priority: P3)
 
-**Goal**: Load older conversation messages in batches of 10 when scrolling at top, preserving visual anchor.
+**Goal**: Scroll backward through all profile conversations with boundary separators and stable viewport anchor.
 
-**Independent Test**: With >10 messages, scrolling to top repeatedly prepends older batches of 10, stops at history end, and keeps visible anchor stable.
+**Independent Test**: With multi-conversation history, repeated top-boundary scrolling prepends older batches across conversations, shows separators with start dates, and no-ops at absolute top.
 
 ### Tests for User Story 3
 
-- [X] T033 [P] [US3] Add unit tests for conversation lazy-load cursor and has-older transitions in `tests/unit/tui/conversation_paging_test.go`
-- [X] T034 [P] [US3] Add integration test for top-boundary lazy-load prepend behavior in `tests/integration/tui_conversation_lazyload_test.go`
-- [X] T035 [P] [US3] Add integration test for anchor preservation after prepend in `tests/integration/tui_conversation_anchor_test.go`
-- [X] T036 [P] [US3] Add integration test for no-op at absolute history top in `tests/integration/tui_conversation_lazyload_test.go`
-- [X] T037 [P] [US3] Add contract test for conversation paging rules from UI contract in `tests/contract/tui_conversation_scroll_contract_test.go`
+- [ ] T031 [P] [US3] Add unit tests for cross-conversation paging cursor/has-older transitions in `tests/unit/tui/conversation_paging_test.go`
+- [ ] T032 [P] [US3] Add integration test for prepend across conversation boundaries in `tests/integration/tui_conversation_lazyload_test.go`
+- [ ] T033 [P] [US3] Add integration test for boundary separator rendering with start date label in `tests/integration/tui_conversation_lazyload_test.go`
+- [ ] T033a [P] [US3] Add unit test for separator format (`-- YYYY-MM-DD HH:MM MST -----` width-expanding) using Go local time (`time.Local`) with layout `2006-01-02 15:04 MST` in `tests/unit/tui/conversation_boundary_format_test.go`
+- [ ] T034 [P] [US3] Add integration test for viewport anchor preservation during prepend in `tests/integration/tui_conversation_anchor_test.go`
+- [ ] T035 [P] [US3] Add integration test for no-op at absolute top across all profile conversations in `tests/integration/tui_conversation_lazyload_test.go`
+- [ ] T036 [P] [US3] Add integration test for non-fatal error during older-batch load in `tests/integration/tui_history_failure_test.go`
+- [ ] T037 [P] [US3] Add contract test for cross-conversation scroll behavior + separators in `tests/contract/tui_conversation_scroll_contract_test.go`
 
 ### Implementation for User Story 3
 
-- [X] T038 [US3] Implement top-boundary detection and lazy-load trigger in messages viewport in `internal/tui/model.go`
-- [X] T039 [US3] Integrate older-message paged query into TUI loading flow in `internal/tui/model.go`
-- [X] T040 [US3] Prepend older messages while preserving viewport visual anchor in `internal/tui/model.go`
-- [X] T041 [US3] Stop additional fetches when no older messages remain in `internal/tui/model.go`
-- [X] T042 [US3] Ensure new send/assistant reply snaps viewport back to bottom after mid-history browsing in `internal/tui/model.go`
+- [ ] T038 [US3] Implement profile-wide older-batch fetch trigger at messages top boundary in `internal/tui/model.go`
+- [ ] T039 [US3] Integrate cross-conversation paging query flow in `internal/app/chat_cmd.go`
+- [ ] T040 [US3] Insert synthetic boundary items when conversation ID changes in loaded stream in `internal/tui/model.go`
+- [ ] T041 [US3] Render single-line conversation boundary `-- YYYY-MM-DD HH:MM MST -----` using Go local time (`time.Local`) with layout `2006-01-02 15:04 MST`, with right-side dashes expanding to viewport width in `internal/tui/bubble.go`
+- [ ] T042 [US3] Preserve viewport anchor when prepending messages + boundaries in `internal/tui/model.go`
+- [ ] T043 [US3] Stop further fetches when absolute profile-history top reached in `internal/tui/model.go`
+- [ ] T044 [US3] Keep send/reply bottom-snap behavior after mid-history browsing in `internal/tui/model.go`
 
-**Checkpoint**: All user stories are independently functional.
+**Checkpoint**: All user stories independently functional.
 
 ---
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-**Purpose**: Finish quality gates, docs sync, and cross-story regression hardening.
+**Purpose**: Final docs, manual UX guard, and quality gates.
 
-- [X] T043 [P] Update feature validation procedure with any discovered nuances in `specs/009-messenger-chat-ui/quickstart.md`
-- [X] T044 [P] Add/refresh regression coverage references in `specs/009-messenger-chat-ui/contracts/ui-scroll-behavior.md`
-- [X] T045 Run full quality gates (`make fmt && make lint && make vet && make test`) and record outcomes in `specs/009-messenger-chat-ui/plan.md`
-- [X] T046 Manually verify FR-012 baseline alignment (user messages right-aligned, assistant messages left-aligned) and record reviewer sign-off in `specs/009-messenger-chat-ui/plan.md`
+- [ ] T045 [P] Update validation guidance for cross-conversation boundaries in `specs/009-messenger-chat-ui/quickstart.md`
+- [ ] T046 [P] Refresh contract wording for separators + profile-wide paging in `specs/009-messenger-chat-ui/contracts/ui-scroll-behavior.md`
+- [ ] T047 Run full quality gates (`make fmt && make lint && make vet && make test`) and record result in `specs/009-messenger-chat-ui/plan.md`
+- [ ] T048 Manually verify FR-012 baseline alignment unchanged and record reviewer sign-off in `specs/009-messenger-chat-ui/plan.md`
 
 ---
 
@@ -136,26 +139,26 @@
 
 ### Phase Dependencies
 
-- **Phase 1 (Setup)**: No dependencies.
-- **Phase 2 (Foundational)**: Depends on Phase 1; blocks all user stories.
-- **Phase 3 (US1)**: Depends on Phase 2; serves as MVP.
-- **Phase 4 (US2)**: Depends on Phase 2; can proceed after/alongside US1 if team capacity allows.
-- **Phase 5 (US3)**: Depends on Phase 2 and reuses US1 history-loading primitives.
-- **Phase 6 (Polish)**: Depends on completion of desired user stories.
+- Phase 1: no dependencies
+- Phase 2: depends on Phase 1; blocks all user stories
+- Phase 3 (US1): depends on Phase 2
+- Phase 4 (US2): depends on Phase 2 (can proceed alongside US1 with coordination)
+- Phase 5 (US3): depends on Phase 2 and US1 startup/history base
+- Phase 6: depends on all desired story completion
 
 ### User Story Dependencies
 
-- **US1 (P1)**: No dependency on other stories.
-- **US2 (P2)**: Independent of US1 for core zone routing, but shares model file and should merge after US1 baseline is stable.
-- **US3 (P3)**: Depends on conversation startup/history primitives introduced in US1.
+- **US1 (P1)**: foundation only
+- **US2 (P2)**: foundation only (shares `internal/tui/model.go` heavily)
+- **US3 (P3)**: relies on US1 history source and foundational paging primitives
 
 ### Dependency Graph
 
 - Foundation: `T001 -> {T004,T005,T006} -> {T007,T008}`
-- US1: `{T009,T010,T011,T012} -> {T013,T014,T015,T016,T017}`
-- US2: `{T018,T019,T020,T021,T022,T023,T024} -> {T025,T026,T027,T028,T029,T030,T031,T032}`
-- US3: `{T033,T034,T035,T036,T037} -> {T038,T039,T040,T041,T042}`
-- Polish: `{T043,T044,T045,T046}` after selected stories complete
+- US1: `{T009,T010,T011,T012} -> {T013,T014,T015,T016}`
+- US2: `{T017,T018,T019,T020,T021,T022,T023} -> {T024,T025,T026,T027,T028,T029,T030}`
+- US3: `{T031,T032,T033,T033a,T034,T035,T036,T037} -> {T038,T039,T040,T041,T042,T043,T044}`
+- Polish: `{T045,T046,T047,T048}`
 
 ---
 
@@ -164,65 +167,64 @@
 ### User Story 1
 
 ```bash
-# Parallel US1 tests
+# Parallel US1 test tasks
 T009  T010  T011  T012
 
-# Then implement sequence
-T013 -> T014 -> T015 -> T016 -> T017
+# Then implementation sequence
+T013 -> T014 -> T015 -> T016
 ```
 
 ### User Story 2
 
 ```bash
-# Parallel US2 tests
-T018  T019  T020  T021  T022  T023  T024
+# Parallel US2 test tasks
+T017  T018  T019  T020  T021  T022  T023
 
-# Parallel-safe implementation split (different concerns, same file requires staged merges)
-T025/T026/T027/T028
-T029/T030/T031
-Then T032
+# Then implementation in staged groups
+T024/T025/T026
+T027/T028/T029
+Then T030
 ```
 
 ### User Story 3
 
 ```bash
-# Parallel US3 tests
-T033  T034  T035  T036  T037
+# Parallel US3 test tasks
+T031  T032  T033  T033a  T034  T035  T036  T037
 
-# Then paging implementation path
-T038 -> T039 -> T040 -> T041 -> T042
+# Then cross-conversation implementation sequence
+T038 -> T039 -> T040 -> T041 -> T042 -> T043 -> T044
 ```
 
 ---
 
 ## Implementation Strategy
 
-### MVP First (US1)
+### MVP First
 
-1. Complete Setup + Foundational (Phases 1–2).
-2. Complete US1 (Phase 3).
-3. Validate independent test criteria for US1 via T010/T011/T012.
-4. Demo/release MVP with conversation continuity.
+1. Complete Phases 1–2.
+2. Deliver US1 (Phase 3) for startup continuity with profile-wide source.
+3. Validate US1 tests and demo.
 
 ### Incremental Delivery
 
-1. Add US2 for deterministic scroll-zone behavior and bounded input-history loading.
-2. Add US3 for long-history browsing with anchor-preserving lazy load.
-3. Finish Polish phase and run full quality gates.
+1. Add US2 to preserve input-zone behavior and global page-key routing.
+2. Add US3 for cross-conversation lazy loading + separators.
+3. Finish polish and gate commands.
 
 ### Parallel Team Strategy
 
-1. Team aligns on shared `internal/tui/model.go` edit boundaries.
-2. One engineer handles store/repo tasks, one handles US2 routing/input-window logic, one handles US3 paging/anchor behavior.
-3. Rebase frequently due to shared TUI file and run targeted tests before merge.
+1. Coordinate edits in shared files (`internal/tui/model.go`, `internal/app/chat_cmd.go`).
+2. Split work by layer:
+   - Engineer A: store queries + metadata
+   - Engineer B: TUI rendering/routing
+   - Engineer C: tests/contracts/docs
+3. Rebase frequently due to shared TUI file.
 
 ---
 
 ## Notes
 
-- All tasks follow required checklist format: `- [ ] T### [P?] [US?] Description with file path`.
-- Tests are included because planning docs explicitly require them.
-- Prefer small, reviewable commits grouped by task or tightly-coupled task pair.
-- Resolve `internal/tui/model.go` merge conflicts carefully due to heavy shared edits.
-- FR-012 (user/right + assistant/left bubble alignment) is already implemented baseline behavior; this feature must not modify it, and verification will be done manually by the reviewer.
-- SC-005 startup performance timing will not be instrumented in this feature; performance confidence is based on bounded loading design and manual validation.
+- All tasks follow required checklist format with IDs, labels, and file paths.
+- Tests included per constitution and plan requirements.
+- Cross-conversation separators are a UX addition; FR-012 bubble alignment remains unchanged and manually verified in T048.

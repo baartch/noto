@@ -24,8 +24,8 @@ When the user opens noto, they immediately see the most recent messages from the
 
 **Acceptance Scenarios**:
 
-1. **Given** the user has a previous conversation with at least 10 messages, **When** they open noto, **Then** the 10 most recent messages are displayed in the messages area at launch.
-2. **Given** the user has a previous conversation with fewer than 10 messages, **When** they open noto, **Then** all available messages are shown.
+1. **Given** the active profile history has at least 10 messages across one or more conversations, **When** they open noto, **Then** the 10 most recent messages are displayed in the messages area at launch.
+2. **Given** the active profile history contains fewer than 10 messages across all conversations, **When** they open noto, **Then** all available messages are shown.
 3. **Given** the user has no conversation history at all, **When** they open noto, **Then** the messages area is empty and no error is shown.
 4. **Given** messages are loaded on startup, **When** the messages area is rendered, **Then** it is scrolled to the bottom so the most recent message is visible.
 
@@ -74,7 +74,7 @@ When the user has scrolled to the top of the currently loaded messages and conti
 ### Edge Cases
 
 - What happens when a conversation is very long (thousands of messages)? Lazy loading must prevent excessive memory use; batch size should be small and fixed.
-- How does the system handle the case where the previous conversation's profile differs from the current one? Only messages belonging to the active profile's conversation should be shown.
+- How does the system handle profile boundaries? Only messages belonging to the active profile (across all conversations in that profile) should be shown.
 - What if message loading fails on startup (e.g., database unavailable)? The app should open normally with an empty messages area and surface a non-fatal error indicator.
 - What if the user switches profiles mid-session? The messages area should reset and load the last 10 messages for the newly active profile.
 - What happens when the terminal is resized while browsing history? The viewport should re-render without losing scroll position context.
@@ -85,8 +85,8 @@ When the user has scrolled to the top of the currently loaded messages and conti
 
 - **FR-001**: On startup, the system MUST load and display the last 10 messages (user and assistant turns) from the active profile history, ordered oldest-to-newest with the newest at the bottom.
 - **FR-002**: The messages area MUST be scrolled to the bottom on initial render so the most recent message is immediately visible.
-- **FR-003**: When the mouse cursor is positioned inside the messages viewport, mouse wheel scroll events MUST scroll the conversation history only and MUST NOT affect the input area's state.
-- **FR-004**: When the mouse cursor is positioned inside the input textarea, mouse wheel scroll events MUST cycle the input command history only and MUST NOT scroll the conversation history.
+- **FR-003**: When the mouse cursor is positioned inside the messages viewport, mouse wheel scroll events MUST scroll the messages history (profile-wide) only and MUST NOT affect the input area's state.
+- **FR-004**: When the mouse cursor is positioned inside the input textarea, mouse wheel scroll events MUST cycle the input command history only and MUST NOT scroll the messages history (profile-wide).
 - **FR-004a**: The system MUST NOT preload input-history entries into memory at startup.
 - **FR-004b**: On the first input-history scroll action in the input textarea, the system MUST load exactly the latest 3 stored input-history entries.
 - **FR-004c**: When the user scrolls beyond the oldest loaded input-history entry, the system MUST lazy-load older input-history entries in batches of 3.
@@ -97,7 +97,7 @@ When the user has scrolled to the top of the currently loaded messages and conti
 - **FR-006**: When the user reaches the top of the currently loaded messages and triggers an upward scroll, the system MUST fetch the next older batch of messages from the active profile history (including older conversations) and prepend them to the view.
 - **FR-007**: The lazy-load batch size MUST be small and fixed (default: 10 messages per batch) to bound memory use and render time.
 - **FR-008**: After prepending a new batch of older messages, the viewport MUST maintain the user's visual position so previously visible messages remain on screen (no jump).
-- **FR-008a**: When the loaded history crosses from one conversation to an older conversation, the system MUST render a thin separator line containing that older conversation’s start date at the boundary.
+- **FR-008a**: When the loaded history crosses from one conversation to an older conversation, the system MUST render a single-character-height separator line at the boundary, formatted like `-- YYYY-MM-DD HH:MM MST ---------------------` using Go local time (`time.Local`) with fixed layout `2006-01-02 15:04 MST`, and the right-side dash run expands to fill remaining viewport width.
 - **FR-009**: When the user sends a new message or receives a reply, the view MUST scroll to the bottom automatically.
 - **FR-009a**: After a message is sent, the system MUST clear in-memory loaded input-history entries.
 - **FR-010**: When the active profile changes (e.g., via profile switch), the messages area MUST clear and reload the last 10 messages for the new profile history.
@@ -120,7 +120,7 @@ When the user has scrolled to the top of the currently loaded messages and conti
 - **SC-003**: A user can scroll the mouse wheel while hovering over the input area to cycle command history without the messages area moving.
 - **SC-003a**: Input-history loading behavior matches policy: first scroll loads 3 entries, subsequent backward lazy-loads are in batches of 3, and no more than 12 entries are loaded per compose session.
 - **SC-004**: A user with profile history of 50+ messages spanning multiple conversations can scroll back through the full history from startup using only mouse wheel in the messages area or Page Up/Page Down keys.
-- **SC-004a**: Whenever scrolling crosses into an older conversation, the user sees a visible thin separator containing that conversation’s start date.
+- **SC-004a**: Whenever scrolling crosses into an older conversation, the user sees a one-line boundary separator with that conversation’s start date rendered in Go local time (`time.Local`) using layout `2006-01-02 15:04 MST`, and right-side dashes extending to viewport width.
 - **SC-005**: No explicit startup performance measurement instrumentation is required for this feature; performance confidence is accepted based on bounded startup/lazy-load design and manual validation.
 - **SC-006**: After a profile switch, the messages area reflects the new profile's history within 1 second.
 

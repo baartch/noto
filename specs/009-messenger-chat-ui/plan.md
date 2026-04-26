@@ -73,7 +73,7 @@ Completed in `research.md`:
 - Selected separator rendering model at conversation boundaries.
 - Selected unified chronological pagination strategy.
 - Confirmed non-fatal paging error handling.
-- Chosen compact date formatting for separator labels.
+- Chosen deterministic Go local-time formatting for separator labels (`time.Local`, layout `2006-01-02 15:04 MST`).
 
 ## Phase 1: Design & Contracts
 
@@ -88,7 +88,7 @@ Outputs generated:
 2. Update startup loading to source last 10 messages from profile-wide history, not only one conversation.
 3. Update lazy-load cursoring to continue across older conversations in fixed batches of 10.
 4. Add boundary item synthesis when conversation ID changes in loaded stream.
-5. Render thin boundary separators with conversation start date.
+5. Render thin boundary separators with conversation start date using Go local time (`time.Local`) and fixed layout `2006-01-02 15:04 MST`.
 6. Preserve viewport anchor during prepend operations including boundary insertions.
 7. Keep wheel routing zone-aware and PageUp/PageDown global to messages history.
 8. Keep input-history policy unchanged (no preload, 3/3/12, clear on send).
