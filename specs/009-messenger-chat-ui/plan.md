@@ -5,7 +5,7 @@
 
 ## Summary
 
-Implement messenger-style history continuity and scroll behavior in the TUI by loading the latest conversation messages on startup, routing wheel/page scrolls strictly by cursor zone (messages vs input), adding bounded lazy loading for older conversation and input-history entries, and resetting transient input-history memory after send.
+Implement messenger-style history continuity and scroll behavior in the TUI by loading the latest conversation messages on startup, routing mouse wheel scrolls by cursor zone (messages vs input) while Page Up/Page Down always scroll message history, adding bounded lazy loading for older conversation and input-history entries, and resetting transient input-history memory after send.
 
 ## Technical Context
 
@@ -92,9 +92,10 @@ Completed artifacts:
    - On TUI initialization/profile switch, load latest 10 conversation messages.
    - Map stored messages to chat view roles and open viewport at bottom.
 
-3. **Zone-aware wheel routing**
+3. **Zone-aware wheel routing + page-key routing**
    - Detect cursor hover zone (`messages` vs `input`) from mouse events.
-   - Route wheel events exclusively to the selected zone; remove overflow handoff behavior.
+   - Route mouse wheel events exclusively to the selected zone; remove overflow handoff behavior.
+   - Route Page Up/Page Down to messages history scrolling regardless of hover zone.
 
 4. **Conversation lazy loading**
    - Trigger older-message fetch at messages-view top boundary using batch size 10.

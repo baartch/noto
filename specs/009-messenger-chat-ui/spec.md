@@ -47,6 +47,8 @@ When the user moves the mouse cursor into the messages area and scrolls the mous
 5. **Given** no input-history entries are loaded yet in memory, **When** the user first scrolls while cursor is inside the input textarea, **Then** exactly the latest 3 input-history entries are loaded.
 6. **Given** the user keeps scrolling upward in the input textarea after reaching the oldest loaded entry, **When** more stored input history exists, **Then** 3 more entries are lazy-loaded per step until 12 total are loaded.
 7. **Given** 12 input-history entries are already loaded, **When** the user scrolls further upward, **Then** no additional input-history entries are loaded.
+8. **Given** the user presses Page Up, **When** any UI area is currently hovered, **Then** the messages history scrolls toward older messages.
+9. **Given** the user presses Page Down, **When** any UI area is currently hovered, **Then** the messages history scrolls toward newer messages.
 
 ---
 
@@ -87,7 +89,9 @@ When the user has scrolled to the top of the currently loaded messages and conti
 - **FR-004b**: On the first input-history scroll action in the input textarea, the system MUST load exactly the latest 3 stored input-history entries.
 - **FR-004c**: When the user scrolls beyond the oldest loaded input-history entry, the system MUST lazy-load older input-history entries in batches of 3.
 - **FR-004d**: The system MUST cap loaded input-history entries to 12 total during a single compose session.
-- **FR-005**: Scrolling up (mouse wheel or Page Up) in the messages area MUST navigate toward older messages; scrolling down (mouse wheel or Page Down) MUST navigate toward newer messages.
+- **FR-005**: Scrolling up/down with the mouse wheel in the messages area MUST navigate older/newer messages respectively.
+- **FR-005a**: Pressing Page Up MUST always scroll the messages history area toward older messages, regardless of mouse cursor position.
+- **FR-005b**: Pressing Page Down MUST always scroll the messages history area toward newer messages, regardless of mouse cursor position.
 - **FR-006**: When the user reaches the top of the currently loaded messages and triggers an upward scroll, the system MUST fetch the next older batch of messages and prepend them to the view.
 - **FR-007**: The lazy-load batch size MUST be small and fixed (default: 10 messages per batch) to bound memory use and render time.
 - **FR-008**: After prepending a new batch of older messages, the viewport MUST maintain the user's visual position so previously visible messages remain on screen (no jump).
@@ -111,8 +115,8 @@ When the user has scrolled to the top of the currently loaded messages and conti
 - **SC-002**: A user can scroll the mouse wheel while hovering over the messages area without any unintended change to the input field text or command history.
 - **SC-003**: A user can scroll the mouse wheel while hovering over the input area to cycle command history without the messages area moving.
 - **SC-003a**: Input-history loading behavior matches policy: first scroll loads 3 entries, subsequent backward lazy-loads are in batches of 3, and no more than 12 entries are loaded per compose session.
-- **SC-004**: A user with a conversation of 50+ messages can scroll back through the full history from startup using only mouse wheel or Page Up inputs.
-- **SC-005**: The application opens in under 2 seconds regardless of how long the conversation history is (lazy loading ensures only 10 messages are fetched on startup).
+- **SC-004**: A user with a conversation of 50+ messages can scroll back through the full history from startup using only mouse wheel in the messages area or Page Up/Page Down keys.
+- **SC-005**: No explicit startup performance measurement instrumentation is required for this feature; performance confidence is accepted based on bounded startup/lazy-load design and manual validation.
 - **SC-006**: After a profile switch, the messages area reflects the new profile's history within 1 second.
 
 ## Assumptions
