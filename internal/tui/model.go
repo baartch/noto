@@ -67,7 +67,7 @@ func NotesSaving() tea.Msg { return notesSavingMsg{} }
 func StatsUpdated(formatted string) tea.Msg { return statsUpdatedMsg{formatted: formatted} }
 
 // ProfileSwitched updates the TUI state after switching profiles.
-func ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, tokenStatus string, extractorFallback, embeddingModelMissing bool, provider ProviderFunc, listModels ListModelsFunc, listEmbeddings ListEmbeddingsFunc, modelSelected ModelSelectedFunc, embeddingModelSelected EmbeddingModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, settings *SettingsMenu, history []string) profileSwitchedMsg {
+func ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, tokenStatus string, extractorFallback, embeddingModelMissing bool, provider ProviderFunc, listModels ListModelsFunc, listEmbeddings ListEmbeddingsFunc, modelSelected ModelSelectedFunc, embeddingModelSelected EmbeddingModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, settings *SettingsMenu, history []string, startupMessages []*store.Message, startupHistoryErr error) profileSwitchedMsg {
 	return profileSwitchedMsg{
 		profileName:            profileName,
 		activeModel:            activeModel,
@@ -85,6 +85,8 @@ func ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, c
 		extractorModelSelected: extractorModelSelected,
 		settings:               settings,
 		history:                history,
+		startupMessages:        startupMessages,
+		startupHistoryErr:      startupHistoryErr,
 	}
 }
 
@@ -164,6 +166,8 @@ type profileSwitchedMsg struct {
 	extractorModelSelected ExtractorModelSelectedFunc
 	settings               *SettingsMenu
 	history                []string
+	startupMessages        []*store.Message
+	startupHistoryErr      error
 }
 type profileSwitchFailedMsg struct{ err error }
 type spinnerTickMsg struct{}
@@ -198,6 +202,7 @@ type Model struct {
 	width       int
 	height      int
 	err         error
+	historyErr  string
 	ready       bool
 	keys        keyMap
 	help        help.Model
@@ -443,6 +448,7 @@ func New(
 		settingsList:           settingsList,
 		settingsEditor:         settingsEditor,
 		settingsErr:            "",
+		historyErr:             "",
 	}
 	m.loadInitialConversationHistory(nil)
 	m.loadInitialInputHistoryBatch()
@@ -778,6 +784,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.historyDraft = ""
 		m.loadInitialInputHistoryBatch()
 		m.messages = []chatMessage{{role: "command", content: "Switched to profile: " + msg.profileName, timestamp: time.Now()}}
+		if len(msg.startupMessages) > 0 {
+			mapped := m.mapStoreMessagesToChatMessages(msg.startupMessages)
+			m.loadInitialConversationHistory(mapped)
+			m.messages = m.conversationHistoryWindow.messages
+		}
+		m.setHistoryError(msg.startupHistoryErr)
 		m.err = nil
 		m.clearSuggestions()
 		m.input.SetValue("")
@@ -1033,6 +1045,32 @@ func (m *Model) loadInitialInputHistoryBatch() {
 	m.historyIndex = len(m.history)
 }
 
+func (m *Model) setHistoryError(err error) {
+	if err == nil {
+		m.historyErr = ""
+		return
+	}
+	m.historyErr = err.Error()
+}
+
+func (m *Model) mapStoreMessagesToChatMessages(messages []*store.Message) []chatMessage {
+	out := make([]chatMessage, 0, len(messages))
+	for _, sm := range messages {
+		if sm == nil {
+			continue
+		}
+		role := "command"
+		switch sm.Role {
+		case store.RoleUser:
+			role = "user"
+		case store.RoleAssistant:
+			role = "assistant"
+		}
+		out = append(out, chatMessage{role: role, content: sm.Content, timestamp: sm.CreatedAt})
+	}
+	return out
+}
+
 func (m *Model) recordHistory(val string) {
 	if strings.TrimSpace(val) == "" {
 		return
@@ -1141,6 +1179,9 @@ func (m Model) View() tea.View {
 	var errBlock string
 	if m.err != nil {
 		errBlock = errStyle.Render("  ✗ "+m.err.Error()) + "\n"
+	}
+	if m.historyErr != "" {
+		errBlock += errStyle.Render("  ! "+m.historyErr) + "\n"
 	}
 
 	// ---- input bar ----
@@ -1959,6 +2000,23 @@ func (m *Model) updatePendingSpinner() {
 }
 
 // syncViewport rebuilds viewport content and scrolls to bottom.
+// SetStartupConversationHistory seeds the visible conversation history and optional non-fatal load error.
+func (m *Model) SetStartupConversationHistory(messages []*store.Message, err error) {
+	if err != nil {
+		m.setHistoryError(err)
+	}
+	if len(messages) == 0 {
+		return
+	}
+	chatMsgs := m.mapStoreMessagesToChatMessages(messages)
+	m.loadInitialConversationHistory(chatMsgs)
+	m.messages = m.conversationHistoryWindow.messages
+	m.setHistoryError(nil)
+	if m.ready {
+		m.syncViewport()
+	}
+}
+
 func (m *Model) syncViewport() {
 	if !m.ready {
 		return

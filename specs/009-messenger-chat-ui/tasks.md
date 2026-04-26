@@ -32,8 +32,8 @@
 - [X] T004 Implement store query to fetch latest N conversation messages in `internal/store/message_repo.go`
 - [X] T005 [P] Implement store query to fetch older messages before cursor (id/timestamp) in `internal/store/message_repo.go`
 - [X] T006 Implement active-profile most-recent conversation resolution helper in `internal/store/conversation_repo.go`
-- [ ] T007 Add/adjust shared mapping utility from store message to TUI chat message in `internal/tui/model.go`
-- [ ] T008 Add shared non-fatal history error state + rendering hook in `internal/tui/model.go`
+- [X] T007 Add/adjust shared mapping utility from store message to TUI chat message in `internal/tui/model.go`
+- [X] T008 Add shared non-fatal history error state + rendering hook in `internal/tui/model.go`
 
 **Checkpoint**: Foundation ready — user story implementation can now begin.
 
@@ -54,9 +54,9 @@
 
 ### Implementation for User Story 1
 
-- [ ] T013 [US1] Implement startup history load flow in `internal/tui/model.go`
-- [ ] T014 [US1] Wire startup/profile-switch message retrieval via repositories in `internal/app/chat_cmd.go`
-- [ ] T015 [US1] Ensure initial viewport position is bottom after load in `internal/tui/model.go`
+- [X] T013 [US1] Implement startup history load flow in `internal/tui/model.go`
+- [X] T014 [US1] Wire startup/profile-switch message retrieval via repositories in `internal/app/chat_cmd.go`
+- [X] T015 [US1] Ensure initial viewport position is bottom after load in `internal/tui/model.go`
 - [ ] T016 [US1] Implement empty-history rendering path without blocking input in `internal/tui/model.go`
 - [ ] T017 [US1] Implement non-fatal error indicator for load failures in `internal/tui/model.go`
 
