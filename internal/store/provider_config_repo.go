@@ -139,6 +139,7 @@ func (r *ProviderConfigRepo) SetEmbeddingsModel(ctx context.Context, profileID, 
 }
 
 // SetEndpoint updates the endpoint for a profile's active provider config.
+// If no active config exists, it creates one.
 func (r *ProviderConfigRepo) SetEndpoint(ctx context.Context, profileID, endpoint string) error {
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE provider_config SET endpoint = ?, updated_at = datetime('now')
@@ -149,12 +150,22 @@ func (r *ProviderConfigRepo) SetEndpoint(ctx context.Context, profileID, endpoin
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return ErrProviderConfigNotFound
+		// No active config exists, create one
+		return r.Upsert(ctx, &ProviderConfig{
+			ID:           fmt.Sprintf("%x", time.Now().UnixNano()),
+			ProfileID:    profileID,
+			ProviderType: "openai_compatible",
+			Endpoint:     endpoint,
+			IsActive:     true,
+			CreatedAt:    time.Now().UTC(),
+			UpdatedAt:    time.Now().UTC(),
+		})
 	}
 	return nil
 }
 
 // SetCredentialRef updates the encrypted API key for a profile's active provider config.
+// If no active config exists, it creates one.
 func (r *ProviderConfigRepo) SetCredentialRef(ctx context.Context, profileID, credentialRef string) error {
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE provider_config SET credential_ref = ?, updated_at = datetime('now')
@@ -165,7 +176,16 @@ func (r *ProviderConfigRepo) SetCredentialRef(ctx context.Context, profileID, cr
 	}
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return ErrProviderConfigNotFound
+		// No active config exists, create one
+		return r.Upsert(ctx, &ProviderConfig{
+			ID:            fmt.Sprintf("%x", time.Now().UnixNano()),
+			ProfileID:     profileID,
+			ProviderType:  "openai_compatible",
+			CredentialRef: credentialRef,
+			IsActive:      true,
+			CreatedAt:     time.Now().UTC(),
+			UpdatedAt:     time.Now().UTC(),
+		})
 	}
 	return nil
 }
