@@ -8,7 +8,7 @@ Validate profile-wide backward history scrolling across conversations with bound
 1. Run app (`make run`) with a profile containing multiple conversations.
 2. Confirm startup loads latest 10 messages and starts at bottom.
 3. Scroll up in messages area until crossing conversation boundary.
-4. Verify older conversation messages appear and a thin separator with conversation start date is displayed.
+4. Verify older conversation messages appear and a thin separator is displayed in the format `-- YYYY-MM-DD HH:MM MST ---------------------` using Go local time (`time.Local`, layout `2006-01-02 15:04 MST`).
 5. Continue scrolling to ensure loading proceeds through all profile history.
 6. At absolute history top, further upward scroll should no-op (no crash, no duplicate loads).
 7. Verify Page Up/Page Down always scroll messages history regardless of hover zone.

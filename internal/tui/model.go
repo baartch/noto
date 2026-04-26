@@ -296,9 +296,11 @@ type inputHistoryWindow struct {
 }
 
 type chatMessage struct {
-	role      string
-	content   string
-	timestamp time.Time
+	role                  string
+	content               string
+	timestamp             time.Time
+	conversationID        string
+	conversationStartedAt time.Time
 }
 
 type keyMap struct {
@@ -1024,7 +1026,9 @@ func (m *Model) loadInitialConversationHistory(messages []chatMessage) {
 		messages = messages[len(messages)-conversationInitialLoadSize:]
 		m.conversationHistoryWindow.hasOlder = true
 	} else {
-		m.conversationHistoryWindow.hasOlder = false
+		// For profile-wide startup loads we only fetch the latest window first.
+		// If window is full-size, optimistically allow one older fetch attempt.
+		m.conversationHistoryWindow.hasOlder = len(messages) == conversationInitialLoadSize
 	}
 	m.conversationHistoryWindow.messages = append([]chatMessage(nil), messages...)
 	m.conversationHistoryWindow.loadedCnt = len(messages)
@@ -1091,7 +1095,59 @@ func (m *Model) maybeLoadOlderConversationHistory() {
 	if !m.ready || !m.viewport.AtTop() {
 		return
 	}
-	m.loadOlderConversationHistoryBatch()
+	if len(m.allMessages) > len(m.conversationHistoryWindow.messages) {
+		m.loadOlderConversationHistoryBatch()
+		return
+	}
+	m.loadOlderConversationHistoryFromStore()
+}
+
+func (m *Model) loadOlderConversationHistoryFromStore() {
+	if m.messageLoadInProgress || !m.conversationHistoryWindow.hasOlder {
+		return
+	}
+	if m.execCtx == nil || m.execCtx.DB == nil || m.execCtx.ProfileID == "" {
+		m.conversationHistoryWindow.hasOlder = false
+		return
+	}
+	if len(m.conversationHistoryWindow.messages) == 0 {
+		m.conversationHistoryWindow.hasOlder = false
+		return
+	}
+	before := m.conversationHistoryWindow.messages[0].timestamp
+	if before.IsZero() {
+		m.conversationHistoryWindow.hasOlder = false
+		return
+	}
+
+	m.messageLoadInProgress = true
+	defer func() { m.messageLoadInProgress = false }()
+
+	repo := store.NewMessageRepo(m.execCtx.DB)
+	older, err := repo.ListOlderByProfileBefore(context.Background(), m.execCtx.ProfileID, before, conversationLazyBatchSize)
+	if err != nil {
+		m.setHistoryError(err)
+		return
+	}
+	if len(older) == 0 {
+		m.conversationHistoryWindow.hasOlder = false
+		return
+	}
+
+	mapped := m.mapStoreMessagesToChatMessages(older)
+	anchor := m.viewport.YOffset()
+	combined := make([]chatMessage, 0, len(mapped)+len(m.conversationHistoryWindow.messages))
+	combined = append(combined, mapped...)
+	combined = append(combined, m.conversationHistoryWindow.messages...)
+	m.conversationHistoryWindow.messages = combined
+	m.conversationHistoryWindow.loadedCnt = len(combined)
+	m.conversationHistoryWindow.hasOlder = len(mapped) == conversationLazyBatchSize
+	m.messages = combined
+	m.setHistoryError(nil)
+	if m.ready {
+		m.viewport.SetContent(m.renderHistory())
+		m.viewport.SetYOffset(anchor + len(mapped))
+	}
 }
 
 func (m *Model) setHistoryError(err error) {
@@ -1117,7 +1173,13 @@ func (m *Model) mapStoreMessagesToChatMessages(messages []*store.Message) []chat
 		case store.RoleSystem:
 			role = "command"
 		}
-		out = append(out, chatMessage{role: role, content: sm.Content, timestamp: sm.CreatedAt})
+		out = append(out, chatMessage{
+			role:                  role,
+			content:               sm.Content,
+			timestamp:             sm.CreatedAt,
+			conversationID:        sm.ConversationID,
+			conversationStartedAt: sm.ConversationStartedAt,
+		})
 	}
 	return out
 }
@@ -2146,7 +2208,18 @@ func (m *Model) renderHistory() string {
 	}
 
 	var sb strings.Builder
-	for _, msg := range m.messages {
+	for i, msg := range m.messages {
+		if i > 0 {
+			prev := m.messages[i-1]
+			if msg.conversationID != "" && prev.conversationID != "" && msg.conversationID != prev.conversationID {
+				boundaryAt := msg.conversationStartedAt
+				if boundaryAt.IsZero() {
+					boundaryAt = msg.timestamp
+				}
+				sb.WriteString(renderConversationBoundary(boundaryAt, termWidth))
+				sb.WriteString("\n\n")
+			}
+		}
 		ts := msg.timestamp
 		if ts.IsZero() {
 			ts = time.Now()

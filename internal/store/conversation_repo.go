@@ -97,6 +97,19 @@ func (r *ConversationRepo) GetMostRecentByProfile(ctx context.Context, profileID
 	return r.scanOne(row)
 }
 
+// GetStartedAtByID returns the conversation start time for boundary labels.
+func (r *ConversationRepo) GetStartedAtByID(ctx context.Context, id string) (time.Time, error) {
+	var startedAt time.Time
+	err := r.db.QueryRowContext(ctx, `SELECT started_at FROM conversations WHERE id = ?`, id).Scan(&startedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, ErrConversationNotFound
+	}
+	if err != nil {
+		return time.Time{}, fmt.Errorf("store: get conversation started_at: %w", err)
+	}
+	return startedAt, nil
+}
+
 // Archive sets the conversation status to archived and records its end time.
 func (r *ConversationRepo) Archive(ctx context.Context, id string) error {
 	now := time.Now().UTC()

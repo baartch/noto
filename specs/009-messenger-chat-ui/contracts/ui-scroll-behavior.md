@@ -9,8 +9,8 @@ Defines required UI behavior for profile-wide history scrolling with conversatio
    - Backward scroll in messages area MUST continue into older conversations in the same active profile.
 
 2. **Conversation boundary marker**
-   - When crossing into older conversation messages, render a single-character-height separator line formatted like `-- <terminal-local date/time> ---------------------`.
-   - Date/time formatting MUST use the terminal-local timezone/locale representation.
+   - When crossing into older conversation messages, render a single-character-height separator line formatted like `-- YYYY-MM-DD HH:MM MST ---------------------`.
+   - Date/time formatting MUST use Go local time (`time.Local`) with fixed layout `2006-01-02 15:04 MST`.
    - The right-side dashes MUST expand to fill remaining viewport width.
 
 3. **Wheel routing**

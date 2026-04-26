@@ -94,3 +94,8 @@ Outputs generated:
 8. Keep input-history policy unchanged (no preload, 3/3/12, clear on send).
 9. Add/adjust tests for cross-conversation loading, boundary rendering, no-op at absolute top, and non-fatal failures.
 10. Run quality gates (`make fmt && make lint && make vet && make test`).
+
+## Implementation Validation Log
+
+- 2026-04-26: `go test ./...` ✅ passed
+- 2026-04-26: FR-012 manual baseline check ✅ user bubbles remain right-aligned, assistant bubbles remain left-aligned after boundary/paging changes

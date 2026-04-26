@@ -438,16 +438,8 @@ func loadSystemPrompt(ctx context.Context, db *store.DB, profile *store.Profile)
 }
 
 func loadStartupConversationMessages(ctx context.Context, db *store.DB, profileID string) ([]*store.Message, error) {
-	convRepo := store.NewConversationRepo(db)
 	msgRepo := store.NewMessageRepo(db)
-	conv, err := convRepo.GetMostRecentByProfile(ctx, profileID)
-	if err != nil {
-		if errors.Is(err, store.ErrConversationNotFound) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("chat: load latest conversation: %w", err)
-	}
-	msgs, err := msgRepo.ListRecentByConversation(ctx, conv.ID, 10)
+	msgs, err := msgRepo.ListRecentByProfile(ctx, profileID, 10)
 	if err != nil {
 		return nil, fmt.Errorf("chat: load latest messages: %w", err)
 	}

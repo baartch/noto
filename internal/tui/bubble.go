@@ -162,6 +162,19 @@ func padLines(content, pad string) string {
 	return strings.Join(lines, "\n")
 }
 
+func renderConversationBoundary(ts time.Time, width int) string {
+	if width < 10 {
+		width = 10
+	}
+	label := "-- " + ts.In(time.Local).Format("2006-01-02 15:04 MST") + " "
+	dashes := width - utf8.RuneCountInString(label)
+	if dashes < 3 {
+		dashes = 3
+	}
+	line := label + strings.Repeat("-", dashes)
+	return boundaryStyle.Render(line)
+}
+
 func alignWrappedLines(lines []string, indent string) string {
 	var out []string
 	for i, line := range lines {
