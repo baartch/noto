@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
 	"noto/internal/provider"
 	"noto/internal/tui"
 )
