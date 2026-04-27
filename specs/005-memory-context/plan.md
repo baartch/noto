@@ -5,7 +5,7 @@
 
 ## Summary
 
-Add profile-local Markdown prompt storage (`<profile>/prompts/system.md`, `<profile>/prompts/extractor.md`) and tighten extraction contracts so the extractor always returns valid JSON with as many meaningful notes as warranted, each note carrying its own `action` (`add|update`), mandatory `target_id` on updates, and constrained category (`fact|progress|blocker|action_item|other`). Keep existing relevance ranking, token budgeting, persistence, and vector index maintenance behavior.
+Add profile-local Markdown prompt storage (`<profile>/prompts/system.md`, `<profile>/prompts/extractor.md`) and tighten extraction contracts so the extractor always returns valid JSON with top-level `has_new_info` and `confidence`, plus as many meaningful notes as warranted, each note carrying its own `action` (`add|update`), mandatory `target_id` on updates, and constrained category (`fact|progress|blocker|action_item|other`). Missing prompt files are auto-bootstrapped with defaults and a visible warning. Keep existing relevance ranking, token budgeting, persistence, and vector index maintenance behavior.
 
 ## Technical Context
 
@@ -16,7 +16,7 @@ Add profile-local Markdown prompt storage (`<profile>/prompts/system.md`, `<prof
 **Target Platform**: Cross-platform terminal environments (Linux/macOS primary)  
 **Project Type**: CLI + TUI application  
 **Performance Goals**: Context assembly <200ms at 10k notes; prompt file load/save non-blocking for normal interactions  
-**Constraints**: Deterministic fallback ranking, robust malformed-JSON handling, no DB storage for system/extractor prompts  
+**Constraints**: Deterministic fallback ranking, robust malformed-JSON handling, no DB storage for system/extractor prompts, missing prompt files are non-fatal (auto-bootstrap defaults + visible warning)  
 **Scale/Scope**: Single-user local profiles, up to 10k+ notes per profile, multiple profile directories
 
 ## Constitution Check
@@ -72,14 +72,14 @@ tests/
 
 ## Phase 1: Design Plan
 
-1. Extend data model with Prompt File and Extraction Payload entities/validation.
-2. Update contract docs for retrieval + extraction schema invariants.
-3. Update quickstart to include prompt file and schema validation scenarios.
+1. Extend data model with Prompt File and Extraction Payload entities/validation, including top-level `has_new_info` and `confidence`.
+2. Update contract docs for retrieval + extraction schema invariants, including top-level metadata requirements.
+3. Update quickstart to include prompt file and schema validation scenarios (with top-level metadata checks).
 4. Update agent context reference in `AGENTS.md` to point to this plan.
 
 ## Phase 2: Task Planning Approach
 
-Generate implementation tasks that sequence: file persistence layer → extractor schema validation → extraction pipeline integration → settings wiring → tests (unit/integration/contract) → docs.
+Generate implementation tasks that sequence: file persistence layer → extractor schema validation (including top-level `has_new_info`/`confidence`) → extraction pipeline integration → settings wiring → tests (unit/integration/contract) → docs.
 
 ## Complexity Tracking
 

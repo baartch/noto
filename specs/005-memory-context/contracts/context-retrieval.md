@@ -22,6 +22,8 @@
 
 ```json
 {
+  "has_new_info": true,
+  "confidence": 0.86,
   "notes": [
     {
       "action": "add",
@@ -41,11 +43,21 @@
 ```
 
 Validation rules:
-- Top-level object MUST include `notes` array.
+- Top-level object MUST include `has_new_info` (boolean), `confidence` (float 0.0..1.0), and `notes` array.
 - Each note MUST include `action` with value `add|update`.
 - `action=update` MUST include `target_id`.
 - Each note MUST include `category` in `fact|progress|blocker|action_item|other`.
 - Invalid payloads MUST be rejected and logged.
+
+No-new-info example:
+
+```json
+{
+  "has_new_info": false,
+  "confidence": 0.12,
+  "notes": []
+}
+```
 
 ## Output
 

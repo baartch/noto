@@ -31,10 +31,13 @@ Validation:
 
 ### Extraction Payload
 
+- **has_new_info**: bool
+- **confidence**: float (0.0..1.0)
 - **notes**: array of `ExtractedNote`
 
 Validation:
-- Payload MUST be valid JSON object with top-level `notes` array.
+- Payload MUST be valid JSON object with top-level `has_new_info`, `confidence`, and `notes`.
+- `confidence` MUST be in range `0.0..1.0`.
 
 ### ExtractedNote
 

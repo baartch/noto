@@ -82,6 +82,7 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 - If compaction fails, the system logs a warning and continues with existing data.
 - If note volume exceeds configured limits, the system truncates by relevance and recency.
 - If extractor output is not valid JSON or misses required per-note fields, the system rejects extraction output and logs a warning.
+- If `<profile>/prompts/system.md` or `<profile>/prompts/extractor.md` is missing, the system auto-bootstraps defaults and emits a visible warning (non-fatal).
 
 ## Requirements _(mandatory)_
 
@@ -99,16 +100,19 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 - **FR-010**: The system MUST periodically compact or rebuild the vector index when required.
 - **FR-011**: The system MUST fall back to importance-then-recency selection if the index is unavailable.
 - **FR-012**: The system MUST use the main model for extraction when no extractor model is configured and display a footer warning.
-- **FR-013**: The system MUST store the extractor prompt as a Markdown file at `<profile>/prompts/extractor.md`, using the current prompt as the starting content.
+- **FR-013**: Prompts MUST be persisted as profile-local Markdown files under `<profile>/prompts/` and MUST NOT be stored in SQLite:
+  - `system.md` is the canonical system prompt file.
+  - `extractor.md` is the canonical extractor prompt file and starts from the current prompt content.
 - **FR-014**: The extractor output MUST assign `action: add|update` on each individual extracted note, rather than at the whole-response level.
 - **FR-015**: The extractor prompt MUST instruct the LLM to extract as many notes as are meaningful for the input, with no fixed note-count cap.
-- **FR-016**: The system prompt MUST be stored per profile as a Markdown file under `<profile>/prompts/` and MUST NOT be stored in SQLite.
-- **FR-017**: Prompts MUST be persisted as profile-local Markdown files under `<profile>/prompts/` (including at least `system.md` and `extractor.md`).
 - **FR-018**: The extractor LLM response MUST be valid JSON containing a notes array.
 - **FR-019**: Each note in extractor output MUST include its own `action` field with value `add` or `update`.
 - **FR-020**: Notes with `action: update` MUST include `target_id` referencing the existing note id to update.
 - **FR-021**: Each extracted note MUST include exactly one category from `fact|progress|blocker|action_item|other`.
 - **FR-022**: The system and extractor prompts MUST prioritize accurate, user-useful note extraction over verbosity.
+- **FR-023**: The extractor JSON response MUST include top-level `has_new_info` as a boolean (`true|false`).
+- **FR-024**: The extractor JSON response MUST include top-level `confidence` as a float in the range `0.0..1.0`.
+- **FR-025**: If `<profile>/prompts/system.md` or `<profile>/prompts/extractor.md` is missing, the system MUST auto-create the missing file with defaults and emit a visible warning without failing the flow.
 
 ### Non-Functional Requirements _(mandatory)_
 
@@ -135,6 +139,8 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 - **SC-005**: Fallback selection yields deterministic importance-then-recency results when the index is unavailable.
 - **SC-007**: When no extractor model is configured, extraction uses the main model and the footer shows a warning indicator.
 - **SC-008**: 100% of accepted extraction payloads conform to the JSON schema (`notes[]`, per-note `action`, `target_id` for updates, valid category).
+- **SC-009**: 100% of accepted extraction payloads include valid `has_new_info` (boolean) and `confidence` (0.0..1.0).
+- **SC-010**: 100% of missing prompt-file cases (`system.md`/`extractor.md`) auto-bootstrap defaults and emit a visible warning while continuing operation.
 
 ## Assumptions
 
