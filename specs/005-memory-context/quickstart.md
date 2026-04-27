@@ -54,3 +54,9 @@
 - `go test ./...`
 - `make lint`
 - `make fmt`
+
+## Wiring Notes
+
+- Integration fixture constants for extractor payloads live in `tests/integration/memory/extractor_payload_fixtures.go`.
+- Prompt file test helpers for profile-local markdown prompts live in `tests/integration/testutil/prompt_files.go`.
+- Use these helpers when validating `<profile>/prompts/system.md` and `<profile>/prompts/extractor.md` persistence and bootstrap behavior.

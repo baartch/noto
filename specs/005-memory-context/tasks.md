@@ -9,9 +9,9 @@
 
 **Purpose**: Prepare scaffolding for prompt-file + extraction-contract work.
 
-- [ ] T001 Add/update feature wiring notes in specs/005-memory-context/quickstart.md for prompt files and extractor schema validation paths
-- [ ] T002 Create shared test fixtures for extractor JSON payload cases in tests/integration/memory/extractor_payload_fixtures.go
-- [ ] T003 [P] Add helper utilities for profile prompt file setup in tests/integration/testutil/prompt_files.go
+- [X] T001 Add/update feature wiring notes in specs/005-memory-context/quickstart.md for prompt files and extractor schema validation paths
+- [X] T002 Create shared test fixtures for extractor JSON payload cases in tests/integration/memory/extractor_payload_fixtures.go
+- [X] T003 [P] Add helper utilities for profile prompt file setup in tests/integration/testutil/prompt_files.go
 
 ---
 
