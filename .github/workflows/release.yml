@@ -76,7 +76,7 @@ jobs:
         run: |
           mkdir -p dist
           CURRENT_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          go build -ldflags "-X noto/internal/version.Version=${{ github.ref_name }} -X noto/internal/version.Commit=${{ github.sha}} -X noto/internal/version.Date=$CURRENT_DATE" -o dist/noto-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/noto
+          go build -ldflags "-X noto/internal/version.Version=${{ github.ref_name }} -X noto/internal/version.Commit=${{ github.sha}} -X noto/internal/version.Date=$CURRENT_DATE" -o dist/noto${{ matrix.ext }} ./cmd/noto
 
       - name: Package artifact
         run: |
