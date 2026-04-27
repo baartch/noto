@@ -25,7 +25,7 @@ func TestFooterUsageAggregation_AcrossSources(t *testing.T) {
 	m2 = updated.(tui.Model)
 
 	view := m2.View().Content
-	if !strings.Contains(view, "↑20") || !strings.Contains(view, "↓3") || !strings.Contains(view, "cr:3") || !strings.Contains(view, "cw:6") {
+	if !strings.Contains(view, "↑20") || !strings.Contains(view, "↓3") || !strings.Contains(view, "R3") || !strings.Contains(view, "W6") {
 		t.Fatalf("expected aggregated usage values in footer, got: %s", view)
 	}
 }

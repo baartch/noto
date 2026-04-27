@@ -412,7 +412,11 @@ func runChat(cmd *cobra.Command, _ []string) error {
 		embeddingModelMissing = sess.EmbeddingModelMissingActive()
 		embeddingModel = sess.EmbeddingModel()
 	}
-	startUpdateCheckAsync(cmd.OutOrStdout())
+	startUpdateCheckAsync(func(msg tea.Msg) {
+		if prog != nil {
+			prog.Send(msg)
+		}
+	})
 
 	m := tui.New(
 		activeProfile.Name, activeModel, extractorModel, embeddingModel,

@@ -1,15 +1,15 @@
 package app
 
 import (
-	"bytes"
 	"testing"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestStartUpdateCheckAsync_NonBlocking(t *testing.T) {
-	buf := new(bytes.Buffer)
 	start := time.Now()
-	startUpdateCheckAsync(buf)
+	startUpdateCheckAsync(func(tea.Msg) {})
 	if time.Since(start) > 100*time.Millisecond {
 		t.Fatalf("startUpdateCheckAsync appears blocking")
 	}
