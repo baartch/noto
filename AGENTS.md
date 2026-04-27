@@ -12,9 +12,7 @@ Auto-generated from all feature plans. Last updated: 2026-04-27
 - golang.org/x/mod/semver (versioning)
 - Profile storage: `~/.noto/profiles/<profile>/memory.db`, `~/.noto/profiles/<profile>/memory.vec`, profile metadata files
 - Profile-local SQLite (`~/.noto/profiles/<profile>/memory.db`) for conversation/message data and input history (009-messenger-chat-ui)
-- Go 1.26+ + Cobra CLI, Bubble Tea v2, Bubbles v2, Lip Gloss v2, modernc.org/sqlite, OpenAI-compatible provider adapter, internal pure-Go HNSW index (005-memory-context)
 - Profile-local SQLite (`~/.noto/profiles/<profile>/memory.db`) for notes/cache + profile-local files (`~/.noto/profiles/<profile>/prompts/*.md`, `memory.vec`) (005-memory-context)
-- Go 1.26+ + Cobra CLI, Bubble Tea v2, Bubbles v2, Lip Gloss v2, OpenAI-compatible provider adapter (004-bubbletea-tui)
 - Profile-local SQLite (`~/.noto/profiles/<profile>/memory.db`) + profile-local files (`memory.vec`, prompt files) (004-bubbletea-tui)
 
 ## Project Structure

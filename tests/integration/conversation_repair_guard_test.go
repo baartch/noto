@@ -50,6 +50,7 @@ func TestConversationRepairGuard_ArchivesLingeringActiveConversationsOnSessionSt
 		observe.NewNoopLogger(),
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewSession: %v", err)

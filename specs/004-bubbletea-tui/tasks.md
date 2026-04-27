@@ -17,9 +17,9 @@
 
 **Purpose**: Establish implementation scaffolding for TUI telemetry and validation.
 
-- [ ] T001 Audit current TUI flows and capture inventory in `specs/004-bubbletea-tui/contracts/tui-flows.md`
-- [ ] T002 Add/confirm test fixtures for provider usage payloads in `tests/unit/provider/usage_payload_fixtures_test.go`
-- [ ] T003 [P] Add reusable footer rendering test helper in `tests/integration/tui/footer_test_helpers.go`
+- [X] T001 Audit current TUI flows and capture inventory in `specs/004-bubbletea-tui/contracts/tui-flows.md`
+- [X] T002 Add/confirm test fixtures for provider usage payloads in `tests/unit/provider/usage_payload_fixtures_test.go`
+- [X] T003 [P] Add reusable footer rendering test helper in `tests/integration/tui/footer_test_helpers.go`
 
 ---
 
@@ -29,13 +29,13 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T004 Implement usage snapshot parsing types and mappers in `internal/provider/usage.go`
-- [ ] T005 [P] Implement session usage accumulator (`up/down/cache read/cache write/cost`) in `internal/tui/usage_accumulator.go`
-- [ ] T006 [P] Implement accumulator update logic for `main|extractor|embeddings` sources in `internal/tui/usage_accumulator.go`
-- [ ] T007 Implement footer status view model with required always-visible fields in `internal/tui/footer_status.go`
-- [ ] T008 Wire provider usage events into TUI model update path in `internal/tui/model.go`
-- [ ] T009 Add unit tests for parsing + missing-usage no-op behavior in `tests/unit/provider/usage_test.go`
-- [ ] T010 Add unit tests for accumulator math and source aggregation in `tests/unit/tui/usage_accumulator_test.go`
+- [X] T004 Implement usage snapshot parsing types and mappers in `internal/provider/usage.go`
+- [X] T005 [P] Implement session usage accumulator (`up/down/cache read/cache write/cost`) in `internal/tui/usage_accumulator.go`
+- [X] T006 [P] Implement accumulator update logic for `main|extractor|embeddings` sources in `internal/tui/usage_accumulator.go`
+- [X] T007 Implement footer status view model with required always-visible fields in `internal/tui/footer_status.go`
+- [X] T008 Wire provider usage events into TUI model update path in `internal/tui/model.go`
+- [X] T009 Add unit tests for parsing + missing-usage no-op behavior in `tests/unit/provider/usage_test.go`
+- [X] T010 Add unit tests for accumulator math and source aggregation in `tests/unit/tui/usage_accumulator_test.go`
 
 **Checkpoint**: Foundation ready - user story implementation can now begin.
 
