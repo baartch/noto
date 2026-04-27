@@ -10,6 +10,7 @@ This contract defines required behavior for refactored TUI flows, component reus
 2. Navigation keys, labels, and visual styles remain consistent with existing UI unless explicitly documented.
 3. If a suitable Bubbles component exists, it must be used.
 4. If a custom component is used, its rationale is documented in-code or in supporting docs.
+   - Current rationale: no broad replacement candidates remain; existing picker/help/list surfaces already use Bubbles primitives. `internal/tui/components.go` documents shared composition conventions.
 5. Styling is defined via reusable Lip Gloss styles.
 6. Footer always renders: token usage (`up/down/cache read/cache write`), context cache stats (`ctx:miss|hit`), total cost, current profile, current main model, app version, and help keybinding.
 7. Token/cost totals are extracted from provider `usage` payloads when present.

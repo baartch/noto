@@ -10,12 +10,12 @@ import (
 
 // renderFooter draws the bottom status line.
 func (m *Model) renderFooter() string {
-	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	green := lipgloss.NewStyle().Foreground(lipgloss.Color("71"))
-	blue := lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	yellow := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
-	purple := lipgloss.NewStyle().Foreground(lipgloss.Color("135"))
-	white := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	dim := footerDimStyle
+	green := footerGreenStyle
+	blue := footerBlueStyle
+	yellow := footerYellowStyle
+	purple := footerPurpleStyle
+	white := footerWhiteStyle
 
 	// Left: token stats + cache status + notes badge + extractor warning.
 	var leftParts []string

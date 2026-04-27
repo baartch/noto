@@ -323,7 +323,7 @@ type openAIEmbeddingRequest struct {
 }
 
 type openAIEmbeddingResponse struct {
-	Model string               `json:"model"`
+	Model string `json:"model"`
 	Data  []struct {
 		Embedding []float64 `json:"embedding"`
 	} `json:"data"`

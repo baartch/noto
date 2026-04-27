@@ -50,4 +50,12 @@ var (
 	pickerNormalStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
 	pickerActiveStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // currently-active item
 	pickerHeaderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Bold(true)
+
+	// Footer status styles
+	footerDimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	footerGreenStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("71"))
+	footerBlueStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	footerYellowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+	footerPurpleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("135"))
+	footerWhiteStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 )

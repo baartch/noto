@@ -49,22 +49,22 @@
 
 ### Tests for User Story 1
 
-- [ ] T011 [P] [US1] Add integration test for anchored input/footer during overlays in `tests/integration/tui/layout_anchor_test.go`
-- [ ] T012 [P] [US1] Add integration test for picker `/` filtering without list collapse in `tests/integration/tui/picker_filter_test.go`
-- [ ] T013 [P] [US1] Add integration test for keybindings (`Ctrl+D`, `Ctrl+L`, `Ctrl+H`, `Ctrl+J`) in `tests/integration/tui/keybindings_test.go`
-- [ ] T014 [P] [US1] Add integration test for expanded help position above textarea in `tests/integration/tui/help_layout_test.go`
-- [ ] T015 [P] [US1] Add integration test for always-visible footer fields and `ctx:miss|hit` in `tests/integration/tui/footer_fields_test.go`
-- [ ] T016 [P] [US1] Add integration test for footer usage accumulation across main/extractor/embeddings in `tests/integration/tui/footer_usage_aggregation_test.go`
+- [X] T011 [P] [US1] Add integration test for anchored input/footer during overlays in `tests/integration/tui/layout_anchor_test.go`
+- [X] T012 [P] [US1] Add integration test for picker `/` filtering without list collapse in `tests/integration/tui/picker_filter_test.go`
+- [X] T013 [P] [US1] Add integration test for keybindings (`Ctrl+D`, `Ctrl+L`, `Ctrl+H`, `Ctrl+J`) in `tests/integration/tui/keybindings_test.go`
+- [X] T014 [P] [US1] Add integration test for expanded help position above textarea in `tests/integration/tui/help_layout_test.go`
+- [X] T015 [P] [US1] Add integration test for always-visible footer fields and `ctx:miss|hit` in `tests/integration/tui/footer_fields_test.go`
+- [X] T016 [P] [US1] Add integration test for footer usage accumulation across main/extractor/embeddings in `tests/integration/tui/footer_usage_aggregation_test.go`
 
 ### Implementation for User Story 1
 
-- [ ] T017 [US1] Refactor remaining non-conforming TUI flows to Bubble Tea model/update loop patterns in `internal/tui/model.go`
-- [ ] T018 [US1] Enforce overlay layout anchoring for input/footer in `internal/tui/layout.go`
-- [ ] T019 [US1] Implement stable picker filter behavior with Bubbles list filtering in `internal/tui/pickers.go`
-- [ ] T020 [US1] Implement/normalize global keybindings (`Ctrl+D`, `Ctrl+L`, `Ctrl+H`, `Ctrl+J`) in `internal/tui/keys.go`
-- [ ] T021 [US1] Render expanded help above textarea and preserve footer placement in `internal/tui/help.go`
-- [ ] T022 [US1] Render footer telemetry fields (`up/down/cache read/cache write/cost`, `ctx:miss|hit`, profile/model/version/help) in `internal/tui/footer.go`
-- [ ] T023 [US1] Wire usage payload handling from provider responses/chunks into footer updates in `internal/tui/model.go`
+- [X] T017 [US1] Refactor remaining non-conforming TUI flows to Bubble Tea model/update loop patterns in `internal/tui/model.go`
+- [X] T018 [US1] Enforce overlay layout anchoring for input/footer in `internal/tui/layout.go`
+- [X] T019 [US1] Implement stable picker filter behavior with Bubbles list filtering in `internal/tui/pickers.go`
+- [X] T020 [US1] Implement/normalize global keybindings (`Ctrl+D`, `Ctrl+L`, `Ctrl+H`, `Ctrl+J`) in `internal/tui/keys.go`
+- [X] T021 [US1] Render expanded help above textarea and preserve footer placement in `internal/tui/help.go`
+- [X] T022 [US1] Render footer telemetry fields (`up/down/cache read/cache write/cost`, `ctx:miss|hit`, profile/model/version/help) in `internal/tui/footer.go`
+- [X] T023 [US1] Wire usage payload handling from provider responses/chunks into footer updates in `internal/tui/model.go`
 
 **Checkpoint**: User Story 1 is independently functional and testable (MVP).
 
@@ -78,14 +78,14 @@
 
 ### Tests for User Story 2
 
-- [ ] T024 [P] [US2] Add contract test validating flow/component mapping and custom-rationale requirement in `tests/contract/tui_component_contract_test.go`
-- [ ] T025 [P] [US2] Add integration regression test for Bubbles Help primary/secondary key grouping in `tests/integration/tui/help_component_grouping_test.go`
+- [X] T024 [P] [US2] Add contract test validating flow/component mapping and custom-rationale requirement in `tests/contract/tui_component_contract_test.go`
+- [X] T025 [P] [US2] Add integration regression test for Bubbles Help primary/secondary key grouping in `tests/integration/tui/help_component_grouping_test.go`
 
 ### Implementation for User Story 2
 
-- [ ] T026 [US2] Replace remaining custom list/input/help primitives with Bubbles components where suitable in `internal/tui/components.go`
-- [ ] T027 [US2] Document rationale for retained custom components in `specs/004-bubbletea-tui/contracts/tui-flows.md`
-- [ ] T028 [US2] Consolidate shared Lip Gloss style definitions for standardized TUI surfaces in `internal/tui/styles.go`
+- [X] T026 [US2] Replace remaining custom list/input/help primitives with Bubbles components where suitable in `internal/tui/components.go`
+- [X] T027 [US2] Document rationale for retained custom components in `specs/004-bubbletea-tui/contracts/tui-flows.md`
+- [X] T028 [US2] Consolidate shared Lip Gloss style definitions for standardized TUI surfaces in `internal/tui/styles.go`
 
 **Checkpoint**: User Stories 1 and 2 both work independently.
 
@@ -95,8 +95,8 @@
 
 **Purpose**: Final validation, cleanup, and documentation.
 
-- [ ] T029 [P] Update quick verification steps for telemetry and keybinding behavior in `specs/004-bubbletea-tui/quickstart.md`
-- [ ] T030 Run full quality gates and fix residual issues (`make fmt && make lint && make vet && make test`) in repository root
+- [X] T029 [P] Update quick verification steps for telemetry and keybinding behavior in `specs/004-bubbletea-tui/quickstart.md`
+- [X] T030 Run full quality gates and fix residual issues (`make fmt && make lint && make vet && make test`) in repository root
 
 ---
 

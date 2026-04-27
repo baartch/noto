@@ -50,6 +50,10 @@
    - Simulate response without `usage`.
    - Verify totals remain unchanged (no reset/no estimation).
 
+8. **Check settings shortcut parity**
+   - Press `Ctrl+J` in active TUI.
+   - Verify settings dialog opens and footer remains visible.
+
 ## Expected Results
 
 - All TUI flows align with Bubble Tea architecture and Bubbles-first component selection.
