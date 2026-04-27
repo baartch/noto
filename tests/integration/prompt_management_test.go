@@ -2,19 +2,17 @@ package integration
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"noto/internal/config"
 	"noto/internal/profile"
-	"noto/internal/store"
-	"noto/tests/integration/testutil"
 )
 
 func TestPromptStore_GetDefault_WhenMissing(t *testing.T) {
-	db, closeDB := testutil.TempDB(t)
-	defer closeDB()
-
-	repo := store.NewSystemPromptRepo(db)
-	ps := profile.NewPromptStore("test-profile-id", repo)
+	t.Setenv("NOTO_APP_DIR", t.TempDir())
+	ps := profile.NewPromptStore("test-profile", nil)
 
 	content, err := ps.GetSystemPrompt(context.Background())
 	if err != nil {
@@ -26,11 +24,8 @@ func TestPromptStore_GetDefault_WhenMissing(t *testing.T) {
 }
 
 func TestPromptStore_SetAndGet(t *testing.T) {
-	db, closeDB := testutil.TempDB(t)
-	defer closeDB()
-
-	repo := store.NewSystemPromptRepo(db)
-	ps := profile.NewPromptStore("test-profile-id", repo)
+	t.Setenv("NOTO_APP_DIR", t.TempDir())
+	ps := profile.NewPromptStore("test-profile", nil)
 
 	custom := "You are a specialized assistant for software architecture."
 	if err := ps.SetSystemPrompt(context.Background(), custom); err != nil {
@@ -47,11 +42,8 @@ func TestPromptStore_SetAndGet(t *testing.T) {
 }
 
 func TestPromptStore_UpdateOverwrites(t *testing.T) {
-	db, closeDB := testutil.TempDB(t)
-	defer closeDB()
-
-	repo := store.NewSystemPromptRepo(db)
-	ps := profile.NewPromptStore("test-profile-id", repo)
+	t.Setenv("NOTO_APP_DIR", t.TempDir())
+	ps := profile.NewPromptStore("test-profile", nil)
 	ctx := context.Background()
 
 	if err := ps.SetSystemPrompt(ctx, "version 1"); err != nil {
@@ -67,5 +59,34 @@ func TestPromptStore_UpdateOverwrites(t *testing.T) {
 	}
 	if got != "version 2" {
 		t.Errorf("expected version 2, got %q", got)
+	}
+}
+
+func TestPromptStore_AutoBootstrapsMissingPromptFile(t *testing.T) {
+	t.Setenv("NOTO_APP_DIR", t.TempDir())
+	slug := "bootstrap-profile"
+	ps := profile.NewPromptStore(slug, nil)
+
+	if _, err := ps.GetSystemPrompt(context.Background()); err != nil {
+		t.Fatalf("initial GetSystemPrompt: %v", err)
+	}
+
+	systemPath, err := config.ProfileSystemPromptPath(slug)
+	if err != nil {
+		t.Fatalf("ProfileSystemPromptPath: %v", err)
+	}
+	if err := os.Remove(systemPath); err != nil {
+		t.Fatalf("remove system prompt: %v", err)
+	}
+
+	content, err := ps.GetSystemPrompt(context.Background())
+	if err != nil {
+		t.Fatalf("GetSystemPrompt after remove: %v", err)
+	}
+	if content == "" {
+		t.Fatal("expected bootstrapped prompt content")
+	}
+	if _, err := os.Stat(filepath.Clean(systemPath)); err != nil {
+		t.Fatalf("expected bootstrapped file to exist: %v", err)
 	}
 }

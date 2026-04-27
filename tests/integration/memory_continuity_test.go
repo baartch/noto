@@ -20,7 +20,7 @@ func TestMemoryContinuity_ExtractTurn_NoLLM_SavesNothing(t *testing.T) {
 
 	// With nil adapter, ExtractTurn should return no notes (no LLM = no extraction).
 	extractor := memory.NewExtractor(noteRepo, nil, nil)
-	result, err := extractor.ExtractTurn(ctx, p.ID, "", nil, "hello", "hi there")
+	result, err := extractor.ExtractTurn(ctx, p.Slug, "", nil, "hello", "hi there")
 	if err != nil {
 		t.Fatalf("ExtractTurn: %v", err)
 	}

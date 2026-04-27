@@ -2,55 +2,41 @@ package profile
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"time"
 
-	"noto/internal/store"
+	"noto/internal/config"
 )
 
 const defaultSystemPrompt = "You are Noto. A buddy who takes notes."
 
-// PromptStore manages reading and writing the profile system prompt from SQLite.
+// PromptStore manages reading and writing profile prompts from profile-local markdown files.
 type PromptStore struct {
-	profileID string
-	repo      *store.SystemPromptRepo
+	profileSlug string
 }
 
-// NewPromptStore creates a PromptStore.
-func NewPromptStore(profileID string, repo *store.SystemPromptRepo) *PromptStore {
-	return &PromptStore{profileID: profileID, repo: repo}
+// NewPromptStore creates a PromptStore. The second parameter is kept for backward compatibility
+// with legacy call sites that previously passed a DB repo.
+func NewPromptStore(profileSlug string, _ any) *PromptStore {
+	return &PromptStore{profileSlug: profileSlug}
 }
 
-// GetSystemPrompt returns the stored prompt or a default if missing.
+// GetSystemPrompt returns the file-backed prompt, bootstrapping defaults if missing.
 func (ps *PromptStore) GetSystemPrompt(ctx context.Context) (string, error) {
-	if ps.repo == nil {
-		return defaultSystemPrompt, nil
-	}
-	prompt, err := ps.repo.GetByProfile(ctx, ps.profileID)
+	_ = ctx
+	content, _, err := config.ReadSystemPromptFile(ps.profileSlug)
 	if err != nil {
-		if errors.Is(err, store.ErrSystemPromptNotFound) {
-			return defaultSystemPrompt, nil
-		}
 		return "", fmt.Errorf("profile: get system prompt: %w", err)
 	}
-	if prompt.Prompt == "" {
+	if content == "" {
 		return defaultSystemPrompt, nil
 	}
-	return prompt.Prompt, nil
+	return content, nil
 }
 
-// SetSystemPrompt writes the prompt to SQLite.
+// SetSystemPrompt writes the prompt to the profile prompt markdown file.
 func (ps *PromptStore) SetSystemPrompt(ctx context.Context, content string) error {
-	if ps.repo == nil {
-		return errors.New("profile: system prompt repo is nil")
-	}
-	p := &store.SystemPrompt{
-		ID:        fmt.Sprintf("sp-%x", time.Now().UnixNano()),
-		ProfileID: ps.profileID,
-		Prompt:    content,
-	}
-	if err := ps.repo.Upsert(ctx, p); err != nil {
+	_ = ctx
+	if err := config.WriteSystemPromptFile(ps.profileSlug, content); err != nil {
 		return fmt.Errorf("profile: set system prompt: %w", err)
 	}
 	return nil

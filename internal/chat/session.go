@@ -441,7 +441,7 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 		extractor.WithDeduper(deduper)
 	}
 	sourceIDs := []string{s.history[len(s.history)-2].ID, s.history[len(s.history)-1].ID}
-	result, err := extractor.ExtractTurn(ctx, s.profileID, s.conversationID, sourceIDs, userMsg, assistantMsg)
+	result, err := extractor.ExtractTurn(ctx, s.profileSlug, s.conversationID, sourceIDs, userMsg, assistantMsg)
 	if err != nil {
 		s.logger.Errorf("memory extraction failed: %v", err)
 		s.markNotesDone(0)

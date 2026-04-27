@@ -19,13 +19,13 @@
 
 **Purpose**: Core infrastructure required before user stories.
 
-- [ ] T004 Implement profile prompt file path helpers (`system.md`, `extractor.md`) in internal/config/paths.go
-- [ ] T005 Implement prompt file read/write + default bootstrap logic in internal/config/settings.go
-- [ ] T006 [P] Define extractor payload validation types and schema checks in internal/memory/extractor.go
-- [ ] T007 Implement extractor payload validation logging/warnings for malformed payload rejection in internal/memory/logging.go
-- [ ] T008 Add unit tests for prompt file persistence and defaults in tests/unit/store/prompt_file_store_test.go
-- [ ] T009 [P] Add unit tests for extractor payload schema validation (including top-level `has_new_info` and `confidence` range) in tests/unit/memory/extractor_payload_validation_test.go
-- [ ] T010 [P] Add unit tests for missing prompt-file bootstrap warning behavior in tests/unit/store/prompt_file_store_test.go
+- [X] T004 Implement profile prompt file path helpers (`system.md`, `extractor.md`) in internal/config/paths.go
+- [X] T005 Implement prompt file read/write + default bootstrap logic in internal/config/settings.go
+- [X] T006 [P] Define extractor payload validation types and schema checks in internal/memory/extractor.go
+- [X] T007 Implement extractor payload validation logging/warnings for malformed payload rejection in internal/memory/logging.go
+- [X] T008 Add unit tests for prompt file persistence and defaults in tests/unit/store/prompt_file_store_test.go
+- [X] T009 [P] Add unit tests for extractor payload schema validation (including top-level `has_new_info` and `confidence` range) in tests/unit/memory/extractor_payload_validation_test.go
+- [X] T010 [P] Add unit tests for missing prompt-file bootstrap warning behavior in tests/unit/store/prompt_file_store_test.go
 
 **Checkpoint**: Prompt file persistence + extractor schema validation foundation complete.
 

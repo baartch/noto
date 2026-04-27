@@ -430,8 +430,7 @@ func loadSystemPrompt(ctx context.Context, db *store.DB, profile *store.Profile)
 	if profile == nil || db == nil {
 		return "You are Noto. A buddy who takes notes."
 	}
-	repo := store.NewSystemPromptRepo(db)
-	ps := profilepkg.NewPromptStore(profile.ID, repo)
+	ps := profilepkg.NewPromptStore(profile.Slug, nil)
 	prompt, err := ps.GetSystemPrompt(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "chat: load system prompt: %v\n", err)

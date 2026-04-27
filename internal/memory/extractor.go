@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"noto/internal/config"
 	"noto/internal/provider"
 	"noto/internal/store"
 	"noto/internal/vector"
@@ -22,66 +23,17 @@ type extractionResponse struct {
 	HasNewInfo bool            `json:"has_new_info"`
 	Confidence float64         `json:"confidence"`
 	Notes      []extractedItem `json:"notes"`
-	Action     string          `json:"action"`    // add | update
-	TargetID   string          `json:"target_id"` // note id when action=update
 }
 
 // extractedItem is the JSON shape the LLM returns per note.
 type extractedItem struct {
-	Category   string `json:"category"` // fact | progress | blocker | action_item | other
+	Action     string `json:"action"`    // add | update
+	TargetID   string `json:"target_id"` // required when action=update
+	Category   string `json:"category"`  // fact | progress | blocker | action_item | other
 	Content    string `json:"content"`
 	Importance int    `json:"importance"` // 1-10
 }
 
-const extractionPrompt = `You are a memory extractor for a chat assistant.
-Return ONLY valid JSON. No markdown. No code fences. No commentary.
-Language policy: write note content in the same language as the user message.
-
-Output schema (all keys required):
-{
-  "has_new_info": true|false,
-  "confidence": 0.0-1.0,
-  "action": "add|update",
-  "target_id": "",
-  "notes": [
-    {
-      "category": "fact|progress|blocker|action_item|other",
-      "content": "max 220 chars, one concise sentence",
-      "importance": 1-10
-    }
-  ]
-}
-
-Hard rules:
-1) Always emit strict JSON (double quotes, no trailing commas).
-2) Prioritize USER-provided information over assistant text.
-   - Extract primarily from the user message.
-   - Use assistant text only as context/confirmation, not as a source of new facts.
-   - If user and assistant conflict, trust the user.
-3) If nothing memory-worthy exists:
-   - "has_new_info": false
-   - "confidence": 0
-   - "action": "add"
-   - "target_id": ""
-   - "notes": []
-4) Use "action":"update" ONLY when the user clearly corrects/refines existing memory.
-   - Then set "target_id" to an ID from Existing notes.
-   - Include exactly one replacement note in "notes".
-5) For "action":"add", set "target_id":"".
-6) Do not duplicate existing notes; prefer update when correcting, add when new.
-7) Keep note content atomic and specific (no lists, no combined topics).
-
-Importance rubric:
-- 8-10: durable identity/long-term goals/major decisions likely useful across future sessions.
-- 5-7: medium-term preferences, ongoing work context, recent important events.
-- 1-4: minor or short-lived details.
-
-Existing notes (use for update targeting):
-%s
-
-Exchange:
-User: %s
-Assistant: %s`
 
 // CacheInvalidator invalidates cached memory retrieval context.
 type CacheInvalidator interface {
@@ -126,15 +78,16 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID s
 	if notes, err := e.noteRepo.ListByProfile(ctx, profileID); err == nil {
 		existing = notes
 	}
-	resp := e.llmExtract(ctx, userMsg, assistantMsg, existing)
+	resp := e.llmExtract(ctx, profileID, userMsg, assistantMsg, existing)
 	if !resp.HasNewInfo || resp.Confidence < 0.6 || len(resp.Notes) == 0 {
 		return &ExtractionResult{}, nil
 	}
 	items := resp.Notes
-
-	if resp.Action == "update" && resp.TargetID != "" {
-		if updated, err := e.updateNote(ctx, profileID, resp.TargetID, items, sourceMessageIDs); err == nil && updated {
-			return &ExtractionResult{Notes: []*store.MemoryNote{}, Updated: 1}, nil
+	for _, it := range items {
+		if it.Action == "update" && it.TargetID != "" {
+			if updated, err := e.updateNote(ctx, profileID, it.TargetID, []extractedItem{it}, sourceMessageIDs); err == nil && updated {
+				continue
+			}
 		}
 	}
 
@@ -153,8 +106,12 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID s
 
 // llmExtract calls the model and parses the JSON response. Never returns an error
 // — failures are silently dropped so a bad extraction never breaks the chat flow.
-func (e *Extractor) llmExtract(ctx context.Context, userMsg, assistantMsg string, existing []*store.MemoryNote) extractionResponse {
-	prompt := fmt.Sprintf(extractionPrompt, formatExistingNotes(existing), userMsg, assistantMsg)
+func (e *Extractor) llmExtract(ctx context.Context, profileID, userMsg, assistantMsg string, existing []*store.MemoryNote) extractionResponse {
+	template, _, err := config.ReadExtractorPromptFile(profileID)
+	if err != nil || strings.TrimSpace(template) == "" {
+		template = config.DefaultExtractorPromptTemplate
+	}
+	prompt := fmt.Sprintf(template, formatExistingNotes(existing), userMsg, assistantMsg)
 	resp, err := e.adapter.Complete(ctx, provider.CompletionRequest{
 		Messages:    []provider.Message{{Role: "user", Content: prompt}},
 		Temperature: 0.2,
@@ -171,9 +128,43 @@ func (e *Extractor) llmExtract(ctx context.Context, userMsg, assistantMsg string
 
 	var payload extractionResponse
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		e.logHook.ExtractionPayloadRejected("invalid json")
+		return extractionResponse{}
+	}
+	if err := validateExtractionPayload(payload); err != nil {
+		e.logHook.ExtractionPayloadRejected(err.Error())
 		return extractionResponse{}
 	}
 	return payload
+}
+
+func validateExtractionPayload(payload extractionResponse) error {
+	if payload.Confidence < 0 || payload.Confidence > 1 {
+		return rejectErr("confidence out of range")
+	}
+	if !payload.HasNewInfo && len(payload.Notes) > 0 {
+		return rejectErr("has_new_info=false with non-empty notes")
+	}
+	if payload.HasNewInfo && len(payload.Notes) == 0 {
+		return rejectErr("has_new_info=true with empty notes")
+	}
+	for i, n := range payload.Notes {
+		if n.Action != "add" && n.Action != "update" {
+			return rejectErr("note[%d]: invalid action", i)
+		}
+		if n.Action == "update" && strings.TrimSpace(n.TargetID) == "" {
+			return rejectErr("note[%d]: update requires target_id", i)
+		}
+		switch n.Category {
+		case "fact", "progress", "blocker", "action_item", "other":
+		default:
+			return rejectErr("note[%d]: invalid category", i)
+		}
+		if strings.TrimSpace(n.Content) == "" {
+			return rejectErr("note[%d]: empty content", i)
+		}
+	}
+	return nil
 }
 
 func formatExistingNotes(existing []*store.MemoryNote) string {
