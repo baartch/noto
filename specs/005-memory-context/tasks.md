@@ -39,21 +39,21 @@
 
 ### Tests for User Story 1
 
-- [ ] T011 [P] [US1] Add integration test for valid extractor JSON with per-note actions in tests/integration/memory/extractor_json_contract_test.go
-- [ ] T012 [P] [US1] Add integration test for update notes requiring `target_id` in tests/integration/memory/extractor_json_contract_test.go
-- [ ] T013 [P] [US1] Add integration test for category enforcement (`fact|progress|blocker|action_item|other`) in tests/integration/memory/extractor_json_contract_test.go
-- [ ] T014 [P] [US1] Add integration test for malformed extractor payload rejection in tests/integration/memory/extractor_json_contract_test.go
-- [ ] T015 [P] [US1] Add integration test for required top-level `has_new_info` + `confidence` validation in tests/integration/memory/extractor_json_contract_test.go
-- [ ] T016 [P] [US1] Extend relevance-selection integration coverage for token-budgeted injection in tests/integration/context_cache_lifecycle_test.go
+- [X] T011 [P] [US1] Add integration test for valid extractor JSON with per-note actions in tests/integration/memory/extractor_json_contract_test.go
+- [X] T012 [P] [US1] Add integration test for update notes requiring `target_id` in tests/integration/memory/extractor_json_contract_test.go
+- [X] T013 [P] [US1] Add integration test for category enforcement (`fact|progress|blocker|action_item|other`) in tests/integration/memory/extractor_json_contract_test.go
+- [X] T014 [P] [US1] Add integration test for malformed extractor payload rejection in tests/integration/memory/extractor_json_contract_test.go
+- [X] T015 [P] [US1] Add integration test for required top-level `has_new_info` + `confidence` validation in tests/integration/memory/extractor_json_contract_test.go
+- [X] T016 [P] [US1] Extend relevance-selection integration coverage for token-budgeted injection in tests/integration/context_cache_lifecycle_test.go
 
 ### Implementation for User Story 1
 
-- [ ] T017 [US1] Update extractor prompt content/template to require strict JSON output and per-note action semantics in internal/memory/extractor.go
-- [ ] T018 [US1] Enforce note-level `action` and `target_id` rules during extraction processing in internal/memory/processor.go
-- [ ] T019 [US1] Enforce allowed note category values during extraction processing in internal/memory/processor.go
-- [ ] T020 [US1] Reject invalid extractor payloads before persistence and emit warning telemetry in internal/memory/extractor.go
-- [ ] T021 [US1] Parse and validate top-level `has_new_info` and `confidence` in internal/memory/extractor.go
-- [ ] T022 [US1] Preserve relevance ranking + token budget injection behavior with validated notes in internal/memory/retrieval.go
+- [X] T017 [US1] Update extractor prompt content/template to require strict JSON output and per-note action semantics in internal/memory/extractor.go
+- [X] T018 [US1] Enforce note-level `action` and `target_id` rules during extraction processing in internal/memory/processor.go
+- [X] T019 [US1] Enforce allowed note category values during extraction processing in internal/memory/processor.go
+- [X] T020 [US1] Reject invalid extractor payloads before persistence and emit warning telemetry in internal/memory/extractor.go
+- [X] T021 [US1] Parse and validate top-level `has_new_info` and `confidence` in internal/memory/extractor.go
+- [X] T022 [US1] Preserve relevance ranking + token budget injection behavior with validated notes in internal/memory/retrieval.go
 
 **Checkpoint**: US1 fully functional and independently testable, including explicit top-level metadata validation (`has_new_info`, `confidence`).
 
@@ -67,18 +67,18 @@
 
 ### Tests for User Story 2
 
-- [ ] T023 [P] [US2] Add integration test for prompt file persistence across restarts in tests/integration/prompt_management_test.go
-- [ ] T024 [P] [US2] Add integration test for missing `system.md`/`extractor.md` auto-bootstrap + visible warning in tests/integration/prompt_management_test.go
-- [ ] T025 [P] [US2] Add integration test verifying system/extractor prompts are loaded from files (not DB) in tests/integration/prompt_management_test.go
-- [ ] T026 [P] [US2] Extend cache lifecycle restart test coverage for prompt-file changes in tests/integration/context_cache_lifecycle_test.go
+- [X] T023 [P] [US2] Add integration test for prompt file persistence across restarts in tests/integration/prompt_management_test.go
+- [X] T024 [P] [US2] Add integration test for missing `system.md`/`extractor.md` auto-bootstrap + visible warning in tests/integration/prompt_management_test.go
+- [X] T025 [P] [US2] Add integration test verifying system/extractor prompts are loaded from files (not DB) in tests/integration/prompt_management_test.go
+- [X] T026 [P] [US2] Extend cache lifecycle restart test coverage for prompt-file changes in tests/integration/context_cache_lifecycle_test.go
 
 ### Implementation for User Story 2
 
-- [ ] T027 [US2] Wire prompt loading to profile prompt files in runtime setup path in internal/app/app.go
-- [ ] T028 [US2] Ensure settings save flow writes system prompt to `<profile>/prompts/system.md` in internal/tui/settings_menu.go
-- [ ] T029 [US2] Ensure extractor prompt persistence uses `<profile>/prompts/extractor.md` in internal/config/settings.go
-- [ ] T030 [US2] Emit visible warning when prompt files are missing and defaults are auto-created in internal/tui/footer_view.go
-- [ ] T031 [US2] Invalidate context cache on system prompt save from file-backed flow in internal/cache/context.go
+- [X] T027 [US2] Wire prompt loading to profile prompt files in runtime setup path in internal/app/app.go
+- [X] T028 [US2] Ensure settings save flow writes system prompt to `<profile>/prompts/system.md` in internal/tui/settings_menu.go
+- [X] T029 [US2] Ensure extractor prompt persistence uses `<profile>/prompts/extractor.md` in internal/config/settings.go
+- [X] T030 [US2] Emit visible warning when prompt files are missing and defaults are auto-created in internal/tui/footer_view.go
+- [X] T031 [US2] Invalidate context cache on system prompt save from file-backed flow in internal/cache/context.go
 
 **Checkpoint**: US2 fully functional and independently testable.
 

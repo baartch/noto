@@ -280,6 +280,7 @@ type Model struct {
 	extractorModelSelected ExtractorModelSelectedFunc
 	extractorFallback      bool
 	embeddingModelMissing  bool
+	promptBootstrapWarning bool
 	embeddingModel         string
 }
 

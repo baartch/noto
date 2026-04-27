@@ -13,6 +13,7 @@ import (
 	"noto/internal/backup"
 	chatpkg "noto/internal/chat"
 	"noto/internal/commands"
+	"noto/internal/config"
 	"noto/internal/observe"
 	profilepkg "noto/internal/profile"
 	"noto/internal/provider"
@@ -118,6 +119,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 	startupMessages, startupHistoryErr := loadStartupConversationMessages(ctx, profileDB, activeProfile.ID)
 	embeddingModelMissing := false
 	embeddingModel := ""
+	promptBootstrapWarning := false
 
 	var providerFn tui.ProviderFunc
 	var listModelsFn tui.ListModelsFunc
@@ -141,7 +143,8 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			APIKey:       decryptedKey,
 		}
 
-		systemPrompt := loadSystemPrompt(ctx, profileDB, activeProfile)
+		systemPrompt, bootstrapWarning := loadSystemPrompt(ctx, profileDB, activeProfile)
+		promptBootstrapWarning = promptBootstrapWarning || bootstrapWarning
 
 		convRepo := store.NewConversationRepo(profileDB)
 		msgRepo := store.NewMessageRepo(profileDB)
@@ -293,7 +296,8 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					Endpoint:     providerCfg.Endpoint,
 					APIKey:       decryptedKey,
 				}
-				systemPrompt := loadSystemPrompt(ctx, profileDB, p)
+				systemPrompt, bootstrapWarning := loadSystemPrompt(ctx, profileDB, p)
+				promptBootstrapWarning = promptBootstrapWarning || bootstrapWarning
 				convRepo := store.NewConversationRepo(profileDB)
 				msgRepo := store.NewMessageRepo(profileDB)
 				noteRepo := store.NewMemoryNoteRepo(profileDB)
@@ -426,17 +430,16 @@ func runChat(cmd *cobra.Command, _ []string) error {
 }
 
 // loadSystemPrompt reads the profile system prompt from SQLite, falling back to a default.
-func loadSystemPrompt(ctx context.Context, db *store.DB, profile *store.Profile) string {
+func loadSystemPrompt(_ context.Context, db *store.DB, profile *store.Profile) (string, bool) {
 	if profile == nil || db == nil {
-		return "You are Noto. A buddy who takes notes."
+		return "You are Noto. A buddy who takes notes.", false
 	}
-	ps := profilepkg.NewPromptStore(profile.Slug, nil)
-	prompt, err := ps.GetSystemPrompt(ctx)
+	prompt, res, err := config.ReadSystemPromptFile(profile.Slug)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "chat: load system prompt: %v\n", err)
-		return "You are Noto. A buddy who takes notes."
+		return "You are Noto. A buddy who takes notes.", false
 	}
-	return strings.TrimSpace(prompt)
+	return strings.TrimSpace(prompt), res.MissingAny()
 }
 
 func loadStartupConversationMessages(ctx context.Context, db *store.DB, profileID string) ([]*store.Message, error) {
