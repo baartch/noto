@@ -1,5 +1,11 @@
 # Release notes
 
+## 0.2.0
+
+April 27, 2026
+
+- Store prompts in profile folder for easier editing
+
 ## 0.1.1
 
 April 26, 2026
