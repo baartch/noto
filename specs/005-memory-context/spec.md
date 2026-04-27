@@ -81,6 +81,7 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 - If the vector index cannot be loaded, retrieval must still return a deterministic fallback selection.
 - If compaction fails, the system logs a warning and continues with existing data.
 - If note volume exceeds configured limits, the system truncates by relevance and recency.
+- If extractor output is not valid JSON or misses required per-note fields, the system rejects extraction output and logs a warning.
 
 ## Requirements _(mandatory)_
 
@@ -102,6 +103,12 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 - **FR-014**: The extractor output MUST assign `action: add|update` on each individual extracted note, rather than at the whole-response level.
 - **FR-015**: The extractor prompt MUST instruct the LLM to extract as many notes as are meaningful for the input, with no fixed note-count cap.
 - **FR-016**: The system prompt MUST be stored per profile as a Markdown file under `<profile>/prompts/` and MUST NOT be stored in SQLite.
+- **FR-017**: Prompts MUST be persisted as profile-local Markdown files under `<profile>/prompts/` (including at least `system.md` and `extractor.md`).
+- **FR-018**: The extractor LLM response MUST be valid JSON containing a notes array.
+- **FR-019**: Each note in extractor output MUST include its own `action` field with value `add` or `update`.
+- **FR-020**: Notes with `action: update` MUST include `target_id` referencing the existing note id to update.
+- **FR-021**: Each extracted note MUST include exactly one category from `fact|progress|blocker|action_item|other`.
+- **FR-022**: The system and extractor prompts MUST prioritize accurate, user-useful note extraction over verbosity.
 
 ### Non-Functional Requirements _(mandatory)_
 
@@ -127,6 +134,7 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 - **SC-006**: Incremental updates are applied on note changes without blocking chat turns.
 - **SC-005**: Fallback selection yields deterministic importance-then-recency results when the index is unavailable.
 - **SC-007**: When no extractor model is configured, extraction uses the main model and the footer shows a warning indicator.
+- **SC-008**: 100% of accepted extraction payloads conform to the JSON schema (`notes[]`, per-note `action`, `target_id` for updates, valid category).
 
 ## Assumptions
 

@@ -1,32 +1,36 @@
 # Implementation Plan: Memory Context Indexing
 
-**Branch**: `005-memory-context` | **Date**: 2026-04-10 | **Spec**: [spec.md](./spec.md)
+**Branch**: `005-memory-context` | **Date**: 2026-04-27 | **Spec**: `/specs/005-memory-context/spec.md`
 **Input**: Feature specification from `/specs/005-memory-context/spec.md`
 
 ## Summary
 
-Implement relevance-based memory retrieval with a persistent vector index, configurable 1,500-token default budget, importance-then-recency fallback, extractor-model fallback to main model with footer warning, and automatic index maintenance. Ensure context caching persists across restarts and maintenance does not block chat.
+Add profile-local Markdown prompt storage (`<profile>/prompts/system.md`, `<profile>/prompts/extractor.md`) and tighten extraction contracts so the extractor always returns valid JSON with as many meaningful notes as warranted, each note carrying its own `action` (`add|update`), mandatory `target_id` on updates, and constrained category (`fact|progress|blocker|action_item|other`). Keep existing relevance ranking, token budgeting, persistence, and vector index maintenance behavior.
 
 ## Technical Context
 
-**Language/Version**: Go 1.26+
-**Primary Dependencies**: charm.land/bubbletea/v2, charm.land/bubbles/v2, charm.land/lipgloss/v2, Cobra, modernc.org/sqlite
-**Storage**: Per-profile SQLite DB + profile-local vector index file
-**Testing**: `go test ./...`, integration tests in `tests/integration`
-**Target Platform**: Terminal (Linux/macOS/Windows)
-**Project Type**: CLI/TUI application
-**Performance Goals**: Context assembly under 200ms with 10k notes
-**Constraints**: Token budget default 1,500 (adjustable), deterministic fallback ordering
-**Scale/Scope**: Single-profile memory retrieval with incremental indexing and periodic compaction
+**Language/Version**: Go 1.26+  
+**Primary Dependencies**: Cobra CLI, Bubble Tea v2, Bubbles v2, Lip Gloss v2, modernc.org/sqlite, OpenAI-compatible provider adapter, internal pure-Go HNSW index  
+**Storage**: Profile-local SQLite (`~/.noto/profiles/<profile>/memory.db`) for notes/cache + profile-local files (`~/.noto/profiles/<profile>/prompts/*.md`, `memory.vec`)  
+**Testing**: `go test ./...` + contract/integration tests for extractor payload validation and prompt persistence  
+**Target Platform**: Cross-platform terminal environments (Linux/macOS primary)  
+**Project Type**: CLI + TUI application  
+**Performance Goals**: Context assembly <200ms at 10k notes; prompt file load/save non-blocking for normal interactions  
+**Constraints**: Deterministic fallback ranking, robust malformed-JSON handling, no DB storage for system/extractor prompts  
+**Scale/Scope**: Single-user local profiles, up to 10k+ notes per profile, multiple profile directories
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Code Quality Gate**: Run `golangci-lint run` and `go test ./...` before merge.
-- **Testing Standards Gate**: Add/adjust tests for relevance selection, fallback ordering, and persistence across restarts.
-- **UX Consistency Gate**: Ensure settings dialog (Ctrl+J) and footer warning align with existing TUI patterns and terminology.
-- **Performance Gate**: Validate context assembly latency under 200ms with 10k notes.
+- **I. Code Quality Is Enforced**: PASS — plan includes focused modules for prompt storage and extraction validation, explicit error handling for invalid payloads.
+- **II. Testing Standards Are Non-Negotiable**: PASS — includes unit + integration/contract coverage for JSON schema rules, update target validation, prompt file persistence.
+- **III. User Experience Consistency First**: PASS — keeps existing settings and fallback UX, adds clear behavior on malformed extractor output (reject + warning).
+
+Post-Design Re-check (after Phase 1 artifacts):
+- **I. Code Quality Is Enforced**: PASS
+- **II. Testing Standards Are Non-Negotiable**: PASS
+- **III. User Experience Consistency First**: PASS
 
 ## Project Structure
 
@@ -39,64 +43,44 @@ specs/005-memory-context/
 ├── data-model.md
 ├── quickstart.md
 ├── contracts/
+│   └── context-retrieval.md
 └── tasks.md
 ```
 
 ### Source Code (repository root)
 
 ```text
+cmd/
 internal/
-├── memory/
-│   ├── extractor.go
-│   ├── retrieval.go
-│   └── ...
-├── vector/
-│   ├── index.go
-│   ├── sync.go
-│   ├── rebuild.go
-│   └── hnsw/
-├── store/
-│   ├── memory_note_repo.go
-│   ├── vector_manifest_repo.go
-│   └── ...
-├── tui/
-│   └── ...
-└── commands/
-
-specs/005-memory-context/
-
+├── config/            # profile + prompt file persistence
+├── memory/            # note extraction + validation orchestration
+├── vector/            # hnsw indexing and retrieval
+└── tui/               # settings and runtime UX feedback
 tests/
 ├── integration/
 └── contract/
 ```
 
-**Structure Decision**: Single Go CLI/TUI project with memory and vector logic under `internal/memory` and `internal/vector`.
+**Structure Decision**: Keep single-project Go CLI/TUI architecture and implement prompt persistence in profile config/memory layers; add contract tests for extractor JSON response semantics.
 
-## Plan
+## Phase 0: Research Plan
 
-### Phase 0: Research
-- Confirm incremental vector indexing strategy and compaction triggers.
-- Validate token-budgeted selection approach for short notes.
+1. Confirm best-practice storage layout and migration for prompt values moving from DB/config to profile-local Markdown files.
+2. Define strict JSON contract for extractor responses with per-note action semantics and update targeting.
+3. Define validation/error strategy for malformed or partially valid extraction output.
+4. Define prompt-writing guidance for accuracy and user utility.
 
-### Phase 1: Design
-- Define context selection flow (vector ranking → token budget → fallback ordering).
-- Define index maintenance cadence and compaction trigger rules.
-- Specify settings storage for token budget and Ctrl+J dialog behavior.
-- Define extractor fallback behavior and footer warning text.
+## Phase 1: Design Plan
 
-### Phase 2: Implementation
-- Persist token budget setting and wire Ctrl+J settings dialog.
-- Add relevance selection using vector index and token budget.
-- Implement importance-then-recency fallback when index missing/stale.
-- Implement extractor-model fallback to main model with footer warning.
-- Implement incremental index updates on note changes and periodic compaction/rebuild.
-- Ensure cached context persists across restarts.
+1. Extend data model with Prompt File and Extraction Payload entities/validation.
+2. Update contract docs for retrieval + extraction schema invariants.
+3. Update quickstart to include prompt file and schema validation scenarios.
+4. Update agent context reference in `AGENTS.md` to point to this plan.
 
-### Phase 3: Validation
-- Run `go test ./...` and lint checks.
-- Validate latency budget with large note sets.
-- Run quickstart scenarios for relevance, persistence, and fallback.
+## Phase 2: Task Planning Approach
+
+Generate implementation tasks that sequence: file persistence layer → extractor schema validation → extraction pipeline integration → settings wiring → tests (unit/integration/contract) → docs.
 
 ## Complexity Tracking
 
-> **No constitution violations identified.**
+No constitution violations requiring justification.
