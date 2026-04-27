@@ -111,6 +111,31 @@ func TestVectorFallback_MissingIndex_Warns(t *testing.T) {
 	}
 }
 
+func TestVectorFallback_DeterministicOrderingWhenIndexUnavailable(t *testing.T) {
+	ctx := context.Background()
+	notes := []vector.MemoryNoteRecord{{ID: "a", Content: "A"}, {ID: "b", Content: "B"}, {ID: "c", Content: "C"}}
+	lister := &stubNoteLister{notes: notes}
+	index := &stubIndex{err: vector.ErrIndexNotFound}
+	retrieval := vector.NewHybridRetrieval(index, lister, "det-profile")
+
+	first, err := retrieval.Retrieve(ctx, []float32{0.1}, 3)
+	if err != nil {
+		t.Fatalf("first Retrieve: %v", err)
+	}
+	second, err := retrieval.Retrieve(ctx, []float32{0.1}, 3)
+	if err != nil {
+		t.Fatalf("second Retrieve: %v", err)
+	}
+	if len(first) != len(second) {
+		t.Fatalf("result size differs: %d vs %d", len(first), len(second))
+	}
+	for i := range first {
+		if first[i].Note.ID != second[i].Note.ID {
+			t.Fatalf("non-deterministic order at %d: %s vs %s", i, first[i].Note.ID, second[i].Note.ID)
+		}
+	}
+}
+
 func TestVectorInvalidation_OnPromptChange_MarksStale(t *testing.T) {
 	ctx := context.Background()
 	setter := &stubManifestStatusSetter{}
@@ -149,4 +174,26 @@ func TestVectorRebuild_IndexFlushCalled(t *testing.T) {
 	if !called {
 		t.Fatalf("expected Flush to be called")
 	}
+}
+
+func TestVectorRebuild_NonBlockingOnFailureSignal(t *testing.T) {
+	ctx := context.Background()
+	setter := &stubManifestStatusSetter{}
+	index := &stubIndex{}
+
+	badEmbedder := &stubFailEmbedder{}
+	rebuilder := vector.NewRebuilder(setter, index, "profile-fail").WithEmbedder(badEmbedder, "model")
+	err := rebuilder.Rebuild(ctx, []vector.MemoryNoteRecord{{ID: "n1", Content: "Note"}})
+	if err == nil {
+		t.Fatal("expected rebuild error")
+	}
+	if setter.lastStatus != string(vector.ManifestFailed) {
+		t.Fatalf("expected failed status, got %q", setter.lastStatus)
+	}
+}
+
+type stubFailEmbedder struct{}
+
+func (s *stubFailEmbedder) Embed(_ context.Context, _ provider.EmbeddingRequest) (*provider.EmbeddingResponse, error) {
+	return nil, context.DeadlineExceeded
 }

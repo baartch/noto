@@ -28,6 +28,9 @@ const (
 	// SystemPromptName is the default system prompt filename.
 	SystemPromptName = "system.md"
 
+	// ExtractorPromptName is the default extractor prompt filename.
+	ExtractorPromptName = "extractor.md"
+
 	// CacheDirName is the subdirectory within each profile for cached context.
 	CacheDirName = "cache"
 
@@ -108,6 +111,15 @@ func ProfileSystemPromptPath(slug string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, SystemPromptName), nil
+}
+
+// ProfileExtractorPromptPath returns the absolute path to the extractor prompt file for a profile.
+func ProfileExtractorPromptPath(slug string) (string, error) {
+	dir, err := ProfilePromptsDir(slug)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, ExtractorPromptName), nil
 }
 
 // ActiveProfilePath returns the absolute path to the active-profile marker file.

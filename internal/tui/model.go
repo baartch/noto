@@ -280,6 +280,7 @@ type Model struct {
 	extractorModelSelected ExtractorModelSelectedFunc
 	extractorFallback      bool
 	embeddingModelMissing  bool
+	promptBootstrapWarning bool
 	embeddingModel         string
 }
 
@@ -1826,8 +1827,7 @@ func (m *Model) refreshSettingsValues() {
 		}
 	}
 	if m.execCtx.ProfileID != "" && m.execCtx.DB != nil {
-		repo := store.NewSystemPromptRepo(m.execCtx.DB)
-		promptStore := profile.NewPromptStore(m.execCtx.ProfileID, repo)
+		promptStore := profile.NewPromptStore(m.execCtx.ProfileSlug, nil)
 		if prompt, err := promptStore.GetSystemPrompt(ctx); err == nil {
 			m.systemPrompt = prompt
 		}
@@ -1949,11 +1949,10 @@ func (m *Model) saveProviderAPIKey(key string) error {
 }
 
 func (m *Model) saveSystemPrompt(prompt string) error {
-	if m.execCtx == nil || m.execCtx.DB == nil {
-		return errors.New("settings: no database available")
+	if m.execCtx == nil || m.execCtx.ProfileSlug == "" {
+		return errors.New("settings: no active profile available")
 	}
-	repo := store.NewSystemPromptRepo(m.execCtx.DB)
-	promptStore := profile.NewPromptStore(m.execCtx.ProfileID, repo)
+	promptStore := profile.NewPromptStore(m.execCtx.ProfileSlug, nil)
 	if err := promptStore.SetSystemPrompt(context.Background(), prompt); err != nil {
 		return err
 	}

@@ -7,9 +7,7 @@ import (
 	"os"
 	"os/exec"
 
-	"noto/internal/config"
 	"noto/internal/profile"
-	"noto/internal/store"
 )
 
 // ErrOpenEditor is returned by promptEditHandler to signal the TUI that it
@@ -60,20 +58,7 @@ func promptShowHandler(ctx *ExecContext, _ []string) error {
 	if ctx.ProfileSlug == "" || ctx.ProfileID == "" {
 		return errors.New("no active profile")
 	}
-	path, err := config.ProfileDBPath(ctx.ProfileSlug)
-	if err != nil {
-		return err
-	}
-	db, err := store.OpenProfile(path)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = db.Close()
-	}()
-
-	repo := store.NewSystemPromptRepo(db)
-	ps := profile.NewPromptStore(ctx.ProfileID, repo)
+	ps := profile.NewPromptStore(ctx.ProfileSlug, nil)
 	content, err := ps.GetSystemPrompt(context.Background())
 	if err != nil {
 		return fmt.Errorf("prompt show: %w", err)
@@ -88,32 +73,19 @@ func promptEditHandler(ctx *ExecContext, _ []string) error {
 	if ctx.ProfileSlug == "" || ctx.ProfileID == "" {
 		return errors.New("no active profile")
 	}
-	path, err := config.ProfileDBPath(ctx.ProfileSlug)
-	if err != nil {
-		return err
-	}
-	db, err := store.OpenProfile(path)
-	if err != nil {
-		return err
-	}
-
-	repo := store.NewSystemPromptRepo(db)
-	ps := profile.NewPromptStore(ctx.ProfileID, repo)
+	ps := profile.NewPromptStore(ctx.ProfileSlug, nil)
 	content, err := ps.GetSystemPrompt(context.Background())
 	if err != nil {
-		_ = db.Close()
 		return fmt.Errorf("prompt edit: %w", err)
 	}
 
 	tmpFile, err := os.CreateTemp("", "noto-prompt-*.md")
 	if err != nil {
-		_ = db.Close()
 		return fmt.Errorf("prompt edit: %w", err)
 	}
 	promptPath := tmpFile.Name()
 	if _, err := tmpFile.WriteString(content); err != nil {
 		_ = tmpFile.Close()
-		_ = db.Close()
 		_ = os.Remove(promptPath)
 		return fmt.Errorf("prompt edit: %w", err)
 	}
@@ -122,7 +94,6 @@ func promptEditHandler(ctx *ExecContext, _ []string) error {
 	save := func() error {
 		defer func() {
 			_ = os.Remove(promptPath)
-			_ = db.Close()
 		}()
 		data, err := os.ReadFile(promptPath)
 		if err != nil {

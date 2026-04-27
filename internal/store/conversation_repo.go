@@ -97,6 +97,22 @@ func (r *ConversationRepo) GetMostRecentByProfile(ctx context.Context, profileID
 	return r.scanOne(row)
 }
 
+// ArchiveActiveByProfile archives all currently active conversations for the profile.
+// Returns the number of rows transitioned to archived.
+func (r *ConversationRepo) ArchiveActiveByProfile(ctx context.Context, profileID string) (int64, error) {
+	now := time.Now().UTC()
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE conversations
+		SET status = 'archived', ended_at = ?
+		WHERE profile_id = ? AND status = 'active'
+	`, now, profileID)
+	if err != nil {
+		return 0, fmt.Errorf("store: archive active conversations: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	return rows, nil
+}
+
 // GetStartedAtByID returns the conversation start time for boundary labels.
 func (r *ConversationRepo) GetStartedAtByID(ctx context.Context, id string) (time.Time, error) {
 	var startedAt time.Time

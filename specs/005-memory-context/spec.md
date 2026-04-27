@@ -15,6 +15,13 @@
 - Q: What should the fallback ranking be when the vector index is unavailable? → A: Importance then recency.
 - Q: How should the vector index be generated/updated? → A: Incremental updates on note changes with periodic rebuild/compaction.
 
+### Session 2026-04-27
+
+- Q: Where should the extractor prompt be stored? → A: Profile-local at `<profile>/prompts/extractor.md`.
+- Q: How should extraction actions be represented? → A: Per extracted note with `action: add|update`.
+- Q: How many notes should extraction return? → A: No fixed count; extract all meaningful notes above quality threshold.
+- Q: Where should the system prompt be stored? → A: Profile-local Markdown file in `<profile>/prompts`, not in SQLite.
+
 ## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Relevant Memory Context (Priority: P1)
@@ -29,11 +36,13 @@ As a user, I want Noto to add only the most relevant notes to the context so tha
 
 1. **Given** a profile has many notes, **When** a chat turn starts, **Then** only the most relevant notes within the configured token budget (default 1,500) are injected into the context.
 2. **Given** notes are created or updated, **When** the change is saved, **Then** the vector index is incrementally updated.
-3. **Given** periodic maintenance runs, **When** compaction is required, **Then** the index is rebuilt without manual commands.
-4. **Given** the note index is available, **When** relevance is computed, **Then** the system uses the vector index to rank notes.
-5. **Given** the vector index is missing or stale, **When** a chat turn starts, **Then** the system falls back to importance-then-recency ordering.
-6. **Given** the user opens settings, **When** they change the token budget, **Then** subsequent chat turns use the new budget.
-7. **Given** no extractor model is configured, **When** notes are extracted, **Then** the system uses the main model and shows a footer warning.
+3. **Given** the extractor returns multiple notes, **When** extraction completes, **Then** each note includes its own `action` value (`add` or `update`).
+4. **Given** periodic maintenance runs, **When** compaction is required, **Then** the index is rebuilt without manual commands.
+5. **Given** the note index is available, **When** relevance is computed, **Then** the system uses the vector index to rank notes.
+6. **Given** the vector index is missing or stale, **When** a chat turn starts, **Then** the system falls back to importance-then-recency ordering.
+7. **Given** the user opens settings, **When** they change the token budget, **Then** subsequent chat turns use the new budget.
+8. **Given** no extractor model is configured, **When** notes are extracted, **Then** the system uses the main model and shows a footer warning.
+9. **Given** a message contains multiple distinct memory-worthy facts, **When** extraction runs, **Then** all meaningful notes are returned (not an arbitrary fixed count).
 
 ---
 
@@ -72,6 +81,8 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 - If the vector index cannot be loaded, retrieval must still return a deterministic fallback selection.
 - If compaction fails, the system logs a warning and continues with existing data.
 - If note volume exceeds configured limits, the system truncates by relevance and recency.
+- If extractor output is not valid JSON or misses required per-note fields, the system rejects extraction output and logs a warning.
+- If `<profile>/prompts/system.md` or `<profile>/prompts/extractor.md` is missing, the system auto-bootstraps defaults and emits a visible warning (non-fatal).
 
 ## Requirements _(mandatory)_
 
@@ -89,6 +100,19 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 - **FR-010**: The system MUST periodically compact or rebuild the vector index when required.
 - **FR-011**: The system MUST fall back to importance-then-recency selection if the index is unavailable.
 - **FR-012**: The system MUST use the main model for extraction when no extractor model is configured and display a footer warning.
+- **FR-013**: Prompts MUST be persisted as profile-local Markdown files under `<profile>/prompts/` and MUST NOT be stored in SQLite:
+  - `system.md` is the canonical system prompt file.
+  - `extractor.md` is the canonical extractor prompt file and starts from the current prompt content.
+- **FR-014**: The extractor output MUST assign `action: add|update` on each individual extracted note, rather than at the whole-response level.
+- **FR-015**: The extractor prompt MUST instruct the LLM to extract as many notes as are meaningful for the input, with no fixed note-count cap.
+- **FR-018**: The extractor LLM response MUST be valid JSON containing a notes array.
+- **FR-019**: Each note in extractor output MUST include its own `action` field with value `add` or `update`.
+- **FR-020**: Notes with `action: update` MUST include `target_id` referencing the existing note id to update.
+- **FR-021**: Each extracted note MUST include exactly one category from `fact|progress|blocker|action_item|other`.
+- **FR-022**: The system and extractor prompts MUST prioritize accurate, user-useful note extraction over verbosity.
+- **FR-023**: The extractor JSON response MUST include top-level `has_new_info` as a boolean (`true|false`).
+- **FR-024**: The extractor JSON response MUST include top-level `confidence` as a float in the range `0.0..1.0`.
+- **FR-025**: If `<profile>/prompts/system.md` or `<profile>/prompts/extractor.md` is missing, the system MUST auto-create the missing file with defaults and emit a visible warning without failing the flow.
 
 ### Non-Functional Requirements _(mandatory)_
 
@@ -114,6 +138,9 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 - **SC-006**: Incremental updates are applied on note changes without blocking chat turns.
 - **SC-005**: Fallback selection yields deterministic importance-then-recency results when the index is unavailable.
 - **SC-007**: When no extractor model is configured, extraction uses the main model and the footer shows a warning indicator.
+- **SC-008**: 100% of accepted extraction payloads conform to the JSON schema (`notes[]`, per-note `action`, `target_id` for updates, valid category).
+- **SC-009**: 100% of accepted extraction payloads include valid `has_new_info` (boolean) and `confidence` (0.0..1.0).
+- **SC-010**: 100% of missing prompt-file cases (`system.md`/`extractor.md`) auto-bootstrap defaults and emit a visible warning while continuing operation.
 
 ## Assumptions
 

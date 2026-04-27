@@ -34,6 +34,9 @@ func (p *Processor) Process(
 	updated := 0
 
 	for _, item := range items {
+		if item.Action != "" && item.Action != "add" {
+			continue
+		}
 		candidate := EvaluateCandidate(item.Content, item.Importance, []string{item.Content})
 		candidate.Category = item.Category
 		candidate.Importance = item.Importance

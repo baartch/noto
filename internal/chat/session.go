@@ -136,6 +136,13 @@ func NewSession(
 		recentHistory = nil
 	}
 
+	// Repair guard: archive any lingering active conversations before creating a new one.
+	if archived, err := convRepo.ArchiveActiveByProfile(ctx, profileID); err != nil {
+		logger.Errorf("session: archive active conversations: %v", err)
+	} else if archived > 0 {
+		logger.Infof("session: archived %d lingering active conversation(s)", archived)
+	}
+
 	// Create the new conversation record.
 	convID := fmt.Sprintf("conv-%x", time.Now().UnixNano())
 	if err := convRepo.Create(ctx, &store.Conversation{
@@ -441,15 +448,17 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 		extractor.WithDeduper(deduper)
 	}
 	sourceIDs := []string{s.history[len(s.history)-2].ID, s.history[len(s.history)-1].ID}
-	result, err := extractor.ExtractTurn(ctx, s.profileID, s.conversationID, sourceIDs, userMsg, assistantMsg)
+	result, err := extractor.ExtractTurn(ctx, s.profileID, s.profileSlug, s.conversationID, sourceIDs, userMsg, assistantMsg)
 	if err != nil {
 		s.logger.Errorf("memory extraction failed: %v", err)
 		s.markNotesDone(0)
 		return
 	}
 
-	if len(result.Notes) > 0 && s.adapter != nil {
-		if err := s.syncVectorIndex(ctx, result.Notes); err != nil {
+	if (len(result.Notes) > 0 || len(result.UpdatedNotes) > 0) && s.adapter != nil {
+		syncBatch := append([]*store.MemoryNote{}, result.Notes...)
+		syncBatch = append(syncBatch, result.UpdatedNotes...)
+		if err := s.syncVectorIndex(ctx, syncBatch); err != nil {
 			s.logger.Errorf("vector sync failed: %v", err)
 		}
 	}

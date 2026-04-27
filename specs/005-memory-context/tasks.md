@@ -1,112 +1,188 @@
 # Tasks: Memory Context Indexing
 
 **Input**: Design documents from `/specs/005-memory-context/`
-**Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
+**Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/, quickstart.md
 
-**Tests**: Test tasks are REQUIRED for every user story and must be created before implementation tasks.
+**Tests**: Test tasks are included because the spec mandates automated coverage for changed behavior.
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [X] T001 Review current memory extraction and retrieval flow in internal/memory/extractor.go and internal/memory/retrieval.go
-- [X] T002 Review vector index plumbing in internal/vector/ (index.go, sync.go, rebuild.go)
+**Purpose**: Prepare scaffolding for prompt-file + extraction-contract work.
+
+- [X] T001 Add/update feature wiring notes in specs/005-memory-context/quickstart.md for prompt files and extractor schema validation paths
+- [X] T002 Create shared test fixtures for extractor JSON payload cases in tests/integration/memory/extractor_payload_fixtures.go
+- [X] T003 [P] Add helper utilities for profile prompt file setup in tests/integration/testutil/prompt_files.go
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [X] T003 Define token-budget setting storage and settings dialog behavior in specs/005-memory-context/quickstart.md
-- [X] T004 Define footer warning copy and extractor fallback UX in specs/005-memory-context/quickstart.md
+**Purpose**: Core infrastructure required before user stories.
+
+- [X] T004 Implement profile prompt file path helpers (`system.md`, `extractor.md`) in internal/config/paths.go
+- [X] T005 Implement prompt file read/write + default bootstrap logic in internal/config/settings.go
+- [X] T006 [P] Define extractor payload validation types and schema checks in internal/memory/extractor.go
+- [X] T007 Implement extractor payload validation logging/warnings for malformed payload rejection in internal/memory/logging.go
+- [X] T008 Add unit tests for prompt file persistence and defaults in tests/unit/store/prompt_file_store_test.go
+- [X] T009 [P] Add unit tests for extractor payload schema validation (including top-level `has_new_info` and `confidence` range) in tests/unit/memory/extractor_payload_validation_test.go
+- [X] T010 [P] Add unit tests for missing prompt-file bootstrap warning behavior in tests/unit/store/prompt_file_store_test.go
+
+**Checkpoint**: Prompt file persistence + extractor schema validation foundation complete.
 
 ---
 
 ## Phase 3: User Story 1 - Relevant Memory Context (Priority: P1) 🎯 MVP
 
-**Goal**: Inject only relevant notes within the token budget using vector ranking or deterministic fallback.
+**Goal**: Ensure extraction and retrieval produce accurate, useful note context with strict JSON semantics, including top-level metadata.
 
-**Independent Test**: With many notes, verify context includes only top relevant notes within budget or fallback ordering.
+**Independent Test**: Run extraction on multi-fact input and verify valid JSON with top-level `has_new_info` + `confidence` (0.0..1.0), note array, per-note actions, `target_id` on updates, constrained category, and relevance-limited injection.
 
-### Tests for User Story 1 (REQUIRED) ⚠️
+### Tests for User Story 1
 
-- [X] T005 [P] [US1] Add integration coverage for token-budgeted relevance selection in tests/integration/context_cache_lifecycle_test.go
-- [X] T006 [P] [US1] Add integration coverage for fallback ordering in tests/integration/context_cache_lifecycle_test.go
+- [X] T011 [P] [US1] Add integration test for valid extractor JSON with per-note actions in tests/integration/memory/extractor_json_contract_test.go
+- [X] T012 [P] [US1] Add integration test for update notes requiring `target_id` in tests/integration/memory/extractor_json_contract_test.go
+- [X] T013 [P] [US1] Add integration test for category enforcement (`fact|progress|blocker|action_item|other`) in tests/integration/memory/extractor_json_contract_test.go
+- [X] T014 [P] [US1] Add integration test for malformed extractor payload rejection in tests/integration/memory/extractor_json_contract_test.go
+- [X] T015 [P] [US1] Add integration test for required top-level `has_new_info` + `confidence` validation in tests/integration/memory/extractor_json_contract_test.go
+- [X] T016 [P] [US1] Extend relevance-selection integration coverage for token-budgeted injection in tests/integration/context_cache_lifecycle_test.go
 
 ### Implementation for User Story 1
 
-- [X] T007 [US1] Add token budget setting (default 1500) and read path in internal/config/ (new settings file)
-- [X] T008 [US1] Apply token-budgeted relevance selection in internal/memory/retrieval.go
-- [X] T009 [US1] Implement importance-then-recency fallback in internal/memory/retrieval.go
-- [X] T010 [US1] Wire vector index ranking into retrieval in internal/memory/retrieval.go
+- [X] T017 [US1] Update extractor prompt content/template to require strict JSON output and per-note action semantics in internal/memory/extractor.go
+- [X] T018 [US1] Enforce note-level `action` and `target_id` rules during extraction processing in internal/memory/processor.go
+- [X] T019 [US1] Enforce allowed note category values during extraction processing in internal/memory/processor.go
+- [X] T020 [US1] Reject invalid extractor payloads before persistence and emit warning telemetry in internal/memory/extractor.go
+- [X] T021 [US1] Parse and validate top-level `has_new_info` and `confidence` in internal/memory/extractor.go
+- [X] T022 [US1] Preserve relevance ranking + token budget injection behavior with validated notes in internal/memory/retrieval.go
 
-**Checkpoint**: Relevance selection respects token budget and fallback ordering.
+**Checkpoint**: US1 fully functional and independently testable, including explicit top-level metadata validation (`has_new_info`, `confidence`).
 
 ---
 
 ## Phase 4: User Story 2 - Persistent Context Across Sessions (Priority: P2)
 
-**Goal**: Preserve context caching and index usage across restarts.
+**Goal**: Keep prompt/config/context behavior consistent across restarts with profile-local prompt files.
 
-**Independent Test**: Restart app and ensure cached context and index are reused.
+**Independent Test**: Restart app/profile and verify prompt files are reused, context/index state persists, and no prompt DB dependency exists.
 
-### Tests for User Story 2 (REQUIRED) ⚠️
+### Tests for User Story 2
 
-- [X] T011 [P] [US2] Add integration coverage for cache reuse across restarts in tests/integration/context_cache_lifecycle_test.go
+- [X] T023 [P] [US2] Add integration test for prompt file persistence across restarts in tests/integration/prompt_management_test.go
+- [X] T024 [P] [US2] Add integration test for missing `system.md`/`extractor.md` auto-bootstrap + visible warning in tests/integration/prompt_management_test.go
+- [X] T025 [P] [US2] Add integration test verifying system/extractor prompts are loaded from files (not DB) in tests/integration/prompt_management_test.go
+- [X] T026 [P] [US2] Extend cache lifecycle restart test coverage for prompt-file changes in tests/integration/context_cache_lifecycle_test.go
 
 ### Implementation for User Story 2
 
-- [X] T012 [US2] Persist context cache metadata and reuse cache in internal/memory/retrieval.go
-- [X] T013 [US2] Ensure vector index manifest reuse across restarts in internal/vector/sync.go
+- [X] T027 [US2] Wire prompt loading to profile prompt files in runtime setup path in internal/app/app.go
+- [X] T028 [US2] Ensure settings save flow writes system prompt to `<profile>/prompts/system.md` in internal/tui/settings_menu.go
+- [X] T029 [US2] Ensure extractor prompt persistence uses `<profile>/prompts/extractor.md` in internal/config/settings.go
+- [X] T030 [US2] Emit visible warning when prompt files are missing and defaults are auto-created in internal/tui/footer_view.go
+- [X] T031 [US2] Invalidate context cache on system prompt save from file-backed flow in internal/cache/context.go
 
-**Checkpoint**: Cache and index reuse across restarts verified.
+**Checkpoint**: US2 fully functional and independently testable.
 
 ---
 
 ## Phase 5: User Story 3 - Automatic Context Maintenance (Priority: P2)
 
-**Goal**: Maintain vector index incrementally with periodic compaction/rebuild.
+**Goal**: Maintain vector index automatically while respecting validated extracted-note updates.
 
-**Independent Test**: Add notes and confirm index updates and compaction run automatically.
+**Independent Test**: Add and update notes through extraction pipeline and verify incremental index sync, rebuild fallback, and deterministic retrieval fallback.
 
-### Tests for User Story 3 (REQUIRED) ⚠️
+### Tests for User Story 3
 
-- [X] T014 [P] [US3] Add integration coverage for incremental indexing in tests/integration/vector_sync_retrieval_test.go
-- [X] T015 [P] [US3] Add integration coverage for compaction/rebuild in tests/integration/vector_rebuild_fallback_test.go
+- [X] T032 [P] [US3] Extend integration test for incremental sync after `add|update` extraction actions in tests/integration/vector_sync_retrieval_test.go
+- [X] T033 [P] [US3] Extend integration test for compaction/rebuild non-blocking behavior in tests/integration/vector_rebuild_fallback_test.go
+- [X] T034 [P] [US3] Add integration test for deterministic retrieval fallback when index unavailable in tests/integration/vector_rebuild_fallback_test.go
 
 ### Implementation for User Story 3
 
-- [X] T016 [US3] Implement incremental index updates on note changes in internal/vector/sync.go
-- [X] T017 [US3] Implement periodic compaction/rebuild triggers in internal/vector/rebuild.go
+- [X] T035 [US3] Apply validated extraction actions to note store writes used by vector sync in internal/memory/store.go
+- [X] T036 [US3] Ensure vector sync handles update-target note mutations incrementally in internal/vector/sync.go
+- [X] T037 [US3] Ensure periodic rebuild/compaction triggers remain automatic and non-blocking in internal/vector/rebuild.go
 
-**Checkpoint**: Index updates/compaction run without manual commands.
-
----
-
-## Phase 6: User Story 4 - Extractor Fallback Warning (Priority: P2)
-
-**Goal**: Use main model when extractor model is missing and warn in footer.
-
-**Independent Test**: Clear extractor model config and verify fallback + footer warning.
-
-### Tests for User Story 4 (REQUIRED) ⚠️
-
-- [X] T018 [P] [US4] Add integration coverage for extractor fallback warning in tests/integration/tui_flow_regression_test.go
-
-### Implementation for User Story 4
-
-- [X] T019 [US4] Use main model for extraction when extractor model missing in internal/memory/extractor.go
-- [X] T020 [US4] Surface footer warning state in internal/tui/model.go
-
-**Checkpoint**: Fallback and warning active when extractor model absent.
+**Checkpoint**: US3 fully functional and independently testable.
 
 ---
 
-## Phase 7: Polish & Cross-Cutting Concerns
+## Phase 6: Polish & Cross-Cutting Concerns
 
-- [X] T021 [P] Run go test ./... and golangci-lint run; capture results in specs/005-memory-context/quickstart.md
-- [X] T022 Validate UX and performance goals; update specs/005-memory-context/quickstart.md
+- [X] T038 [P] Update contract examples and validation notes in specs/005-memory-context/contracts/context-retrieval.md
+- [X] T039 [P] Update data model documentation for any implementation-level field adjustments in specs/005-memory-context/data-model.md
+- [X] T040 Run full verification (`go test ./...`, `make lint`, `make fmt`) and record outcomes in specs/005-memory-context/quickstart.md
+- [X] T041 Add explicit UX validation checklist for missing prompt-file warning copy/placement in specs/005-memory-context/quickstart.md
 
 ---
 
 ## Dependencies & Execution Order
 
-- **Phase 1** → **Phase 2** → **Phase 3** → **Phase 4** → **Phase 5** → **Phase 6** → **Phase 7**
-- Tests must be completed before implementation tasks in each user story phase.
+### Phase Dependencies
+
+- **Phase 1 (Setup)**: starts immediately
+- **Phase 2 (Foundational)**: depends on Phase 1, blocks all user stories
+- **Phase 3 (US1)**: depends on Phase 2
+- **Phase 4 (US2)**: depends on Phase 2; may run in parallel with US3 after Phase 2
+- **Phase 5 (US3)**: depends on Phase 2; may run in parallel with US2 after Phase 2
+- **Phase 6 (Polish)**: depends on all selected user stories
+
+### User Story Dependencies
+
+- **US1 (P1)**: no dependency on other stories after foundational work
+- **US2 (P2)**: no hard dependency on US1; integrates same prompt/config infrastructure
+- **US3 (P2)**: depends on foundational extraction-validation pipeline, not on US2 completion
+
+### Within Each User Story
+
+- Tests first (write and verify failing where applicable)
+- Validation/data handling before integration wiring
+- Story-specific integration and checkpoint validation last
+
+---
+
+## Parallel Execution Examples
+
+### User Story 1
+
+```bash
+# Parallel tests
+T011, T012, T013, T014, T015, T016
+
+# Parallel implementation after schema types are in place
+T018, T019, T021
+```
+
+### User Story 2
+
+```bash
+# Parallel tests
+T023, T024, T025, T026
+
+# Parallel implementation
+T028, T029, T030
+```
+
+### User Story 3
+
+```bash
+# Parallel tests
+T032, T033, T034
+```
+
+---
+
+## Implementation Strategy
+
+### MVP First (US1)
+
+1. Complete Phase 1 + Phase 2
+2. Complete Phase 3 (US1)
+3. Validate US1 independently
+4. Demo/deploy MVP increment
+
+### Incremental Delivery
+
+1. Deliver US1 (strict extraction contract + accurate retrieval)
+2. Deliver US2 (profile prompt persistence across restarts)
+3. Deliver US3 (automatic maintenance with validated updates)
+4. Finish with Phase 6 polish and full-suite validation

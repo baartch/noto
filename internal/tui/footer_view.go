@@ -43,6 +43,9 @@ func (m *Model) renderFooter() string {
 	if m.embeddingModelMissing {
 		leftParts = append(leftParts, yellow.Render("Embeddings model missing — memory disabled."))
 	}
+	if m.promptBootstrapWarning {
+		leftParts = append(leftParts, yellow.Render("Prompt files missing — bootstrapped defaults."))
+	}
 
 	left := strings.Join(leftParts, dim.Render("  "))
 
