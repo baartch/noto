@@ -104,7 +104,7 @@ As a user, I want to manage profiles from the settings dialog so I can create, r
 - **FR-008d**: The Profiles list MUST support enter to select, ctrl+n to create, ctrl+r to rename, and ctrl+d to delete profiles using the settings text editor.
 - **FR-008f**: Deleting a profile from the Profiles list MUST require an in-dialog confirmation prompt, and pressing enter confirms deletion.
 - **FR-008e**: Profile management MUST not rely on slash commands.
-- **FR-008a**: The system MUST store the system prompt in the profile database, not a standalone file, defaulting to "You are Noto. A buddy who takes notes." when missing.
+- **FR-008a**: The system MUST store the system prompt as a profile-local Markdown file at `<profile>/prompts/system.md`, defaulting to "You are Noto. A buddy who takes notes." when missing.
 - **FR-008b**: The system MUST invalidate the conversation context cache whenever the system prompt is saved via the settings dialog.
 - **FR-008c**: Provider settings MUST include Endpoint and Key fields; Key values MUST be obfuscated in the list view.
 - **FR-009**: After a value is edited, the updated value MUST be persisted and displayed in the list.
@@ -128,7 +128,7 @@ As a user, I want to manage profiles from the settings dialog so I can create, r
 - **Settings Entry**: A named item representing a value or submenu.
 - **Settings Menu**: A collection of settings entries at a given level.
 - **Setting Value**: The editable value associated with a settings entry.
-- **System Prompt**: The stored prompt value persisted in the profile database.
+- **System Prompt**: The stored prompt value persisted as a profile-local Markdown file.
 
 ## Success Criteria *(mandatory)*
 
@@ -147,4 +147,4 @@ As a user, I want to manage profiles from the settings dialog so I can create, r
 - Settings are profile-scoped unless explicitly noted otherwise.
 - Existing configuration flows (model selection, provider setup, system prompt edit) can be invoked from settings.
 - The dialog can display blank values for unset settings without blocking edits.
-- The system prompt is stored in the profile database (no separate prompt file) and defaults to "You are Noto. A buddy who takes notes." when missing.
+- The system prompt is stored per profile in `<profile>/prompts/system.md` and defaults to "You are Noto. A buddy who takes notes." when missing.

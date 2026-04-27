@@ -15,6 +15,13 @@
 - Q: What should the fallback ranking be when the vector index is unavailable? → A: Importance then recency.
 - Q: How should the vector index be generated/updated? → A: Incremental updates on note changes with periodic rebuild/compaction.
 
+### Session 2026-04-27
+
+- Q: Where should the extractor prompt be stored? → A: Profile-local at `<profile>/prompts/extractor.md`.
+- Q: How should extraction actions be represented? → A: Per extracted note with `action: add|update`.
+- Q: How many notes should extraction return? → A: No fixed count; extract all meaningful notes above quality threshold.
+- Q: Where should the system prompt be stored? → A: Profile-local Markdown file in `<profile>/prompts`, not in SQLite.
+
 ## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Relevant Memory Context (Priority: P1)
@@ -29,11 +36,13 @@ As a user, I want Noto to add only the most relevant notes to the context so tha
 
 1. **Given** a profile has many notes, **When** a chat turn starts, **Then** only the most relevant notes within the configured token budget (default 1,500) are injected into the context.
 2. **Given** notes are created or updated, **When** the change is saved, **Then** the vector index is incrementally updated.
-3. **Given** periodic maintenance runs, **When** compaction is required, **Then** the index is rebuilt without manual commands.
-4. **Given** the note index is available, **When** relevance is computed, **Then** the system uses the vector index to rank notes.
-5. **Given** the vector index is missing or stale, **When** a chat turn starts, **Then** the system falls back to importance-then-recency ordering.
-6. **Given** the user opens settings, **When** they change the token budget, **Then** subsequent chat turns use the new budget.
-7. **Given** no extractor model is configured, **When** notes are extracted, **Then** the system uses the main model and shows a footer warning.
+3. **Given** the extractor returns multiple notes, **When** extraction completes, **Then** each note includes its own `action` value (`add` or `update`).
+4. **Given** periodic maintenance runs, **When** compaction is required, **Then** the index is rebuilt without manual commands.
+5. **Given** the note index is available, **When** relevance is computed, **Then** the system uses the vector index to rank notes.
+6. **Given** the vector index is missing or stale, **When** a chat turn starts, **Then** the system falls back to importance-then-recency ordering.
+7. **Given** the user opens settings, **When** they change the token budget, **Then** subsequent chat turns use the new budget.
+8. **Given** no extractor model is configured, **When** notes are extracted, **Then** the system uses the main model and shows a footer warning.
+9. **Given** a message contains multiple distinct memory-worthy facts, **When** extraction runs, **Then** all meaningful notes are returned (not an arbitrary fixed count).
 
 ---
 
@@ -89,6 +98,10 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 - **FR-010**: The system MUST periodically compact or rebuild the vector index when required.
 - **FR-011**: The system MUST fall back to importance-then-recency selection if the index is unavailable.
 - **FR-012**: The system MUST use the main model for extraction when no extractor model is configured and display a footer warning.
+- **FR-013**: The system MUST store the extractor prompt as a Markdown file at `<profile>/prompts/extractor.md`, using the current prompt as the starting content.
+- **FR-014**: The extractor output MUST assign `action: add|update` on each individual extracted note, rather than at the whole-response level.
+- **FR-015**: The extractor prompt MUST instruct the LLM to extract as many notes as are meaningful for the input, with no fixed note-count cap.
+- **FR-016**: The system prompt MUST be stored per profile as a Markdown file under `<profile>/prompts/` and MUST NOT be stored in SQLite.
 
 ### Non-Functional Requirements _(mandatory)_
 
