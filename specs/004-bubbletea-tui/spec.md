@@ -12,6 +12,10 @@
 - Q: Should this requirement force a refactor of existing TUI code? → A: Yes—refactor all existing TUI surfaces to comply.
 - Q: Where should expanded help be shown when opened? → A: Above the input textarea.
 
+### Session 2026-04-27
+
+- Q: Which footer information must always be visible? → A: Always show tokens (up/down/cache read/cache write/cost), profile name, main model, app version, help keybinding, and context cache info (`ctx:miss|hit`).
+
 ## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Consistent Bubble Tea TUI Usage (Priority: P1)
@@ -33,6 +37,7 @@ As a maintainer, I want all TUI interactions to be built with Bubble Tea so that
 7. **Given** the TUI is active, **When** the user presses `Ctrl+H`, **Then** help expands above the input textarea.
 8. **Given** the TUI is active, **When** the user presses `Ctrl+J`, **Then** the settings dialog opens.
 9. **Given** the TUI is active, **When** the footer is rendered, **Then** it displays keybinding help with `Ctrl+H` in the primary group and all other keybindings in the secondary group.
+10. **Given** the TUI is active, **When** the footer is rendered, **Then** it always shows tokens (up/down/cache read/cache write/cost), context cache stats (`ctx:miss|hit`), current profile, current main model, app version, and help keybinding.
 
 ---
 
@@ -61,16 +66,18 @@ As a maintainer, I want to reuse existing Bubbles components whenever possible s
 ### Functional Requirements
 
 - **FR-001**: The system MUST implement all TUI interaction flows using the Bubble Tea application model.
-- **FR-002**: The system MUST refactor existing TUI interaction flows to use the Bubble Tea application model.
-- **FR-003**: The system MUST prefer existing Bubbles components for TUI elements when they satisfy requirements.
-- **FR-004**: The system MUST define styling using Lip Gloss when styling is required.
-- **FR-005**: The system MUST keep the input bar and footer anchored to the bottom of the screen when overlays (pickers, suggestions) are visible.
-- **FR-006**: The system MUST support filtering in picker overlays via the Bubbles list filter input without hiding the list results.
-- **FR-007**: The system MUST exit the TUI when the user presses `Ctrl+D`.
-- **FR-008**: The system MUST open the model picker when the user presses `Ctrl+L`.
-- **FR-009**: The system MUST render keybinding help in the footer using the Bubbles Help component, with `Ctrl+H` in the primary group and all other keybindings in the secondary group.
-- **FR-010**: The system MUST render expanded help above the input textarea when help is opened via `Ctrl+H`.
-- **FR-011**: The system MUST document any custom TUI components and explain why no Bubbles component was suitable.
+- **FR-002**: The system MUST prefer existing Bubbles components for TUI elements when they satisfy requirements.
+- **FR-003**: The system MUST define styling using Lip Gloss when styling is required.
+- **FR-004**: The system MUST keep the input bar and footer anchored to the bottom of the screen when overlays (pickers, suggestions) are visible.
+- **FR-005**: The system MUST support filtering in picker overlays via the Bubbles list filter input without hiding the list results.
+- **FR-006**: The system MUST exit the TUI when the user presses `Ctrl+D`.
+- **FR-007**: The system MUST open the model picker when the user presses `Ctrl+L`.
+- **FR-008**: The system MUST render keybinding help in the footer using the Bubbles Help component, with `Ctrl+H` in the primary group and all other keybindings in the secondary group.
+- **FR-009**: The system MUST render expanded help above the input textarea when help is opened via `Ctrl+H`.
+- **FR-010**: The system MUST document any custom TUI components and explain why no Bubbles component was suitable.
+- **FR-011**: The system MUST always render footer status fields for tokens (up/down/cache read/cache write/cost), context cache stats (`ctx:miss|hit`), current profile name, current main model, app version, and help keybinding.
+- **FR-012**: The system MUST compute footer token/cost totals from provider `usage` payloads and aggregate values from the main chat model, extractor model, and embeddings model.
+- **FR-013**: The system MUST open the settings dialog when the user presses `Ctrl+J`.
 
 ### Non-Functional Requirements _(mandatory)_
 
@@ -104,6 +111,9 @@ As a maintainer, I want to reuse existing Bubbles components whenever possible s
 - **SC-009**: Any custom TUI components include documented rationale for not using Bubbles.
 - **SC-010**: 0 lint/format violations in CI for the feature scope.
 - **SC-011**: All new/changed behavior covered by automated tests.
+- **SC-012**: The footer always displays tokens (up/down/cache read/cache write/cost), context cache stats (`ctx:miss|hit`), current profile, current main model, app version, and help keybinding in all standard TUI states.
+- **SC-013**: Footer token/cost totals reflect aggregated provider `usage` values across main chat, extractor, and embeddings model operations.
+- **SC-014**: `Ctrl+J` opens the settings dialog in the active TUI.
 
 ## Assumptions
 

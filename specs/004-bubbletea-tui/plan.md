@@ -1,32 +1,33 @@
 # Implementation Plan: Bubble Tea TUI Standard
 
-**Branch**: `004-bubbletea-tui` | **Date**: 2026-04-10 | **Spec**: [spec.md](./spec.md)
+**Branch**: `004-bubbletea-tui` | **Date**: 2026-04-27 | **Spec**: `/specs/004-bubbletea-tui/spec.md`
 **Input**: Feature specification from `/specs/004-bubbletea-tui/spec.md`
 
 ## Summary
 
-Implement Bubble Tea TUI refinements with Bubbles components, including keybinding help using the Bubbles Help component, expanded help rendering above the input textarea, and existing picker/input behavior updates. Ensure consistent UX, tests, and performance validation.
+Standardize all TUI flows on Bubble Tea v2 and prefer Bubbles v2 primitives with Lip Gloss v2 styling. Keep input/footer anchored during overlays, enforce keybindings (`Ctrl+D`, `Ctrl+L`, `Ctrl+H`, `Ctrl+J`), and always render footer telemetry. Footer telemetry aggregates usage/cost from provider `usage` payloads across main chat, extractor, and embeddings models.
 
 ## Technical Context
 
-**Language/Version**: Go 1.26+
-**Primary Dependencies**: charm.land/bubbletea/v2, charm.land/bubbles/v2, charm.land/lipgloss/v2, Cobra
-**Storage**: N/A (UI-only behavior)
-**Testing**: `go test ./...`, integration tests in `tests/integration`
-**Target Platform**: Terminal (Linux/macOS/Windows)
-**Project Type**: CLI/TUI application
-**Performance Goals**: No perceptible lag in input/rendering during typical usage
-**Constraints**: Maintain anchored input/footer; avoid layout shifts when help/pickers render
-**Scale/Scope**: Single-screen TUI interactions with overlays
+**Language/Version**: Go 1.26+  
+**Primary Dependencies**: Cobra CLI, Bubble Tea v2, Bubbles v2, Lip Gloss v2, OpenAI-compatible provider adapter  
+**Storage**: Profile-local SQLite (`~/.noto/profiles/<profile>/memory.db`) + profile-local files (`memory.vec`, prompt files)  
+**Testing**: `go test` with unit/integration/contract suites (`tests/unit`, `tests/integration`, `tests/contract`)  
+**Target Platform**: Cross-platform terminal environments (Linux/macOS primary)  
+**Project Type**: CLI application with interactive TUI  
+**Performance Goals**: No perceptible lag for normal typing/navigation; footer metrics update within normal render loop cadence  
+**Constraints**: Footer always visible; overlay filtering must not collapse list; usage totals must include main + extractor + embeddings usage/cost; `Ctrl+J` must open settings dialog  
+**Scale/Scope**: All existing and new TUI interaction flows in `internal/tui` and related feature modules
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Code Quality Gate**: Run `golangci-lint run` and `go test ./...` before merge.
-- **Testing Standards Gate**: Add/adjust tests for help rendering placement and keybinding help visibility.
-- **UX Consistency Gate**: Ensure help placement above input and footer keybinding help match existing layout patterns; document deviations if any.
-- **Performance Gate**: Validate no noticeable render/input lag when toggling help or opening pickers.
+- **I. Code Quality Is Enforced**: PASS — plan includes refactor boundaries and lint/format/vet requirements.
+- **II. Testing Standards Are Non-Negotiable**: PASS — plan requires tests for positive/negative UI behavior and usage aggregation.
+- **III. User Experience Consistency First**: PASS — plan preserves keybindings, footer/help behavior, and overlay anchoring conventions.
+
+No constitutional violations requiring complexity justification.
 
 ## Project Structure
 
@@ -39,48 +40,56 @@ specs/004-bubbletea-tui/
 ├── data-model.md
 ├── quickstart.md
 ├── contracts/
+│   └── tui-flows.md
 └── tasks.md
 ```
 
 ### Source Code (repository root)
 
 ```text
+cmd/
+└── noto/
+
 internal/
 ├── tui/
-│   ├── model.go
-│   ├── picker.go
-│   ├── styles.go
-│   └── ...
-└── commands/
+├── provider/
+├── observe/
+├── chat/
+├── memory/
+└── profile/
 
 tests/
+├── contract/
 ├── integration/
-└── contract/
+└── unit/
 ```
 
-**Structure Decision**: Single Go CLI/TUI project with UI logic under `internal/tui` and integration tests under `tests/integration`.
+**Structure Decision**: Use the existing single-project Go CLI layout. Implement UI behavior primarily in `internal/tui`, with usage/cost sourcing from provider response paths and validated by integration/contract tests.
 
-## Plan
+## Phase 0: Research Outcomes
 
-### Phase 0: Research
-- Confirm Bubbles Help component usage patterns and footer rendering guidance.
+- Usage source standardized to API `usage` payloads from responses/chunks.
+- Aggregation scope includes main model + extractor + embeddings model usage/cost.
+- Footer contract fixed to always-visible telemetry + profile/model/version/help.
+- Missing `usage` handling defined as no-op (retain last totals, no estimation).
 
-### Phase 1: Design
-- Update TUI layout to incorporate Help component in the footer.
-- Define expanded help placement above the input textarea without displacing footer.
-- Update styles as needed for help rendering.
+(See `/specs/004-bubbletea-tui/research.md`.)
 
-### Phase 2: Implementation
-- Add Help component state to the TUI model.
-- Render footer help with active keybindings.
-- Render expanded help above the input textarea when help is opened.
-- Ensure help interactions do not shift input/footer anchoring.
-- Update or add tests for help rendering and keybindings.
+## Phase 1: Design Outcomes
 
-### Phase 3: Validation
-- Run `go test ./...` and lint checks.
-- Verify help behavior manually for picker open/close and input focus.
+- Data entities expanded to include session usage accumulator and per-response usage snapshots.
+- Contract updated for footer telemetry completeness and cross-model accounting.
+- Quickstart updated with verification flow for usage parsing and aggregation behavior.
+- Agent context updated to reference this plan in `AGENTS.md`.
+
+## Post-Design Constitution Re-Check
+
+- **I. Code Quality Is Enforced**: PASS — concrete modules and responsibilities identified.
+- **II. Testing Standards Are Non-Negotiable**: PASS — explicit validation added for usage parsing/aggregation and footer rendering.
+- **III. User Experience Consistency First**: PASS — no UX deviations introduced; requirements made more testable.
 
 ## Complexity Tracking
 
-> **No constitution violations identified.**
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|-------------------------------------|
+| None | N/A | N/A |
