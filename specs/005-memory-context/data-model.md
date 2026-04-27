@@ -77,6 +77,16 @@ Validation:
 - **source_state_version**: string
 - **status**: `ready | stale | rebuilding | failed`
 
+### Extraction Result (Runtime)
+
+- **notes**: array of newly added `Memory Note`
+- **updated_notes**: array of updated `Memory Note`
+- **updated_count**: int
+
+Validation:
+- `updated_notes` MUST contain notes mutated via `action=update` with valid `target_id`.
+- Both `notes` and `updated_notes` SHOULD be passed to incremental vector sync to keep the index current.
+
 ### Context Cache Entry
 
 - **id**: string
@@ -95,5 +105,6 @@ Validation:
 
 ## State/Flow Notes
 
-- Extraction: input message(s) → extractor JSON payload → validated extracted notes → add/update note writes → incremental index updates.
+- Extraction: input message(s) → extractor JSON payload → validated extracted notes → add/update note writes → extraction result (`notes`, `updated_notes`) → incremental index updates.
+- Prompt load/bootstrap: runtime reads `<profile>/prompts/*.md`; if missing, defaults are created and a visible warning state is set.
 - Prompt edits: settings/UI edit → write `<profile>/prompts/*.md` → invalidate context cache when system prompt changes.

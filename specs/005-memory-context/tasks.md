@@ -108,10 +108,10 @@
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T038 [P] Update contract examples and validation notes in specs/005-memory-context/contracts/context-retrieval.md
-- [ ] T039 [P] Update data model documentation for any implementation-level field adjustments in specs/005-memory-context/data-model.md
-- [ ] T040 Run full verification (`go test ./...`, `make lint`, `make fmt`) and record outcomes in specs/005-memory-context/quickstart.md
-- [ ] T041 Add explicit UX validation checklist for missing prompt-file warning copy/placement in specs/005-memory-context/quickstart.md
+- [X] T038 [P] Update contract examples and validation notes in specs/005-memory-context/contracts/context-retrieval.md
+- [X] T039 [P] Update data model documentation for any implementation-level field adjustments in specs/005-memory-context/data-model.md
+- [X] T040 Run full verification (`go test ./...`, `make lint`, `make fmt`) and record outcomes in specs/005-memory-context/quickstart.md
+- [X] T041 Add explicit UX validation checklist for missing prompt-file warning copy/placement in specs/005-memory-context/quickstart.md
 
 ---
 

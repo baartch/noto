@@ -10,6 +10,8 @@
 ## Behavior
 
 1. Load profile-local prompt files from `<profile>/prompts/`.
+   - If `system.md` or `extractor.md` is missing, auto-bootstrap defaults and continue.
+   - Surface a visible footer warning when bootstrap occurred.
 2. Retrieve relevant notes using vector index (when available).
 3. Apply token budget to selected notes.
 4. If index unavailable, fall back to importance then recency ordering.
@@ -17,6 +19,8 @@
 6. Cache assembled context for reuse across restarts.
 7. If extractor model is missing, use the main model and surface a footer warning.
 8. Extractor response MUST be valid JSON and pass note-level validation before persistence.
+9. Extraction can include mixed per-note actions (`add` and `update`) in one payload.
+10. Updated notes MUST be included in incremental vector sync input so index mutation remains up to date.
 
 ## Extractor Response Contract (JSON)
 
@@ -65,4 +69,6 @@ No-new-info example:
 - **memory_block**: string
 - **cache_hit**: bool
 - **accepted_notes_count**: int
+- **updated_notes_count**: int
 - **rejected_payload**: bool
+- **prompt_bootstrap_warning**: bool (true when missing prompt files were auto-created)

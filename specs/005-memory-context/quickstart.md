@@ -40,20 +40,35 @@
    - Clear extractor model configuration.
    - Confirm main model is used and footer warning appears.
 
+7. **Verify missing prompt-file warning UX**
+   - Delete `<profile>/prompts/system.md` and restart/open chat for that profile.
+   - Confirm the file is auto-created with defaults.
+   - Confirm the footer shows: `Prompt files missing — bootstrapped defaults.`
+   - Repeat for `<profile>/prompts/extractor.md`.
+
 ## Expected Results
 
 - Prompt files are profile-local Markdown files.
+- Missing prompt files are auto-bootstrapped with defaults and show a visible footer warning.
 - Extraction returns contract-compliant JSON with note-level actions.
 - `update` actions always include `target_id`.
 - Category taxonomy remains constrained and consistent.
 - Invalid payloads are rejected with observability signals.
+- Updated notes participate in incremental vector sync.
 - Relevance and persistence behavior remain unchanged from baseline.
 
 ## Validation Commands
 
-- `go test ./...`
-- `make lint`
-- `make fmt`
+- `go test ./...` ✅
+- `make lint` ✅
+- `make fmt` ✅
+
+## UX Validation Checklist (Prompt Bootstrap Warning)
+
+- [ ] Footer warning appears when `system.md` is missing and auto-created.
+- [ ] Footer warning appears when `extractor.md` is missing and auto-created.
+- [ ] Warning text matches expected copy and does not overlap token/cache indicators.
+- [ ] Warning is non-fatal (chat flow continues).
 
 ## Wiring Notes
 

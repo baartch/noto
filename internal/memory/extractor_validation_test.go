@@ -34,7 +34,7 @@ func TestValidateExtractionPayload_UpdateRequiresTargetID(t *testing.T) {
 	p := extractionResponse{
 		HasNewInfo: true,
 		Confidence: 0.7,
-		Notes: []extractedItem{{Action: "update", Category: "progress", Content: "A", Importance: 5}},
+		Notes:      []extractedItem{{Action: "update", Category: "progress", Content: "A", Importance: 5}},
 	}
 	if err := validateExtractionPayload(p); err == nil {
 		t.Fatal("expected update target_id error")

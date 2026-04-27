@@ -27,11 +27,13 @@ type captureRejectHook struct {
 	reasons []string
 }
 
-func (h *captureRejectHook) CandidateScored(memory.NoteCandidate)                     {}
-func (h *captureRejectHook) DuplicateDetected(memory.NoteCandidate, string)            {}
-func (h *captureRejectHook) NoteStored(memory.NoteCandidate, string)                   {}
-func (h *captureRejectHook) NoteStorageFailed(memory.NoteCandidate, error)             {}
-func (h *captureRejectHook) ExtractionPayloadRejected(reason string) { h.reasons = append(h.reasons, reason) }
+func (h *captureRejectHook) CandidateScored(memory.NoteCandidate)           {}
+func (h *captureRejectHook) DuplicateDetected(memory.NoteCandidate, string) {}
+func (h *captureRejectHook) NoteStored(memory.NoteCandidate, string)        {}
+func (h *captureRejectHook) NoteStorageFailed(memory.NoteCandidate, error)  {}
+func (h *captureRejectHook) ExtractionPayloadRejected(reason string) {
+	h.reasons = append(h.reasons, reason)
+}
 
 func newExtractorHarness(t *testing.T) (context.Context, *store.MemoryNoteRepo, *store.Profile, *memory.Extractor) {
 	t.Helper()

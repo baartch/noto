@@ -35,7 +35,6 @@ type extractedItem struct {
 	Importance int    `json:"importance"` // 1-10
 }
 
-
 // CacheInvalidator invalidates cached memory retrieval context.
 type CacheInvalidator interface {
 	InvalidateAll(ctx context.Context, profileID string) error
