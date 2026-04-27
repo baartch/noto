@@ -82,9 +82,9 @@ jobs:
         run: |
           cd dist
           if [ "${{ matrix.archive }}" = "zip" ]; then
-            zip noto-${{ matrix.goos }}-${{ matrix.goarch }}.zip noto-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+            zip noto-${{ matrix.goos }}-${{ matrix.goarch }}.zip noto${{ matrix.ext }}
           else
-            tar -czf noto-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz noto-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+            tar -czf noto-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz noto${{ matrix.ext }}
           fi
 
       - name: Upload artifact
