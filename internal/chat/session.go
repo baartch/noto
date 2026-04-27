@@ -448,8 +448,10 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 		return
 	}
 
-	if len(result.Notes) > 0 && s.adapter != nil {
-		if err := s.syncVectorIndex(ctx, result.Notes); err != nil {
+	if (len(result.Notes) > 0 || len(result.UpdatedNotes) > 0) && s.adapter != nil {
+		syncBatch := append([]*store.MemoryNote{}, result.Notes...)
+		syncBatch = append(syncBatch, result.UpdatedNotes...)
+		if err := s.syncVectorIndex(ctx, syncBatch); err != nil {
 			s.logger.Errorf("vector sync failed: %v", err)
 		}
 	}

@@ -101,6 +101,23 @@ func (s *stubIndexSync) Rebuild(_ []vector.Entry) error { return nil }
 func (s *stubIndexSync) Flush() error                   { return nil }
 func (s *stubIndexSync) Close() error                   { return nil }
 
+func TestVectorSync_IncrementalUpdateTargetMutation(t *testing.T) {
+	index := &stubIndexSync{}
+	manifest := &stubManifestRepo{}
+	syncer := vector.NewSyncer(index, "p1", &stubEmbedder{}, "embed-model").WithManifest(manifest)
+	ctx := context.Background()
+
+	if err := syncer.SyncNotes(ctx, []vector.MemoryNoteRecord{{ID: "n1", Content: "alpha"}}); err != nil {
+		t.Fatalf("initial sync: %v", err)
+	}
+	if err := syncer.SyncNotes(ctx, []vector.MemoryNoteRecord{{ID: "n1", Content: "alpha updated"}}); err != nil {
+		t.Fatalf("update sync: %v", err)
+	}
+	if len(manifest.entries) < 2 {
+		t.Fatalf("expected manifest updates for incremental mutation, got %d", len(manifest.entries))
+	}
+}
+
 type stubEmbedder struct{}
 
 func (s *stubEmbedder) Embed(_ context.Context, _ provider.EmbeddingRequest) (*provider.EmbeddingResponse, error) {

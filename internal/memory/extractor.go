@@ -14,8 +14,9 @@ import (
 
 // ExtractionResult holds the notes extracted from a single exchange.
 type ExtractionResult struct {
-	Notes   []*store.MemoryNote
-	Updated int
+	Notes        []*store.MemoryNote
+	UpdatedNotes []*store.MemoryNote
+	Updated      int
 }
 
 // extractionResponse is the JSON shape the LLM returns for an extraction.
@@ -83,25 +84,31 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID s
 		return &ExtractionResult{}, nil
 	}
 	items := resp.Notes
+	updatedNotes := make([]*store.MemoryNote, 0)
+	addItems := make([]extractedItem, 0, len(items))
+	updatedCount := 0
 	for _, it := range items {
 		if it.Action == "update" && it.TargetID != "" {
-			if updated, err := e.updateNote(ctx, profileID, it.TargetID, []extractedItem{it}, sourceMessageIDs); err == nil && updated {
+			if note, updated, err := e.updateNote(ctx, profileID, it.TargetID, []extractedItem{it}, sourceMessageIDs); err == nil && updated {
+				updatedNotes = append(updatedNotes, note)
+				updatedCount++
 				continue
 			}
 		}
+		addItems = append(addItems, it)
 	}
 
 	processor := NewProcessor(e.noteRepo, e.deduper, e.logHook)
-	notes, updated, err := processor.Process(ctx, profileID, conversationID, items, sourceMessageIDs)
+	notes, updated, err := processor.Process(ctx, profileID, conversationID, addItems, sourceMessageIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(notes) > 0 && e.invalidator != nil {
+	if (len(notes) > 0 || len(updatedNotes) > 0) && e.invalidator != nil {
 		_ = e.invalidator.InvalidateAll(ctx, profileID)
 	}
 
-	return &ExtractionResult{Notes: notes, Updated: updated}, nil
+	return &ExtractionResult{Notes: notes, UpdatedNotes: updatedNotes, Updated: updated + updatedCount}, nil
 }
 
 // llmExtract calls the model and parses the JSON response. Never returns an error
@@ -181,20 +188,20 @@ func formatExistingNotes(existing []*store.MemoryNote) string {
 	return strings.Join(lines, "\n")
 }
 
-func (e *Extractor) updateNote(ctx context.Context, profileID, targetID string, items []extractedItem, sourceMessageIDs []string) (bool, error) {
+func (e *Extractor) updateNote(ctx context.Context, profileID, targetID string, items []extractedItem, sourceMessageIDs []string) (*store.MemoryNote, bool, error) {
 	if len(items) == 0 {
-		return false, nil
+		return nil, false, nil
 	}
 	note, err := e.noteRepo.GetByID(ctx, targetID)
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
 	if note.ProfileID != profileID {
-		return false, nil
+		return nil, false, nil
 	}
 	item := items[0]
 	if strings.TrimSpace(item.Content) == "" {
-		return false, nil
+		return nil, false, nil
 	}
 
 	note.Content = item.Content
@@ -213,10 +220,10 @@ func (e *Extractor) updateNote(ctx context.Context, profileID, targetID string, 
 		}
 	}
 	if err := e.noteRepo.Update(ctx, note); err != nil {
-		return false, err
+		return nil, false, err
 	}
 	if e.invalidator != nil {
 		_ = e.invalidator.InvalidateAll(ctx, profileID)
 	}
-	return true, nil
+	return note, true, nil
 }

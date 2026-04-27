@@ -92,15 +92,15 @@
 
 ### Tests for User Story 3
 
-- [ ] T032 [P] [US3] Extend integration test for incremental sync after `add|update` extraction actions in tests/integration/vector_sync_retrieval_test.go
-- [ ] T033 [P] [US3] Extend integration test for compaction/rebuild non-blocking behavior in tests/integration/vector_rebuild_fallback_test.go
-- [ ] T034 [P] [US3] Add integration test for deterministic retrieval fallback when index unavailable in tests/integration/vector_rebuild_fallback_test.go
+- [X] T032 [P] [US3] Extend integration test for incremental sync after `add|update` extraction actions in tests/integration/vector_sync_retrieval_test.go
+- [X] T033 [P] [US3] Extend integration test for compaction/rebuild non-blocking behavior in tests/integration/vector_rebuild_fallback_test.go
+- [X] T034 [P] [US3] Add integration test for deterministic retrieval fallback when index unavailable in tests/integration/vector_rebuild_fallback_test.go
 
 ### Implementation for User Story 3
 
-- [ ] T035 [US3] Apply validated extraction actions to note store writes used by vector sync in internal/memory/store.go
-- [ ] T036 [US3] Ensure vector sync handles update-target note mutations incrementally in internal/vector/sync.go
-- [ ] T037 [US3] Ensure periodic rebuild/compaction triggers remain automatic and non-blocking in internal/vector/rebuild.go
+- [X] T035 [US3] Apply validated extraction actions to note store writes used by vector sync in internal/memory/store.go
+- [X] T036 [US3] Ensure vector sync handles update-target note mutations incrementally in internal/vector/sync.go
+- [X] T037 [US3] Ensure periodic rebuild/compaction triggers remain automatic and non-blocking in internal/vector/rebuild.go
 
 **Checkpoint**: US3 fully functional and independently testable.
 
