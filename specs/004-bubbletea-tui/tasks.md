@@ -3,69 +3,166 @@
 **Input**: Design documents from `/specs/004-bubbletea-tui/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: Test tasks are REQUIRED for every user story and must be created before implementation tasks.
+**Tests**: Tests are required by the specification (NFR-002), so this task list includes test tasks.
+
+**Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[P]**: Can run in parallel (different files, no dependencies)
+- **[Story]**: Which user story this task belongs to (e.g., US1, US2)
+- All tasks include exact file paths
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [x] T001 Review current TUI layout and help usage in internal/tui/model.go
+**Purpose**: Establish implementation scaffolding for TUI telemetry and validation.
+
+- [X] T001 Audit current TUI flows and capture inventory in `specs/004-bubbletea-tui/contracts/tui-flows.md`
+- [X] T002 Add/confirm test fixtures for provider usage payloads in `tests/unit/provider/usage_payload_fixtures_test.go`
+- [X] T003 [P] Add reusable footer rendering test helper in `tests/integration/tui/footer_test_helpers.go`
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [x] T002 Define help/keybinding UX expectations for footer + expanded help in specs/004-bubbletea-tui/quickstart.md
+**Purpose**: Core telemetry and footer primitives that all story work depends on.
+
+**⚠️ CRITICAL**: No user story work can begin until this phase is complete.
+
+- [X] T004 Implement usage snapshot parsing types and mappers in `internal/provider/usage.go`
+- [X] T005 [P] Implement session usage accumulator (`up/down/cache read/cache write/cost`) in `internal/tui/usage_accumulator.go`
+- [X] T006 [P] Implement accumulator update logic for `main|extractor|embeddings` sources in `internal/tui/usage_accumulator.go`
+- [X] T007 Implement footer status view model with required always-visible fields in `internal/tui/footer_status.go`
+- [X] T008 Wire provider usage events into TUI model update path in `internal/tui/model.go`
+- [X] T009 Add unit tests for parsing + missing-usage no-op behavior in `tests/unit/provider/usage_test.go`
+- [X] T010 Add unit tests for accumulator math and source aggregation in `tests/unit/tui/usage_accumulator_test.go`
+
+**Checkpoint**: Foundation ready - user story implementation can now begin.
 
 ---
 
 ## Phase 3: User Story 1 - Consistent Bubble Tea TUI Usage (Priority: P1) 🎯 MVP
 
-**Goal**: Ensure TUI interactions use Bubble Tea conventions with anchored input/footer and help rendering.
+**Goal**: Ensure all TUI flows follow Bubble Tea patterns, keybindings, anchored layout, and footer telemetry behavior.
 
-**Independent Test**: Launch TUI, toggle help, open pickers, and verify footer/input anchoring plus keybinding display.
+**Independent Test**: Verify all TUI entry points use Bubble Tea models/update loops; verify overlay anchoring, keybindings, help placement, and required footer fields.
 
-### Tests for User Story 1 (REQUIRED) ⚠️
+### Tests for User Story 1
 
-- [x] T003 [P] [US1] Add integration coverage for help placement and footer help in tests/integration/tui_flow_regression_test.go
-- [x] T004 [P] [US1] Add integration coverage for Ctrl+D and Ctrl+L bindings in tests/integration/tui_flow_regression_test.go
+- [X] T011 [P] [US1] Add integration test for anchored input/footer during overlays in `tests/integration/tui/layout_anchor_test.go`
+- [X] T012 [P] [US1] Add integration test for picker `/` filtering without list collapse in `tests/integration/tui/picker_filter_test.go`
+- [X] T013 [P] [US1] Add integration test for keybindings (`Ctrl+D`, `Ctrl+L`, `Ctrl+H`, `Ctrl+J`) in `tests/integration/tui/keybindings_test.go`
+- [X] T014 [P] [US1] Add integration test for expanded help position above textarea in `tests/integration/tui/help_layout_test.go`
+- [X] T015 [P] [US1] Add integration test for always-visible footer fields and `ctx:miss|hit` in `tests/integration/tui/footer_fields_test.go`
+- [X] T016 [P] [US1] Add integration test for footer usage accumulation across main/extractor/embeddings in `tests/integration/tui/footer_usage_aggregation_test.go`
 
 ### Implementation for User Story 1
 
-- [x] T005 [US1] Add Help component state and keymaps in internal/tui/model.go
-- [x] T006 [US1] Render footer help via Bubbles Help in internal/tui/model.go
-- [x] T007 [US1] Render expanded help above input textarea in internal/tui/model.go
-- [x] T008 [US1] Update styles for help placement in internal/tui/styles.go
+- [X] T017 [US1] Refactor remaining non-conforming TUI flows to Bubble Tea model/update loop patterns in `internal/tui/model.go`
+- [X] T018 [US1] Enforce overlay layout anchoring for input/footer in `internal/tui/layout.go`
+- [X] T019 [US1] Implement stable picker filter behavior with Bubbles list filtering in `internal/tui/pickers.go`
+- [X] T020 [US1] Implement/normalize global keybindings (`Ctrl+D`, `Ctrl+L`, `Ctrl+H`, `Ctrl+J`) in `internal/tui/keys.go`
+- [X] T021 [US1] Render expanded help above textarea and preserve footer placement in `internal/tui/help.go`
+- [X] T022 [US1] Render footer telemetry fields (`up/down/cache read/cache write/cost`, `ctx:miss|hit`, profile/model/version/help) in `internal/tui/footer.go`
+- [X] T023 [US1] Wire usage payload handling from provider responses/chunks into footer updates in `internal/tui/model.go`
 
-**Checkpoint**: Help renders in footer and above input without shifting anchored elements.
+**Checkpoint**: User Story 1 is independently functional and testable (MVP).
 
 ---
 
 ## Phase 4: User Story 2 - Prefer Bubbles Components (Priority: P2)
 
-**Goal**: Use Bubbles components for help and keybinding behavior.
+**Goal**: Ensure existing Bubbles components are used whenever suitable and custom components are justified.
 
-**Independent Test**: Verify help component is used for footer/expanded help and keybindings match spec.
+**Independent Test**: Inspect each TUI surface and verify Bubbles usage where applicable; any custom UI has documented rationale.
 
-### Tests for User Story 2 (REQUIRED) ⚠️
+### Tests for User Story 2
 
-- [x] T009 [P] [US2] Add integration assertion for Bubbles Help usage in tests/integration/tui_bubbles_usage_test.go
+- [X] T024 [P] [US2] Add contract test validating flow/component mapping and custom-rationale requirement in `tests/contract/tui_component_contract_test.go`
+- [X] T025 [P] [US2] Add integration regression test for Bubbles Help primary/secondary key grouping in `tests/integration/tui/help_component_grouping_test.go`
 
 ### Implementation for User Story 2
 
-- [x] T010 [US2] Wire help bindings and toggles with Bubbles key/help in internal/tui/model.go
-- [x] T011 [US2] Update help-related documentation in internal/tui/doc.go
+- [X] T026 [US2] Replace remaining custom list/input/help primitives with Bubbles components where suitable in `internal/tui/components.go`
+- [X] T027 [US2] Document rationale for retained custom components in `specs/004-bubbletea-tui/contracts/tui-flows.md`
+- [X] T028 [US2] Consolidate shared Lip Gloss style definitions for standardized TUI surfaces in `internal/tui/styles.go`
 
-**Checkpoint**: Help component usage is documented and verified.
+**Checkpoint**: User Stories 1 and 2 both work independently.
 
 ---
 
 ## Phase 5: Polish & Cross-Cutting Concerns
 
-- [x] T012 [P] Run go test ./... and golangci-lint run; capture results in specs/004-bubbletea-tui/quickstart.md
-- [x] T013 Validate UX anchoring with help/picker overlays and update specs/004-bubbletea-tui/quickstart.md
+**Purpose**: Final validation, cleanup, and documentation.
+
+- [X] T029 [P] Update quick verification steps for telemetry and keybinding behavior in `specs/004-bubbletea-tui/quickstart.md`
+- [X] T030 Run full quality gates and fix residual issues (`make fmt && make lint && make vet && make test`) in repository root
 
 ---
 
 ## Dependencies & Execution Order
 
-- **Phase 1** → **Phase 2** → **Phase 3** → **Phase 4** → **Phase 5**
-- Tests (T003–T004, T009) must be completed before implementation tasks in their respective stories.
+### Phase Dependencies
+
+- **Phase 1 (Setup)**: No dependencies.
+- **Phase 2 (Foundational)**: Depends on Phase 1; blocks all user stories.
+- **Phase 3 (US1)**: Depends on Phase 2.
+- **Phase 4 (US2)**: Depends on Phase 2; may run after or alongside late US1 tasks, but final merge should follow US1 completion.
+- **Phase 5 (Polish)**: Depends on completion of selected user stories (US1 required, US2 recommended).
+
+### User Story Dependencies
+
+- **US1 (P1)**: No dependency on other stories after Foundational phase.
+- **US2 (P2)**: Depends on shared foundations; should remain independently testable.
+
+### Within Each User Story
+
+- Tests first, then implementation.
+- Layout/state model updates before rendering polish.
+- Story must pass its independent test criteria before moving on.
+
+---
+
+## Parallel Execution Examples
+
+### User Story 1
+
+```bash
+# Parallel test authoring
+T011, T012, T013, T014, T015, T016
+
+# Parallel implementation chunks after tests are in place
+T018, T019, T020, T021, T022
+```
+
+### User Story 2
+
+```bash
+# Parallel validation tasks
+T024, T025
+
+# Parallel implementation/documentation tasks
+T027, T028
+```
+
+---
+
+## Implementation Strategy
+
+### MVP First (US1 only)
+
+1. Complete Phase 1 and Phase 2.
+2. Complete all US1 tests and implementation tasks.
+3. Validate US1 independently via integration tests and quickstart flow.
+
+### Incremental Delivery
+
+1. Deliver US1 as MVP.
+2. Deliver US2 as component-standardization increment.
+3. Execute polish tasks and run full quality gates.
+
+### Parallel Team Strategy
+
+1. Team completes Setup + Foundational.
+2. Split US1 work: layout/keybindings/help/footer/aggregation in parallel by file boundaries.
+3. Assign US2 to a second track once foundations stabilize.

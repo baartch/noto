@@ -1,6 +1,6 @@
 # Data Model: Bubble Tea TUI Standard
 
-This feature is a refactor/standardization effort rather than a data model change. The relevant "entities" are the TUI flows and their component usage.
+This feature standardizes TUI behavior and introduces explicit runtime telemetry entities used by the footer.
 
 ## Entities
 
@@ -8,31 +8,57 @@ This feature is a refactor/standardization effort rather than a data model chang
 
 Represents a user-facing terminal UI interaction sequence.
 
-- **Name**: Human-readable identifier for the flow (e.g., "Model Picker")
-- **Entry Point**: Where the flow is initiated (command, keybinding, startup path)
-- **Bubble Tea Model**: The model implementing the flow
-- **Bubbles Components Used**: List of Bubbles components used in the flow (if any)
-- **Lip Gloss Styles**: List of style definitions used by the flow
-- **Custom UI**: Notes on any custom UI and rationale for not using Bubbles
+- **name**: Flow identifier (e.g., `model_picker`, `settings_dialog`)
+- **entry_point**: Trigger path (startup, keybinding, command)
+- **bubbletea_model**: Owning Bubble Tea model type
+- **bubbles_components**: Components used (list/help/textarea/viewport/etc.)
+- **lipgloss_styles**: Reused style identifiers
+- **custom_ui_rationale**: Required when no suitable Bubbles component is used
 
-### Component Usage Record
+### SessionUsageAccumulator
 
-Captures the choice between Bubbles component and custom UI.
+In-memory cumulative usage and cost totals displayed in footer.
 
-- **Component Name**: Name of the Bubbles component considered/used
-- **Decision**: Used / Not Used
-- **Rationale**: Short explanation when not used
+- **tokens_up** (`int64`): Sum of prompt/input tokens
+- **tokens_down** (`int64`): Sum of completion/output tokens
+- **cache_read_tokens** (`int64`): Sum of cached prompt tokens
+- **cache_write_tokens** (`int64`): Sum of cache write tokens
+- **total_cost** (`float64`): Sum of provider-reported cost values
+- **sources** (`set` conceptual): Participating model classes (`main`, `extractor`, `embeddings`)
 
-### Style Definition Record
+### UsageSnapshot
 
-Captures standard styling definitions applied across the TUI.
+Parsed usage payload from one provider response.
 
-- **Style Name**: Identifier for the Lip Gloss style
-- **Usage**: Where the style is applied (headers, lists, prompts)
-- **Notes**: Purpose/intent of the style
+- **completion_tokens** (`int64`)
+- **prompt_tokens** (`int64`)
+- **cached_tokens** (`int64`, from `prompt_tokens_details.cached_tokens`)
+- **cache_write_tokens** (`int64`, from `prompt_tokens_details.cache_write_tokens`)
+- **cost** (`float64`)
+- **source_model_class** (`enum`): `main|extractor|embeddings`
+- **has_usage** (`bool`): false when provider response omits usage payload
 
-## Invariants
+### FooterStatusViewModel
 
-- Every TUI flow must map to a Bubble Tea model.
-- Any custom UI must include a rationale for not using a Bubbles component.
-- Styling is defined via Lip Gloss in reusable blocks.
+Renderable footer state for current frame.
+
+- **usage** (`SessionUsageAccumulator`)
+- **ctx_cache_stats** (`string`): `ctx:<miss>|<hit>`
+- **profile_name** (`string`)
+- **main_model_name** (`string`)
+- **app_version** (`string`)
+- **help_keybinding** (`string`, default `Ctrl+H`)
+
+## Relationships
+
+- A **TUI Flow** renders a **FooterStatusViewModel** when applicable.
+- **UsageSnapshot** events update one **SessionUsageAccumulator**.
+- **SessionUsageAccumulator** is embedded/referenced by **FooterStatusViewModel**.
+
+## Validation Rules / Invariants
+
+- Every TUI flow maps to a Bubble Tea model.
+- Every custom UI element includes rationale.
+- Footer always renders required fields (usage, ctx cache, profile, model, version, help key).
+- `SessionUsageAccumulator` updates only when `UsageSnapshot.has_usage == true`.
+- Usage totals include snapshots from `main`, `extractor`, and `embeddings` model classes.

@@ -66,6 +66,24 @@ func NotesSaving() tea.Msg { return notesSavingMsg{} }
 // StatsUpdated returns a tea.Msg that updates the token/cost status in the footer.
 func StatsUpdated(formatted string) tea.Msg { return statsUpdatedMsg{formatted: formatted} }
 
+// UpdateAvailableNotice shows a transient update warning in the footer.
+func UpdateAvailableNotice(formatted string) tea.Msg { return updateNoticeMsg{formatted: formatted} }
+
+// UsageUpdatedMain applies usage from a main chat completion response.
+func UsageUpdatedMain(usage provider.Usage) tea.Msg {
+	return usageUpdatedMsg{usage: usage, source: usageSourceMain}
+}
+
+// UsageUpdatedExtractor applies usage from extractor model calls.
+func UsageUpdatedExtractor(usage provider.Usage) tea.Msg {
+	return usageUpdatedMsg{usage: usage, source: usageSourceExtractor}
+}
+
+// UsageUpdatedEmbeddings applies usage from embeddings model calls.
+func UsageUpdatedEmbeddings(usage provider.Usage) tea.Msg {
+	return usageUpdatedMsg{usage: usage, source: usageSourceEmbeddings}
+}
+
 // ProfileSwitched updates the TUI state after switching profiles.
 func ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, tokenStatus string, extractorFallback, embeddingModelMissing bool, provider ProviderFunc, listModels ListModelsFunc, listEmbeddings ListEmbeddingsFunc, modelSelected ModelSelectedFunc, embeddingModelSelected EmbeddingModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, settings *SettingsMenu, history []string, startupMessages []*store.Message, startupHistoryErr error) profileSwitchedMsg {
 	return profileSwitchedMsg{
@@ -117,6 +135,11 @@ type editorFinishedMsg struct {
 	onSave func() error
 }
 type statsUpdatedMsg struct{ formatted string }
+type updateNoticeMsg struct{ formatted string }
+type usageUpdatedMsg struct {
+	usage  provider.Usage
+	source usageSource
+}
 
 type profilesAction interface {
 	Label() string
@@ -259,6 +282,9 @@ type Model struct {
 
 	// notes badge
 	notesIndicator string
+
+	updateNotice string
+	usage        usageAccumulator
 
 	// pending assistant state
 	pending      bool
@@ -754,6 +780,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case notesSavedMsg:
 		saved := msg.saved
 		updated := msg.updated
+		m.updateNotice = ""
 		switch {
 		case saved > 0 && updated > 0:
 			m.notesIndicator = fmt.Sprintf("📝 %d saved, %d updated", saved, updated)
@@ -772,6 +799,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case notesSavingMsg:
 		m.notesIndicator = "📝 validating…"
+		m.updateNotice = ""
 
 	case clearNotesIndicatorMsg:
 		m.notesIndicator = ""
@@ -792,6 +820,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// ---- stats update -------------------------------------------------------
 	case statsUpdatedMsg:
 		m.tokenStatus = msg.formatted
+
+	case updateNoticeMsg:
+		m.updateNotice = msg.formatted
+
+	case usageUpdatedMsg:
+		m.usage.addFromUsage(msg.usage)
+		m.tokenStatus = m.usage.formatTokenStatus()
 
 	case profileSwitchedMsg:
 		m.profileName = msg.profileName

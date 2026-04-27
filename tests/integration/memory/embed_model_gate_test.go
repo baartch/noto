@@ -51,6 +51,7 @@ func TestEmbeddingsModelRequiredForRetrieval(t *testing.T) {
 		observe.NewNoopLogger(),
 		func(int, int) {},
 		func() {},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewSession: %v", err)

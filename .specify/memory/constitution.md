@@ -1,17 +1,16 @@
 <!--
 Sync Impact Report
-- Version change: N/A → 1.0.0
+- Version change: 1.1.0 → 1.1.1
 - Modified principles:
-  - N/A (initial constitution adoption)
+  - I. Code Quality Is Enforced (clarified required local verification commands)
 - Added sections:
-  - Quality Standards
-  - Delivery Workflow & Review Gates
+  - None
 - Removed sections:
   - None
 - Templates requiring updates:
-  - ✅ updated: .specify/templates/plan-template.md
-  - ✅ updated: .specify/templates/spec-template.md
-  - ✅ updated: .specify/templates/tasks-template.md
+  - ✅ no changes required: .specify/templates/plan-template.md
+  - ✅ no changes required: .specify/templates/spec-template.md
+  - ✅ no changes required: .specify/templates/tasks-template.md
   - ✅ no command templates present: .specify/templates/commands/*.md
 - Follow-up TODOs:
   - None
@@ -24,6 +23,7 @@ Sync Impact Report
 ### I. Code Quality Is Enforced
 
 All production code MUST pass formatter, linter, and static analysis checks before merge.
+Local verification MUST run `make fmt`, `make lint`, and `make test` before opening or updating a PR.
 Code MUST keep clear naming, small focused modules, and explicit error handling. Reviews MUST
 reject unclear or unmaintainable code even if functionally correct.
 
@@ -55,6 +55,7 @@ Rationale: consistent UX lowers cognitive load, improves trust, and reduces supp
 ## Delivery Workflow & Review Gates
 
 - PRs MUST show: passing quality checks, passing tests, and UX consistency validation.
+- Standard local validation command set is: `make fmt`, `make lint`, `make test`.
 - Reviewers MUST block merges on any missing gate evidence.
 - Release notes MUST include notable UX changes when user-visible.
 
@@ -76,4 +77,4 @@ Compliance review expectations:
 - Every PR: explicit compliance confirmation for all core principles.
 - Quarterly (or milestone) audit: spot-check recent specs/plans/tasks for alignment.
 
-**Version**: 1.1.0 | **Ratified**: 2026-03-27 | **Last Amended**: 2026-04-13
+**Version**: 1.1.1 | **Ratified**: 2026-03-27 | **Last Amended**: 2026-04-27

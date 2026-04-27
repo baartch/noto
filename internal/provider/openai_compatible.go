@@ -111,9 +111,30 @@ func (a *OpenAICompatible) Embed(ctx context.Context, req EmbeddingRequest) (*Em
 		modelName = model
 	}
 
+	usage := Usage{HasUsage: false}
+	promptTokens := apiResp.Usage.InputTokens
+	if promptTokens == 0 {
+		promptTokens = apiResp.Usage.PromptTokens
+	}
+	if apiResp.Usage.TotalTokens > 0 || apiResp.Usage.PromptTokensDetails.CachedTokens > 0 || apiResp.Usage.PromptTokensDetails.CacheWriteTokens > 0 || apiResp.Usage.Cost > 0 {
+		usage = Usage{
+			PromptTokens:     promptTokens,
+			CompletionTokens: apiResp.Usage.OutputTokens,
+			CachedTokens:     apiResp.Usage.PromptTokensDetails.CachedTokens,
+			CacheWriteTokens: apiResp.Usage.PromptTokensDetails.CacheWriteTokens,
+			TotalTokens:      apiResp.Usage.TotalTokens,
+			Cost:             apiResp.Usage.Cost,
+			HasUsage:         true,
+		}
+		if err := ValidateUsage(usage); err != nil {
+			usage = Usage{}
+		}
+	}
+
 	return &EmbeddingResponse{
 		Embedding: vector,
 		Model:     modelName,
+		Usage:     usage,
 	}, nil
 }
 
@@ -202,7 +223,13 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 		modelName = a.cfg.Model
 	}
 	promptTokens := apiResp.Usage.InputTokens
+	if promptTokens == 0 {
+		promptTokens = apiResp.Usage.PromptTokens
+	}
 	completionTokens := apiResp.Usage.OutputTokens
+	if completionTokens == 0 {
+		completionTokens = apiResp.Usage.CompletionTokens
+	}
 	if completionTokens == 0 && apiResp.Usage.TotalTokens > 0 {
 		completionTokens = apiResp.Usage.TotalTokens - promptTokens
 	}
@@ -212,6 +239,22 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 	}
 	info := modelInfo(modelName)
 
+	usage := Usage{HasUsage: false}
+	if apiResp.Usage.TotalTokens > 0 || apiResp.Usage.PromptTokensDetails.CachedTokens > 0 || apiResp.Usage.PromptTokensDetails.CacheWriteTokens > 0 || apiResp.Usage.Cost > 0 {
+		usage = Usage{
+			PromptTokens:     promptTokens,
+			CompletionTokens: completionTokens,
+			CachedTokens:     apiResp.Usage.PromptTokensDetails.CachedTokens,
+			CacheWriteTokens: apiResp.Usage.PromptTokensDetails.CacheWriteTokens,
+			TotalTokens:      totalTokens,
+			Cost:             apiResp.Usage.Cost,
+			HasUsage:         true,
+		}
+		if err := ValidateUsage(usage); err != nil {
+			usage = Usage{}
+		}
+	}
+
 	return &CompletionResponse{
 		Content:          content,
 		Model:            modelName,
@@ -219,6 +262,7 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 		CompletionTokens: completionTokens,
 		TotalTokens:      totalTokens,
 		EstimatedCostUSD: estimateCost(modelName, promptTokens, completionTokens),
+		Usage:            usage,
 		ContextMax:       info.contextWindow,
 	}, nil
 }
@@ -245,10 +289,19 @@ type openAIResponsesRequest struct {
 	PresencePenalty  float64                  `json:"presence_penalty,omitempty"`
 }
 
+type openAIResponsesPromptTokensDetails struct {
+	CachedTokens     int `json:"cached_tokens"`
+	CacheWriteTokens int `json:"cache_write_tokens"`
+}
+
 type openAIResponsesUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
-	TotalTokens  int `json:"total_tokens"`
+	InputTokens         int                                `json:"input_tokens"`
+	PromptTokens        int                                `json:"prompt_tokens"`
+	OutputTokens        int                                `json:"output_tokens"`
+	CompletionTokens    int                                `json:"completion_tokens"`
+	TotalTokens         int                                `json:"total_tokens"`
+	PromptTokensDetails openAIResponsesPromptTokensDetails `json:"prompt_tokens_details"`
+	Cost                float64                            `json:"cost"`
 }
 
 type openAIResponsesResponse struct {
@@ -274,6 +327,7 @@ type openAIEmbeddingResponse struct {
 	Data  []struct {
 		Embedding []float64 `json:"embedding"`
 	} `json:"data"`
+	Usage openAIResponsesUsage `json:"usage"`
 }
 
 func extractResponseText(outputs []struct {

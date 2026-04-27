@@ -47,6 +47,7 @@ type Extractor struct {
 	invalidator CacheInvalidator
 	deduper     vector.Deduper
 	logHook     CaptureLogHook
+	onUsage     func(provider.Usage)
 }
 
 // NewExtractor creates an Extractor. Pass nil adapter to disable LLM extraction.
@@ -65,6 +66,12 @@ func (e *Extractor) WithLogHook(hook CaptureLogHook) *Extractor {
 	if hook != nil {
 		e.logHook = hook
 	}
+	return e
+}
+
+// WithUsageHook configures usage callback for extractor model calls.
+func (e *Extractor) WithUsageHook(hook func(provider.Usage)) *Extractor {
+	e.onUsage = hook
 	return e
 }
 
@@ -124,6 +131,9 @@ func (e *Extractor) llmExtract(ctx context.Context, profileSlug, userMsg, assist
 	})
 	if err != nil {
 		return extractionResponse{}
+	}
+	if e.onUsage != nil {
+		e.onUsage(resp.Usage)
 	}
 
 	raw := strings.TrimSpace(resp.Content)

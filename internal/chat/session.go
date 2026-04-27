@@ -74,6 +74,7 @@ type Session struct {
 	onNotes       NotesCallback
 	onNotesSaving NotesSavingCallback
 	stats         provider.Stats
+	onUsage       func(provider.Usage)
 }
 
 // NewSession creates a new conversation, assembles the system prompt with
@@ -93,6 +94,7 @@ func NewSession(
 	logger observe.Logger,
 	onNotes NotesCallback,
 	onNotesSaving NotesSavingCallback,
+	onUsage func(provider.Usage),
 ) (*Session, error) {
 	// Build system prompt with injected memory notes + session summary.
 	cacheRepo := store.NewContextCacheRepo(db)
@@ -171,6 +173,7 @@ func NewSession(
 		history:           recentHistory,
 		onNotes:           onNotes,
 		onNotesSaving:     onNotesSaving,
+		onUsage:           onUsage,
 		backupStop:        make(chan struct{}),
 		pendingDone:       make(chan struct{}),
 		baseSystemPrompt:  baseSystemPrompt,
@@ -252,6 +255,9 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 
 	// Accumulate token/cost stats.
 	s.stats.Add(resp)
+	if s.onUsage != nil {
+		s.onUsage(resp.Usage)
+	}
 
 	// Fire background extraction — never blocks the reply.
 	go s.extractAsync(userMsg, resp.Content)
@@ -273,6 +279,9 @@ func (s *Session) relevantNotes(ctx context.Context, userMsg string) ([]*store.M
 	embedResp, err := s.adapter.Embed(ctx, provider.EmbeddingRequest{Input: userMsg, Model: s.embeddingModel})
 	if err != nil {
 		return nil, fmt.Errorf("session: embed query: %w", err)
+	}
+	if s.onUsage != nil {
+		s.onUsage(embedResp.Usage)
 	}
 
 	manifestRepo := store.NewVectorManifestRepo(s.db)
@@ -447,6 +456,7 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 		})
 		extractor.WithDeduper(deduper)
 	}
+	extractor.WithUsageHook(s.onUsage)
 	sourceIDs := []string{s.history[len(s.history)-2].ID, s.history[len(s.history)-1].ID}
 	result, err := extractor.ExtractTurn(ctx, s.profileID, s.profileSlug, s.conversationID, sourceIDs, userMsg, assistantMsg)
 	if err != nil {

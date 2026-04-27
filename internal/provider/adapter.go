@@ -35,6 +35,8 @@ type CompletionResponse struct {
 	// EstimatedCostUSD is a rough cost estimate based on known model pricing.
 	// Zero if the model is not in the pricing table.
 	EstimatedCostUSD float64
+	// Usage carries provider-native usage details when available.
+	Usage Usage
 	// ContextMax is the model's context window size (tokens). Zero if unknown.
 	ContextMax int
 }
@@ -49,6 +51,7 @@ type EmbeddingRequest struct {
 type EmbeddingResponse struct {
 	Embedding []float32
 	Model     string
+	Usage     Usage
 }
 
 // Adapter is the interface all provider implementations must satisfy.

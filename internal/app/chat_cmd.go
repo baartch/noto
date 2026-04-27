@@ -187,6 +187,11 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					prog.Send(tui.NotesSaving())
 				}
 			},
+			func(u provider.Usage) {
+				if prog != nil {
+					prog.Send(tui.UsageUpdatedMain(u))
+				}
+			},
 		)
 		if err != nil {
 			return fmt.Errorf("chat: start session: %w", err)
@@ -202,9 +207,6 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			result, err := sess.Send(callCtx, userMsg)
 			if err != nil {
 				return "", err
-			}
-			if prog != nil {
-				prog.Send(tui.StatsUpdated(sess.Stats().Format()))
 			}
 			return result.Reply, nil
 		}
@@ -334,6 +336,11 @@ func runChat(cmd *cobra.Command, _ []string) error {
 							prog.Send(tui.NotesSaving())
 						}
 					},
+					func(u provider.Usage) {
+						if prog != nil {
+							prog.Send(tui.UsageUpdatedMain(u))
+						}
+					},
 				)
 				if err != nil {
 					return tui.ProfileSwitchFailed(fmt.Errorf("chat: start session: %w", err))
@@ -348,9 +355,6 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					result, err := sess.Send(callCtx, userMsg)
 					if err != nil {
 						return "", err
-					}
-					if prog != nil {
-						prog.Send(tui.StatsUpdated(sess.Stats().Format()))
 					}
 					return result.Reply, nil
 				}
@@ -408,7 +412,11 @@ func runChat(cmd *cobra.Command, _ []string) error {
 		embeddingModelMissing = sess.EmbeddingModelMissingActive()
 		embeddingModel = sess.EmbeddingModel()
 	}
-	startUpdateCheckAsync(cmd.OutOrStdout())
+	startUpdateCheckAsync(func(msg tea.Msg) {
+		if prog != nil {
+			prog.Send(msg)
+		}
+	})
 
 	m := tui.New(
 		activeProfile.Name, activeModel, extractorModel, embeddingModel,

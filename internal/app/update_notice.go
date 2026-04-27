@@ -2,15 +2,16 @@ package app
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
+	"noto/internal/tui"
 	"noto/internal/update"
 	"noto/internal/version"
 )
 
-func startUpdateCheckAsync(out io.Writer) {
+func startUpdateCheckAsync(send func(tea.Msg)) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
@@ -20,10 +21,8 @@ func startUpdateCheckAsync(out io.Writer) {
 		if err != nil {
 			return
 		}
-		if res.HasUpdate {
-			if _, err := fmt.Fprintf(out, "Update available: %s (current %s)\n", res.Latest, res.Current); err != nil {
-				return
-			}
+		if res.HasUpdate && send != nil {
+			send(tui.UpdateAvailableNotice("Update available: " + res.Latest))
 		}
 	}()
 }

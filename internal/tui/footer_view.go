@@ -10,12 +10,12 @@ import (
 
 // renderFooter draws the bottom status line.
 func (m *Model) renderFooter() string {
-	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	green := lipgloss.NewStyle().Foreground(lipgloss.Color("71"))
-	blue := lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	yellow := lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
-	purple := lipgloss.NewStyle().Foreground(lipgloss.Color("135"))
-	white := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	dim := footerDimStyle
+	green := footerGreenStyle
+	blue := footerBlueStyle
+	yellow := footerYellowStyle
+	purple := footerPurpleStyle
+	white := footerWhiteStyle
 
 	// Left: token stats + cache status + notes badge + extractor warning.
 	var leftParts []string
@@ -36,6 +36,9 @@ func (m *Model) renderFooter() string {
 
 	if m.notesIndicator != "" {
 		leftParts = append(leftParts, green.Render(m.notesIndicator))
+	}
+	if m.updateNotice != "" {
+		leftParts = append(leftParts, yellow.Render(m.updateNotice))
 	}
 	if m.extractorFallback {
 		leftParts = append(leftParts, yellow.Render("Extractor model missing — using main model."))
@@ -75,9 +78,17 @@ func footerLine(width int, left, right string) string {
 	if width <= 0 {
 		return left + "  " + right
 	}
-	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 2 {
-		return left + "  " + right
+
+	rightWidth := lipgloss.Width(right)
+	if rightWidth >= width {
+		return right
 	}
+
+	maxLeft := max(width-rightWidth-2, 0)
+	if lipgloss.Width(left) > maxLeft {
+		left = lipgloss.NewStyle().MaxWidth(maxLeft).Render(left)
+	}
+
+	gap := max(width-lipgloss.Width(left)-rightWidth, 2)
 	return left + strings.Repeat(" ", gap) + right
 }
