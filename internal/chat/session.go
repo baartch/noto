@@ -136,6 +136,13 @@ func NewSession(
 		recentHistory = nil
 	}
 
+	// Repair guard: archive any lingering active conversations before creating a new one.
+	if archived, err := convRepo.ArchiveActiveByProfile(ctx, profileID); err != nil {
+		logger.Errorf("session: archive active conversations: %v", err)
+	} else if archived > 0 {
+		logger.Infof("session: archived %d lingering active conversation(s)", archived)
+	}
+
 	// Create the new conversation record.
 	convID := fmt.Sprintf("conv-%x", time.Now().UnixNano())
 	if err := convRepo.Create(ctx, &store.Conversation{
