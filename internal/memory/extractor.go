@@ -69,7 +69,7 @@ func (e *Extractor) WithLogHook(hook CaptureLogHook) *Extractor {
 }
 
 // ExtractTurn analyses a single user→assistant exchange and persists any notes.
-func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID string, sourceMessageIDs []string, userMsg, assistantMsg string) (*ExtractionResult, error) {
+func (e *Extractor) ExtractTurn(ctx context.Context, profileID, profileSlug, conversationID string, sourceMessageIDs []string, userMsg, assistantMsg string) (*ExtractionResult, error) {
 	if e.adapter == nil {
 		return &ExtractionResult{}, nil
 	}
@@ -78,7 +78,7 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID s
 	if notes, err := e.noteRepo.ListByProfile(ctx, profileID); err == nil {
 		existing = notes
 	}
-	resp := e.llmExtract(ctx, profileID, userMsg, assistantMsg, existing)
+	resp := e.llmExtract(ctx, profileSlug, userMsg, assistantMsg, existing)
 	if !resp.HasNewInfo || resp.Confidence < 0.6 || len(resp.Notes) == 0 {
 		return &ExtractionResult{}, nil
 	}
@@ -112,8 +112,8 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, conversationID s
 
 // llmExtract calls the model and parses the JSON response. Never returns an error
 // — failures are silently dropped so a bad extraction never breaks the chat flow.
-func (e *Extractor) llmExtract(ctx context.Context, profileID, userMsg, assistantMsg string, existing []*store.MemoryNote) extractionResponse {
-	template, _, err := config.ReadExtractorPromptFile(profileID)
+func (e *Extractor) llmExtract(ctx context.Context, profileSlug, userMsg, assistantMsg string, existing []*store.MemoryNote) extractionResponse {
+	template, _, err := config.ReadExtractorPromptFile(profileSlug)
 	if err != nil || strings.TrimSpace(template) == "" {
 		template = config.DefaultExtractorPromptTemplate
 	}

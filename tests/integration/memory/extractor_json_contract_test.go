@@ -53,7 +53,7 @@ func TestExtractorJSONContract_ValidPerNoteActionsAccepted(t *testing.T) {
 	ctx, noteRepo, p, _ := newExtractorHarness(t)
 
 	ex := memory.NewExtractor(noteRepo, extractorStubAdapter{content: `{"has_new_info":true,"confidence":0.9,"notes":[{"action":"add","target_id":"","category":"fact","content":"User prefers concise responses.","importance":7}]}`}, nil)
-	res, err := ex.ExtractTurn(ctx, p.Slug, "", nil, "I prefer concise responses", "Got it")
+	res, err := ex.ExtractTurn(ctx, p.ID, p.Slug, "", nil, "I prefer concise responses", "Got it")
 	if err != nil {
 		t.Fatalf("ExtractTurn: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestExtractorJSONContract_UpdateRequiresTargetID(t *testing.T) {
 	ctx, noteRepo, p, _ := newExtractorHarness(t)
 	hook := &captureRejectHook{}
 	ex := memory.NewExtractor(noteRepo, extractorStubAdapter{content: `{"has_new_info":true,"confidence":0.8,"notes":[{"action":"update","category":"progress","content":"Status changed","importance":6}]}`}, nil).WithLogHook(hook)
-	res, err := ex.ExtractTurn(ctx, p.Slug, "", nil, "update this", "ok")
+	res, err := ex.ExtractTurn(ctx, p.ID, p.Slug, "", nil, "update this", "ok")
 	if err != nil {
 		t.Fatalf("ExtractTurn: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestExtractorJSONContract_CategoryEnforcement(t *testing.T) {
 	ctx, noteRepo, p, _ := newExtractorHarness(t)
 	hook := &captureRejectHook{}
 	ex := memory.NewExtractor(noteRepo, extractorStubAdapter{content: `{"has_new_info":true,"confidence":0.8,"notes":[{"action":"add","category":"invalid","content":"X","importance":6}]}`}, nil).WithLogHook(hook)
-	res, err := ex.ExtractTurn(ctx, p.Slug, "", nil, "foo", "bar")
+	res, err := ex.ExtractTurn(ctx, p.ID, p.Slug, "", nil, "foo", "bar")
 	if err != nil {
 		t.Fatalf("ExtractTurn: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestExtractorJSONContract_MalformedPayloadRejected(t *testing.T) {
 	ctx, noteRepo, p, _ := newExtractorHarness(t)
 	hook := &captureRejectHook{}
 	ex := memory.NewExtractor(noteRepo, extractorStubAdapter{content: `not-json`}, nil).WithLogHook(hook)
-	res, err := ex.ExtractTurn(ctx, p.Slug, "", nil, "foo", "bar")
+	res, err := ex.ExtractTurn(ctx, p.ID, p.Slug, "", nil, "foo", "bar")
 	if err != nil {
 		t.Fatalf("ExtractTurn: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestExtractorJSONContract_RequiresTopLevelMetadata(t *testing.T) {
 	hook := &captureRejectHook{}
 	// confidence out of range should be rejected.
 	ex := memory.NewExtractor(noteRepo, extractorStubAdapter{content: `{"has_new_info":true,"confidence":1.2,"notes":[{"action":"add","target_id":"","category":"fact","content":"X","importance":3}]}`}, nil).WithLogHook(hook)
-	res, err := ex.ExtractTurn(ctx, p.Slug, "", nil, "foo", "bar")
+	res, err := ex.ExtractTurn(ctx, p.ID, p.Slug, "", nil, "foo", "bar")
 	if err != nil {
 		t.Fatalf("ExtractTurn: %v", err)
 	}
@@ -124,5 +124,32 @@ func TestExtractorJSONContract_RequiresTopLevelMetadata(t *testing.T) {
 	}
 	if len(hook.reasons) == 0 {
 		t.Fatal("expected top-level validation rejection")
+	}
+}
+
+func TestExtractorJSONContract_PersistsNotesWithProfileIDNotSlug(t *testing.T) {
+	ctx, noteRepo, p, _ := newExtractorHarness(t)
+
+	ex := memory.NewExtractor(noteRepo, extractorStubAdapter{content: `{"has_new_info":true,"confidence":0.91,"notes":[{"action":"add","target_id":"","category":"fact","content":"Profile ID mapping check.","importance":6}]}`}, nil)
+	res, err := ex.ExtractTurn(ctx, p.ID, p.Slug, "", nil, "remember this", "ok")
+	if err != nil {
+		t.Fatalf("ExtractTurn: %v", err)
+	}
+	if len(res.Notes) != 1 {
+		t.Fatalf("expected 1 note, got %d", len(res.Notes))
+	}
+
+	notes, err := noteRepo.ListByProfile(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("ListByProfile: %v", err)
+	}
+	if len(notes) == 0 {
+		t.Fatal("expected persisted notes")
+	}
+	if notes[0].ProfileID != p.ID {
+		t.Fatalf("expected note profile_id=%q, got %q", p.ID, notes[0].ProfileID)
+	}
+	if notes[0].ProfileID == p.Slug {
+		t.Fatalf("profile_id must not be slug (%q)", p.Slug)
 	}
 }
