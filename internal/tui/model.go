@@ -447,6 +447,7 @@ func New(
 			key.NewBinding(key.WithKeys("wheel"), key.WithHelp("wheel", "scroll messages/input by cursor zone")),
 			key.NewBinding(key.WithKeys("pgup/pgdn"), key.WithHelp("pgup/pgdn", "scroll messages")),
 			key.NewBinding(key.WithKeys("end"), key.WithHelp("end", "jump to latest message")),
+			key.NewBinding(key.WithKeys("shift+click"), key.WithHelp("shift+click", "select text to copy")),
 			ti.KeyMap.InsertNewline,
 			ti.KeyMap.WordBackward,
 			ti.KeyMap.WordForward,
