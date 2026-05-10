@@ -75,10 +75,7 @@ func NewJSONLogger(w io.Writer) *JSONLogger {
 	return &JSONLogger{w: w}
 }
 
-// NewNoopLogger returns a Logger that silently discards all events.
-func NewNoopLogger() Logger {
-	return NewJSONLogger(io.Discard)
-}
+
 
 // NewStderrLogger returns a JSONLogger writing to stderr.
 func NewStderrLogger() Logger {

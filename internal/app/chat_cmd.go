@@ -150,7 +150,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 		msgRepo := store.NewMessageRepo(profileDB)
 		noteRepo := store.NewMemoryNoteRepo(profileDB)
 		summaryRepo := store.NewSessionSummaryRepo(profileDB)
-		logger := observe.NewNoopLogger()
+		logger, _ := observe.NewFileLogger("")
 
 		sess, err = chatpkg.NewSession(
 			ctx,
@@ -304,7 +304,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 				msgRepo := store.NewMessageRepo(profileDB)
 				noteRepo := store.NewMemoryNoteRepo(profileDB)
 				summaryRepo := store.NewSessionSummaryRepo(profileDB)
-				logger := observe.NewNoopLogger()
+				logger, _ := observe.NewFileLogger("")
 
 				sess, err = chatpkg.NewSession(
 					ctx,

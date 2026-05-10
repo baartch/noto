@@ -456,6 +456,7 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 		})
 		extractor.WithDeduper(deduper)
 	}
+	extractor.WithLogHook(&sessionLogHook{logger: s.logger})
 	extractor.WithUsageHook(s.onUsage)
 	sourceIDs := []string{s.history[len(s.history)-2].ID, s.history[len(s.history)-1].ID}
 	result, err := extractor.ExtractTurn(ctx, s.profileID, s.profileSlug, s.conversationID, sourceIDs, userMsg, assistantMsg)
@@ -464,6 +465,7 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 		s.markNotesDone(0)
 		return
 	}
+	s.logger.Infof("extraction result: notes=%d, updated=%d", len(result.Notes), result.Updated)
 
 	if (len(result.Notes) > 0 || len(result.UpdatedNotes) > 0) && s.adapter != nil {
 		syncBatch := append([]*store.MemoryNote{}, result.Notes...)
@@ -717,4 +719,29 @@ func loadRecentHistory(
 		msgs = msgs[len(msgs)-recentHistoryMessages:]
 	}
 	return msgs, nil
+}
+
+// sessionLogHook implements memory.CaptureLogHook and logs to the session logger.
+type sessionLogHook struct {
+	logger observe.Logger
+}
+
+func (h *sessionLogHook) CandidateScored(candidate memory.NoteCandidate) {
+	h.logger.Infof("memory: candidate scored: value=%d", candidate.ValueScore.Total)
+}
+
+func (h *sessionLogHook) DuplicateDetected(candidate memory.NoteCandidate, existingID string) {
+	h.logger.Infof("memory: duplicate detected: matched=%s", existingID)
+}
+
+func (h *sessionLogHook) NoteStored(candidate memory.NoteCandidate, noteID string) {
+	h.logger.Infof("memory: note stored: id=%s", noteID)
+}
+
+func (h *sessionLogHook) NoteStorageFailed(candidate memory.NoteCandidate, err error) {
+	h.logger.Errorf("memory: note storage failed: %v", err)
+}
+
+func (h *sessionLogHook) ExtractionPayloadRejected(reason string) {
+	h.logger.Errorf("memory: extraction rejected: %s", reason)
 }

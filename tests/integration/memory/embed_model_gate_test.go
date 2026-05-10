@@ -36,6 +36,8 @@ func TestEmbeddingsModelRequiredForRetrieval(t *testing.T) {
 	noteRepo := store.NewMemoryNoteRepo(db)
 	summaryRepo := store.NewSessionSummaryRepo(db)
 
+	logger, _ := observe.NewFileLogger("")
+	defer logger.Close()
 	sess, err := chat.NewSession(
 		ctx,
 		p.ID,
@@ -48,7 +50,7 @@ func TestEmbeddingsModelRequiredForRetrieval(t *testing.T) {
 		summaryRepo,
 		&stubAdapter{},
 		&stubAdapter{},
-		observe.NewNoopLogger(),
+		logger,
 		func(int, int) {},
 		func() {},
 		nil,

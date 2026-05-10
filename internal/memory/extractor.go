@@ -87,6 +87,15 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, profileSlug, con
 	}
 	resp := e.llmExtract(ctx, profileSlug, userMsg, assistantMsg, existing)
 	if !resp.HasNewInfo || resp.Confidence < 0.6 || len(resp.Notes) == 0 {
+		var reason string
+		if !resp.HasNewInfo {
+			reason = "has_new_info=false"
+		} else if resp.Confidence < 0.6 {
+			reason = fmt.Sprintf("confidence too low: %.2f < 0.6", resp.Confidence)
+		} else {
+			reason = "notes array empty"
+		}
+		e.logHook.ExtractionPayloadRejected(reason)
 		return &ExtractionResult{}, nil
 	}
 	items := resp.Notes

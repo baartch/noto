@@ -35,6 +35,8 @@ func TestConversationRepairGuard_ArchivesLingeringActiveConversationsOnSessionSt
 		t.Fatalf("seed conv 2: %v", err)
 	}
 
+	logger, _ := observe.NewFileLogger("")
+	defer logger.Close()
 	s, err := chatpkg.NewSession(
 		ctx,
 		p.ID,
@@ -47,7 +49,7 @@ func TestConversationRepairGuard_ArchivesLingeringActiveConversationsOnSessionSt
 		summaryRepo,
 		nil,
 		nil,
-		observe.NewNoopLogger(),
+		logger,
 		nil,
 		nil,
 		nil,
