@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -447,6 +448,7 @@ func New(
 			key.NewBinding(key.WithKeys("wheel"), key.WithHelp("wheel", "scroll messages/input by cursor zone")),
 			key.NewBinding(key.WithKeys("pgup/pgdn"), key.WithHelp("pgup/pgdn", "scroll messages")),
 			key.NewBinding(key.WithKeys("end"), key.WithHelp("end", "jump to latest message")),
+			key.NewBinding(key.WithKeys("shift+click"), key.WithHelp("shift+click", "select text to copy")),
 			ti.KeyMap.InsertNewline,
 			ti.KeyMap.WordBackward,
 			ti.KeyMap.WordForward,
@@ -728,6 +730,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case msg.Key().Code == tea.KeyEnd:
 			m.viewport.GotoBottom()
+			m.input.CursorEnd()
 			return m, nil
 
 		case msg.Key().Code == tea.KeyTab:
@@ -2134,7 +2137,7 @@ func suggestionWindow(total, cursor, maxRows int) (start, end int) {
 }
 
 func (m *Model) resolvePending(content string) {
-	for i := len(m.messages) - 1; i >= 0; i-- {
+	for i := range slices.Backward(m.messages) {
 		if m.messages[i].role == "pending" {
 			m.messages[i].role = "assistant"
 			m.messages[i].content = content
@@ -2147,7 +2150,7 @@ func (m *Model) resolvePending(content string) {
 }
 
 func (m *Model) clearPending() {
-	for i := len(m.messages) - 1; i >= 0; i-- {
+	for i := range slices.Backward(m.messages) {
 		if m.messages[i].role == "pending" {
 			m.messages = append(m.messages[:i], m.messages[i+1:]...)
 			m.allMessages = append([]chatMessage(nil), m.messages...)
@@ -2160,7 +2163,7 @@ func (m *Model) updatePendingSpinner() {
 	if !m.pending {
 		return
 	}
-	for i := len(m.messages) - 1; i >= 0; i-- {
+	for i := range slices.Backward(m.messages) {
 		if m.messages[i].role == "pending" {
 			m.messages[i].content = spinnerFrames[m.spinnerIndex]
 			return
