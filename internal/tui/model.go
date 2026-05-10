@@ -728,6 +728,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case msg.Key().Code == tea.KeyEnd:
 			m.viewport.GotoBottom()
+			m.input.CursorEnd()
 			return m, nil
 
 		case msg.Key().Code == tea.KeyTab:
