@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -2136,7 +2137,7 @@ func suggestionWindow(total, cursor, maxRows int) (start, end int) {
 }
 
 func (m *Model) resolvePending(content string) {
-	for i := range slices.Backward(len(m.messages)) {
+	for i := range slices.Backward(m.messages) {
 		if m.messages[i].role == "pending" {
 			m.messages[i].role = "assistant"
 			m.messages[i].content = content
@@ -2149,7 +2150,7 @@ func (m *Model) resolvePending(content string) {
 }
 
 func (m *Model) clearPending() {
-	for i := range slices.Backward(len(m.messages)) {
+	for i := range slices.Backward(m.messages) {
 		if m.messages[i].role == "pending" {
 			m.messages = append(m.messages[:i], m.messages[i+1:]...)
 			m.allMessages = append([]chatMessage(nil), m.messages...)
@@ -2162,7 +2163,7 @@ func (m *Model) updatePendingSpinner() {
 	if !m.pending {
 		return
 	}
-	for i := range slices.Backward(len(m.messages)) {
+	for i := range slices.Backward(m.messages) {
 		if m.messages[i].role == "pending" {
 			m.messages[i].content = spinnerFrames[m.spinnerIndex]
 			return
