@@ -9,10 +9,10 @@ import (
 
 // FileLogger writes events and messages to a file.
 type FileLogger struct {
-	file  *os.File
-	mu    sync.Mutex
-	path  string
-	maxSize int64 // max size in bytes before rotation
+	file        *os.File
+	mu          sync.Mutex
+	path        string
+	maxSize     int64 // max size in bytes before rotation
 	currentSize int64
 }
 
@@ -24,7 +24,7 @@ func NewFileLogger(path string) (*FileLogger, error) {
 		return nil, fmt.Errorf("observe: create log dir: %w", err)
 	}
 
-	logPath := fmt.Sprintf("%s/noto.log", dir)
+	logPath := dir + "/noto.log"
 	if path != "" {
 		logPath = path
 	}
@@ -63,7 +63,7 @@ func (fl *FileLogger) Close() error {
 func (fl *FileLogger) Emit(e Event) {
 	fl.mu.Lock()
 	defer fl.mu.Unlock()
-	
+
 	if fl.file == nil {
 		return
 	}
@@ -122,7 +122,7 @@ func (fl *FileLogger) rotateLog() {
 		return
 	}
 
-	fl.file.Close()
+	_ = fl.file.Close()
 
 	// Rename current log to backup
 	backupPath := fmt.Sprintf("%s.%d", fl.path, time.Now().Unix())
@@ -185,6 +185,11 @@ func (flso *FileLoggerWithStdout) Errorf(format string, args ...any) {
 // NoopLogger is a logger that does nothing.
 type NoopLogger struct{}
 
-func (nl *NoopLogger) Emit(e Event)                     {}
+// Emit is a no-op.
+func (nl *NoopLogger) Emit(e Event) {}
+
+// Infof is a no-op.
 func (nl *NoopLogger) Infof(format string, args ...any) {}
+
+// Errorf is a no-op.
 func (nl *NoopLogger) Errorf(format string, args ...any) {}

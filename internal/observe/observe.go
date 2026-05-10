@@ -75,8 +75,6 @@ func NewJSONLogger(w io.Writer) *JSONLogger {
 	return &JSONLogger{w: w}
 }
 
-
-
 // NewStderrLogger returns a JSONLogger writing to stderr.
 func NewStderrLogger() Logger {
 	return NewJSONLogger(os.Stderr)
