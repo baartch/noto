@@ -1,5 +1,12 @@
 # Release notes
 
+## 0.3.0
+
+May 10, 2026
+
+- Add file logger
+- End key jumps to end of user input
+
 ## 0.2.0
 
 April 27, 2026
