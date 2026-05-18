@@ -32,6 +32,7 @@
 In addition to existing retrieval output fields, expose:
 
 - **cache_tier**: `l1 | l2 | none`
+- **cache_tier**: `l1 | l2 | none`
 - **cache_hit**: bool
 - **served_stale**: bool
 - **revalidation_started**: bool

@@ -37,8 +37,8 @@ Validation:
 
 Transient runtime view of cache lookup path.
 
-- **l1_hit**: boolean
-- **l2_hit**: boolean
+- **cache_tier**: `l1 | l2 | none`
+- **cache_hit**: boolean
 - **served_stale**: boolean
 - **revalidation_triggered**: boolean
 - **miss_reason**: enum (nullable)

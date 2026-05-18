@@ -63,3 +63,9 @@ This quickstart verifies **only** the recently added cache hardening requirement
 - `make fmt`
 - `make lint`
 - `make test`
+
+## Diagnostics Validation Notes
+
+- Confirm retrieval metadata reports `cache_tier` as `l1`, `l2`, or `none`.
+- Confirm stale responses set `served_stale=true` and `revalidation_started=true`.
+- Confirm miss classifications include known reasons (e.g., `not_found`, `embedding_model_changed`).

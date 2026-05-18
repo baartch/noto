@@ -17,9 +17,9 @@
 
 **Purpose**: Prepare scaffolding for scoped cache-hardening changes.
 
-- [ ] T001 Review and align cache-hardening scope notes in specs/005-memory-context/plan.md
-- [ ] T002 Create cache-hardening test fixture helpers in tests/integration/memory/cache_hardening_fixtures_test.go
-- [ ] T003 [P] Add diagnostics/miss-reason constants shared by tests in tests/unit/cache/testdata/miss_reasons.go
+- [X] T001 Review and align cache-hardening scope notes in specs/005-memory-context/plan.md
+- [X] T002 Create cache-hardening test fixture helpers in tests/integration/memory/cache_hardening_fixtures_test.go
+- [X] T003 [P] Add diagnostics/miss-reason constants shared by tests in tests/unit/cache/testdata/miss_reasons.go
 
 ---
 
@@ -27,12 +27,12 @@
 
 **Purpose**: Core cache primitives required before user-story implementation.
 
-- [ ] T004 Define cache identity value object and key builder in internal/cache/identity.go
-- [ ] T005 [P] Add cache freshness state model and helpers in internal/cache/freshness.go
-- [ ] T006 [P] Add cache diagnostics aggregator primitives in internal/cache/diagnostics.go
-- [ ] T007 Extend cache service interfaces for tier metadata and diagnostics in internal/cache/service.go
-- [ ] T008 Add unit tests for identity/freshness primitives in tests/unit/cache/identity_test.go
-- [ ] T009 Add unit tests for diagnostics aggregation primitives in tests/unit/cache/diagnostics_test.go
+- [X] T004 Define cache identity value object and key builder in internal/cache/identity.go
+- [X] T005 [P] Add cache freshness state model and helpers in internal/cache/freshness.go
+- [X] T006 [P] Add cache diagnostics aggregator primitives in internal/cache/diagnostics.go
+- [X] T007 Extend cache service interfaces for tier metadata and diagnostics in internal/cache/service.go
+- [X] T008 Add unit tests for identity/freshness primitives in tests/unit/cache/identity_test.go
+- [X] T009 Add unit tests for diagnostics aggregation primitives in tests/unit/cache/diagnostics_test.go
 
 **Checkpoint**: Foundation complete; user story implementation can begin.
 
@@ -46,23 +46,23 @@
 
 ### Tests for User Story 2
 
-- [ ] T010 [P] [US2] Add retrieval cache-key mismatch tests (including embedding model) in tests/unit/memory/retrieval_cache_key_test.go
-- [ ] T011 [P] [US2] Add stale-while-revalidate behavior tests in tests/unit/memory/retrieval_swr_test.go
-- [ ] T012 [P] [US2] Add L1-before-L2 tier selection tests in tests/unit/cache/service_tiers_test.go
-- [ ] T013 [P] [US2] Add event-driven invalidation trigger tests in tests/unit/cache/invalidation_triggers_test.go
-- [ ] T014 [US2] Add integration test for cross-session persistent-cache reuse in tests/integration/memory/cache_persistence_test.go
-- [ ] T015 [US2] Add integration test for prompt/token/embedding invalidation pathways in tests/integration/memory/cache_invalidation_test.go
+- [X] T010 [P] [US2] Add retrieval cache-key mismatch tests (including embedding model) in tests/unit/memory/retrieval_cache_key_test.go
+- [X] T011 [P] [US2] Add stale-while-revalidate behavior tests in tests/unit/memory/retrieval_swr_test.go
+- [X] T012 [P] [US2] Add L1-before-L2 tier selection tests in tests/unit/cache/service_tiers_test.go
+- [X] T013 [P] [US2] Add event-driven invalidation trigger tests in tests/unit/cache/invalidation_triggers_test.go
+- [X] T014 [US2] Add integration test for cross-session persistent-cache reuse in tests/integration/memory/cache_persistence_test.go
+- [X] T015 [US2] Add integration test for prompt/token/embedding invalidation pathways in tests/integration/memory/cache_invalidation_test.go
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Update retrieval cache key construction to include embedding model and full identity inputs in internal/memory/retrieval.go
-- [ ] T017 [US2] Implement in-process L1 cache with L1→L2 lookup and L2 promotion in internal/cache/service.go
-- [ ] T018 [US2] Implement slightly-stale serve path and async revalidation workflow in internal/cache/service.go
-- [ ] T019 [US2] Guard against stale refresh race overwrite using identity/freshness checks in internal/cache/service.go
-- [ ] T020 [US2] Wire note create/update/delete invalidation events in internal/cache/invalidation.go
-- [ ] T021 [US2] Wire system prompt, token budget, and embedding model invalidation events in internal/cache/invalidation.go
-- [ ] T022 [US2] Propagate tier/served-stale/revalidation metadata through retrieval result in internal/memory/retrieval.go
-- [ ] T023 [US2] Update cache behavior contract to match implemented US2 semantics in specs/005-memory-context/contracts/context-retrieval.md
+- [X] T016 [US2] Update retrieval cache key construction to include embedding model and full identity inputs in internal/memory/retrieval.go
+- [X] T017 [US2] Implement in-process L1 cache with L1→L2 lookup and L2 promotion in internal/cache/service.go
+- [X] T018 [US2] Implement slightly-stale serve path and async revalidation workflow in internal/cache/service.go
+- [X] T019 [US2] Guard against stale refresh race overwrite using identity/freshness checks in internal/cache/service.go
+- [X] T020 [US2] Wire note create/update/delete invalidation events in internal/cache/invalidation.go
+- [X] T021 [US2] Wire system prompt, token budget, and embedding model invalidation events in internal/cache/invalidation.go
+- [X] T022 [US2] Propagate tier/served-stale/revalidation metadata through retrieval result in internal/memory/retrieval.go
+- [X] T023 [US2] Update cache behavior contract to match implemented US2 semantics in specs/005-memory-context/contracts/context-retrieval.md
 
 **Checkpoint**: User Story 2 is independently functional and testable.
 
@@ -76,16 +76,16 @@
 
 ### Tests for User Story 3
 
-- [ ] T024 [P] [US3] Add diagnostics snapshot accuracy tests in tests/unit/cache/diagnostics_snapshot_test.go
-- [ ] T025 [P] [US3] Add miss-reason classification tests in tests/unit/memory/retrieval_miss_reason_test.go
-- [ ] T026 [US3] Add integration test for diagnostics reporting window in tests/integration/memory/cache_diagnostics_test.go
+- [X] T024 [P] [US3] Add diagnostics snapshot accuracy tests in tests/unit/cache/diagnostics_snapshot_test.go
+- [X] T025 [P] [US3] Add miss-reason classification tests in tests/unit/memory/retrieval_miss_reason_test.go
+- [X] T026 [US3] Add integration test for diagnostics reporting window in tests/integration/memory/cache_diagnostics_test.go
 
 ### Implementation for User Story 3
 
-- [ ] T027 [US3] Record hit/miss/rebuild timing and miss reasons during retrieval lifecycle in internal/memory/retrieval.go
-- [ ] T028 [US3] Expose diagnostics snapshot API from cache service in internal/cache/service.go
-- [ ] T029 [US3] Surface diagnostics fields in retrieval-facing output contract in specs/005-memory-context/contracts/context-retrieval.md
-- [ ] T030 [US3] Document diagnostics validation workflow in specs/005-memory-context/quickstart.md
+- [X] T027 [US3] Record hit/miss/rebuild timing and miss reasons during retrieval lifecycle in internal/memory/retrieval.go
+- [X] T028 [US3] Expose diagnostics snapshot API from cache service in internal/cache/service.go
+- [X] T029 [US3] Surface diagnostics fields in retrieval-facing output contract in specs/005-memory-context/contracts/context-retrieval.md
+- [X] T030 [US3] Document diagnostics validation workflow in specs/005-memory-context/quickstart.md
 
 **Checkpoint**: User Story 3 is independently functional and testable.
 
@@ -95,9 +95,9 @@
 
 **Purpose**: Final verification and cleanup across stories.
 
-- [ ] T031 [P] Refine cache hardening data-model notes for final implementation alignment in specs/005-memory-context/data-model.md
-- [ ] T032 Run full verification suite (`make fmt`, `make lint`, `make test`) and capture outcomes in specs/005-memory-context/quickstart.md
-- [ ] T033 [P] Remove dead code/obsolete comments from pre-hardening cache paths in internal/cache/doc.go
+- [X] T031 [P] Refine cache hardening data-model notes for final implementation alignment in specs/005-memory-context/data-model.md
+- [X] T032 Run full verification suite (`make fmt`, `make lint`, `make test`) and capture outcomes in specs/005-memory-context/quickstart.md
+- [X] T033 [P] Remove dead code/obsolete comments from pre-hardening cache paths in internal/cache/doc.go
 
 ---
 

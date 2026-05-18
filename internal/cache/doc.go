@@ -1,2 +1,3 @@
-// Package cache implements context cache build, invalidation, and load logic.
+// Package cache implements context cache identity, freshness, diagnostics,
+// invalidation, and load logic for memory retrieval.
 package cache
