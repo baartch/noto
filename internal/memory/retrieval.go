@@ -109,16 +109,26 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 		r.warnFn(err)
 	}
 	summaryText := ""
-	summaryID := "none"
 	if r.summaryRepo != nil {
 		summary, err := r.summaryRepo.GetLatestByProfile(ctx, profileID)
 		if err == nil {
 			summaryText = summary.SummaryText
-			summaryID = summary.ID
 		}
 	}
 
-	cacheKey := cacheKeyFor(profileID, systemPrompt, summaryID, r.tokenBudget)
+	notes, err := r.noteRepo.ListByProfile(ctx, profileID)
+	if err != nil {
+		return nil, fmt.Errorf("memory: list notes: %w", err)
+	}
+
+	rankedIDs, err := r.rankNotes(ctx, systemPrompt, summaryText)
+	if err != nil && r.warnFn != nil {
+		r.warnFn(err)
+	}
+	selectedNotes := SelectNotesForContext(notes, rankedIDs, r.tokenBudget)
+	notesHash := hashNoteIDs(noteIDs(selectedNotes))
+
+	cacheKey := cacheKeyFor(profileID, systemPrompt, notesHash, r.tokenBudget)
 
 	if r.cacheRepo != nil {
 		cached, err := r.cacheRepo.Get(ctx, profileID, cacheKey)
@@ -136,16 +146,6 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 		}
 	}
 
-	notes, err := r.noteRepo.ListByProfile(ctx, profileID)
-	if err != nil {
-		return nil, fmt.Errorf("memory: list notes: %w", err)
-	}
-
-	rankedIDs, err := r.rankNotes(ctx, systemPrompt, summaryText)
-	if err != nil && r.warnFn != nil {
-		r.warnFn(err)
-	}
-	selectedNotes := SelectNotesForContext(notes, rankedIDs, r.tokenBudget)
 	memoryBlock := BuildMemoryBlock(selectedNotes)
 
 	assembled := AssemblePrompt(systemPrompt, summaryText, memoryBlock)
@@ -160,7 +160,7 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 
 	if r.cacheRepo != nil {
 		payload, _ := json.Marshal(ctxOut)
-		expires := time.Now().Add(24 * time.Hour)
+		expires := time.Now().Add(30 * 24 * time.Hour) // 30 days instead of 24 hours
 		sourceIDs, _ := json.Marshal(noteIDs(selectedNotes))
 		promptHash := sha256.Sum256([]byte(systemPrompt))
 		_ = r.cacheRepo.Upsert(ctx, &store.ContextCacheEntry{
@@ -170,7 +170,7 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 			Payload:       string(payload),
 			SourceNoteIDs: string(sourceIDs),
 			PromptVersion: fmt.Sprintf("prompt:%x", promptHash),
-			StateVersion:  summaryID,
+			StateVersion:  notesHash, // Use notesHash instead of summaryID
 			CreatedAt:     time.Now().UTC(),
 			ExpiresAt:     &expires,
 		})
@@ -258,10 +258,21 @@ func AssemblePrompt(systemPrompt, sessionSummary, memoryBlock string) string {
 	return strings.Join(parts, "\n")
 }
 
-func cacheKeyFor(profileID, systemPrompt, summaryID string, tokenBudget int) string {
-	buf := fmt.Appendf(nil, "%s::%s::%s::%d", profileID, systemPrompt, summaryID, tokenBudget)
+func cacheKeyFor(profileID, systemPrompt, notesHash string, tokenBudget int) string {
+	buf := fmt.Appendf(nil, "%s::%s::%s::%d", profileID, systemPrompt, notesHash, tokenBudget)
 	hash := sha256.Sum256(buf)
 	return fmt.Sprintf("ctx:%x", hash)
+}
+
+// hashNoteIDs creates a stable hash of note IDs for cache key generation.
+// Sorts IDs first to ensure consistent hashing regardless of order.
+func hashNoteIDs(ids []string) string {
+	sort.Strings(ids)
+	h := sha256.New()
+	for _, id := range ids {
+		h.Write([]byte(id))
+	}
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 func noteIDs(notes []*store.MemoryNote) []string {

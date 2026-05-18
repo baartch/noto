@@ -1,0 +1,304 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                     COMPLETE CONTEXT ASSEMBLY FLOW                        ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+WHEN APP OPENS → Session Initialization
+────────────────────────────────────────────────────────────────────────────
+
+Input: profileID, baseSystemPrompt
+
+┌───────────────────────────────────────────────────────────────────┐
+│ STEP 1: Load & Prepare Static Data                               │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  SELECT system_prompt FROM profiles WHERE id = ?                 │
+│  → baseSystemPrompt = "You are a helpful assistant..."           │
+│                                                                   │
+│  SELECT * FROM session_summaries                                 │
+│  WHERE profile_id = ? ORDER BY created_at DESC LIMIT 1           │
+│  → summaryText = "User discussed Q1 planning..."                 │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌───────────────────────────────────────────────────────────────────┐
+│ STEP 2: Load All Notes From Database                             │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  SELECT * FROM memory_notes WHERE profile_id = ?                 │
+│  → [Note1, Note2, Note3, ..., Note47]                            │
+│     Each has: ID, Category, Content, Importance, Created        │
+│                                                                   │
+│  Store in: notes = []*store.MemoryNote                           │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌───────────────────────────────────────────────────────────────────┐
+│ STEP 3: Vector Ranking (AI-powered selection)                    │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  Input: systemPrompt + summaryText                               │
+│  Combined: "You are a helpful... User discussed Q1..."           │
+│                                                                   │
+│  API Call: embedder.Embed(combined, model="text-embedding...")   │
+│  → Get embedding vector for combined prompt                      │
+│                                                                   │
+│  Vector Search: Find K=6 most similar notes in vector store      │
+│  → Top 6 note IDs ranked by cosine similarity                    │
+│     [note-5, note-12, note-3, note-42, note-18, note-31]        │
+│                                                                   │
+│  Store in: rankedIDs = []string                                  │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌───────────────────────────────────────────────────────────────────┐
+│ STEP 4: Select Within Token Budget (Importance + Size Check)     │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  Token Budget: 1500 tokens                                       │
+│                                                                   │
+│  For each ranked note ID:                                        │
+│    1. Find note object                                           │
+│    2. Estimate tokens = len(strings.Fields(content))             │
+│    3. Check importance (1-10)                                    │
+│    4. If total + cost <= budget: ADD to selected                 │
+│    5. Else: STOP                                                 │
+│                                                                   │
+│  Example selection:                                              │
+│    Note-5:  120 tokens, importance=10 → SELECTED (total: 120)    │
+│    Note-12: 150 tokens, importance=9  → SELECTED (total: 270)    │
+│    Note-3:  180 tokens, importance=8  → SELECTED (total: 450)    │
+│    Note-42:  110 tokens, importance=7 → SELECTED (total: 560)    │
+│    Note-18: 200 tokens, importance=9  → SELECTED (total: 760)    │
+│    Note-31: 250 tokens, importance=6  → SKIP (would be 1010)     │
+│    ...more notes checked...                                       │
+│    Note-37:  95 tokens, importance=5  → SELECTED (total: 855)    │
+│    Note-44: 300 tokens, importance=4  → SKIP (would exceed 1500) │
+│                                                                   │
+│  Result: selectedNotes = [Note-5, Note-12, Note-3, Note-42,      │
+│                           Note-18, Note-37] (855 total tokens)    │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌───────────────────────────────────────────────────────────────────┐
+│ STEP 5: Hash Selected Notes (Cache Key Component)                │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  Extract IDs: selectedNoteIDs = ["note-5", "note-12", "note-3",  │
+│                                  "note-42", "note-18", "note-37"]│
+│                                                                   │
+│  Sort: sort(selectedNoteIDs)                                      │
+│  → ["note-12", "note-18", "note-3", "note-37", "note-42", ...]   │
+│                                                                   │
+│  Hash: sha256(concatenate all sorted IDs)                         │
+│  → "abc123def456fab789..."  (64 hex characters)                   │
+│                                                                   │
+│  Store in: notesHash = "abc123def456fab789..."                    │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌───────────────────────────────────────────────────────────────────┐
+│ STEP 6: Generate Cache Key                                       │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  Combine:                                                        │
+│    profileID="alice"                                             │
+│    systemPrompt="You are a helpful..."                           │
+│    notesHash="abc123def456fab789..."                             │
+│    tokenBudget=1500                                              │
+│                                                                   │
+│  Hash: sha256(combine above)                                      │
+│  → "ctx:xyz789abc123def456fab..."                                 │
+│                                                                   │
+│  Store in: cacheKey = "ctx:xyz789abc123def456fab..."             │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌───────────────────────────────────────────────────────────────────┐
+│ STEP 7: Check Cache                                              │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  Query:                                                          │
+│    SELECT * FROM context_cache                                  │
+│    WHERE profile_id = "alice"                                   │
+│    AND cache_key = "ctx:xyz789abc123def456fab..."               │
+│                                                                   │
+│         ┌─── IF FOUND AND NOT EXPIRED ──────┐                   │
+│         │                                    │                   │
+│         ▼                                    ▼                   │
+│    ✅ CACHE HIT              ❌ CACHE MISS/EXPIRED             │
+│    Return cached context      Continue to step 8                │
+│    Response time: ~50ms       Response time: ~3-5 sec            │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
+                    │                          │
+           (cache hit path)            (cache miss path)
+                    │                          │
+                    │                          ▼
+                    │      ┌────────────────────────────────┐
+                    │      │ STEP 8: Build Memory Block     │
+                    │      ├────────────────────────────────┤
+                    │      │                                │
+                    │      │ Format selected notes:         │
+                    │      │                                │
+                    │      │ ## Memory Notes                │
+                    │      │ - [fact] "note-5 content..."  │
+                    │      │ - [progress] "note-12..."     │
+                    │      │ - [blocker] "note-3..."       │
+                    │      │ - [fact] "note-42..."         │
+                    │      │ - [action_item] "note-18..."  │
+                    │      │ - [fact] "note-37..."         │
+                    │      │                                │
+                    │      │ Store in: memoryBlock (text)   │
+                    │      │                                │
+                    │      └────────────────────────────────┘
+                    │                   │
+                    │                   ▼
+                    │      ┌────────────────────────────────┐
+                    │      │ STEP 9: Assemble Prompt        │
+                    │      ├────────────────────────────────┤
+                    │      │                                │
+                    │      │ Combine three parts:           │
+                    │      │                                │
+                    │      │ systemPrompt +                 │
+                    │      │ "\n## Previous Session Summary"│
+                    │      │ + summaryText +                │
+                    │      │ "\n" + memoryBlock             │
+                    │      │                                │
+                    │      │ Result: fullSystemMessage      │
+                    │      │                                │
+                    │      └────────────────────────────────┘
+                    │                   │
+                    │                   ▼
+                    │      ┌────────────────────────────────┐
+                    │      │ STEP 10: Store in Cache        │
+                    │      ├────────────────────────────────┤
+                    │      │                                │
+                    │      │ INSERT INTO context_cache:     │
+                    │      │   id = "cc-..."                │
+                    │      │   profile_id = "alice"         │
+                    │      │   cache_key = "ctx:xyz789..."  │
+                    │      │   payload = JSON(context)      │
+                    │      │   source_note_ids = [n5,n12...]│
+                    │      │   state_version = notesHash    │
+                    │      │   expires_at = now + 30 days   │
+                    │      │                                │
+                    │      │ Cache duration: 30 days        │
+                    │      │                                │
+                    │      └────────────────────────────────┘
+                    │                   │
+                    └───────────┬───────┘
+                                │
+                                ▼
+                    ┌─────────────────────────────────┐
+                    │ STEP 11: Return Context         │
+                    ├─────────────────────────────────┤
+                    │                                 │
+                    │ RetrievalContext {              │
+                    │   SystemPrompt,                 │
+                    │   MemoryBlock,                  │
+                    │   SessionSummary,               │
+                    │   AssembledPrompt,              │
+                    │   CacheHit: true/false          │
+                    │ }                               │
+                    │                                 │
+                    │ Send to Session                 │
+                    │                                 │
+                    └─────────────────────────────────┘
+
+
+WHEN USER SENDS MESSAGE:
+────────────────────────────────────────────────────────────────────
+
+Input: userMessage = "How do I set up CI/CD?"
+
+┌────────────────────────────────────────────────────────┐
+│ Session.Send(userMessage)                              │
+├────────────────────────────────────────────────────────┤
+│                                                        │
+│ 1. Persist user message to DB (original, no datetime)  │
+│    INSERT INTO messages: role=user, content=userMsg    │
+│                                                        │
+│ 2. Add to in-memory history                            │
+│    s.history.append(userMessage)                       │
+│                                                        │
+│ 3. Inject datetime for LLM                             │
+│    msgToLLM = "[Current datetime: ...]\n\n" + userMsg  │
+│                                                        │
+│ 4. Build message array for provider                    │
+│    messages = [                                        │
+│      {role: "system", content: fullSystemMessage},     │
+│      {role: "user", content: msgFromHistory},          │
+│      {role: "assistant", content: respFromHistory},    │
+│      ...previous messages...                           │
+│      {role: "user", content: msgToLLM}  ← WITH DATETIME│
+│    ]                                                   │
+│                                                        │
+│ 5. Call LLM provider                                   │
+│    resp = provider.Complete(messages, temp=0.7)        │
+│                                                        │
+│ 6. Persist assistant response                          │
+│    INSERT INTO messages: role=assistant, content=resp  │
+│                                                        │
+│ 7. Add to history                                      │
+│    s.history.append(assistantResponse)                 │
+│                                                        │
+│ 8. Fire background extraction (async)                  │
+│    Extract notes from this turn                        │
+│    → Will create new notes                             │
+│    → Next session: cache miss (different notesHash)    │
+│    → New context cache entry created                   │
+│                                                        │
+└────────────────────────────────────────────────────────┘
+
+
+COMPLETE MESSAGE TO LLM:
+────────────────────────────────────────────────────────────────────
+
+{
+  "role": "system",
+  "content": "
+You are a helpful assistant.
+
+## Previous Session Summary
+- User: What about CI/CD setup?
+- Assistant: Let's discuss GitHub Actions...
+- User: Any recommendations for secrets?
+- Assistant: Store in GitHub encrypted secrets...
+
+## Memory Notes
+- [fact] Project uses GitHub for version control
+- [progress] Docker containerization 90% complete
+- [blocker] Kubernetes config not started
+- [action_item] Document deployment procedure
+- [fact] Using GitHub Actions for testing
+- [fact] Deployment target is AWS ECS
+"
+}
+
+{
+  "role": "user",
+  "content": "Previous message about infrastructure..."
+}
+
+{
+  "role": "assistant",
+  "content": "Response about infrastructure..."
+}
+
+... more history ...
+
+{
+  "role": "user",
+  "content": "
+[Current datetime: Monday, January 18, 2026 at 2:04 PM MST]
+
+How do I set up CI/CD?"
+}
+
+═════════════════════════════════════════════════════════════════════════════
