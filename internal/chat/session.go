@@ -34,6 +34,9 @@ type NotesCallback func(saved, updated int)
 // NotesSavingCallback is called when extraction starts.
 type NotesSavingCallback func()
 
+// ContextStatusCallback is called when context status changes.
+type ContextStatusCallback func(status string)
+
 // Session manages a single chat session.
 type Session struct {
 	profileID      string
@@ -52,6 +55,7 @@ type Session struct {
 	cacheRepo         *store.ContextCacheRepo
 	summaryRepo       *store.SessionSummaryRepo
 	adapter           provider.Adapter
+	retrieval         *memory.Retrieval
 	extractor         *memory.Extractor
 	extractorAdapter  provider.Adapter
 	logger            observe.Logger
@@ -75,10 +79,11 @@ type Session struct {
 	// grows with messages from the current session.
 	history []*store.Message
 
-	onNotes       NotesCallback
-	onNotesSaving NotesSavingCallback
-	stats         provider.Stats
-	onUsage       func(provider.Usage)
+	onNotes         NotesCallback
+	onNotesSaving   NotesSavingCallback
+	onContextStatus ContextStatusCallback
+	stats           provider.Stats
+	onUsage         func(provider.Usage)
 }
 
 // NewSession creates a new conversation, assembles the system prompt with
@@ -98,6 +103,7 @@ func NewSession(
 	logger observe.Logger,
 	onNotes NotesCallback,
 	onNotesSaving NotesSavingCallback,
+	onContextStatus ContextStatusCallback,
 	onUsage func(provider.Usage),
 ) (*Session, error) {
 	// Build system prompt with injected memory notes + session summary.
@@ -170,6 +176,7 @@ func NewSession(
 		cacheStale:        rc.ServedStale,
 		cacheReval:        rc.RevalidationStarted,
 		cacheMiss:         rc.MissReason,
+		retrieval:         ret,
 		convRepo:          convRepo,
 		msgRepo:           msgRepo,
 		noteRepo:          noteRepo,
@@ -182,6 +189,7 @@ func NewSession(
 		history:           recentHistory,
 		onNotes:           onNotes,
 		onNotesSaving:     onNotesSaving,
+		onContextStatus:   onContextStatus,
 		onUsage:           onUsage,
 		backupStop:        make(chan struct{}),
 		pendingDone:       make(chan struct{}),
@@ -194,6 +202,9 @@ func NewSession(
 		extractorFallback: extractorAdapter == nil && adapter != nil,
 		embeddingModel:    embeddingModel,
 		missingEmbedding:  embeddingModel == "",
+	}
+	if s.onContextStatus != nil {
+		s.onContextStatus(s.CacheStatus())
 	}
 	if profileSlug != "" {
 		s.startBackupTicker()
@@ -227,13 +238,25 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	// Inject current date/time into user message for LLM awareness
 	injectedMsg := injectDateTime(userMsg)
 
-	// Build provider request.
+	// Build provider request from retrieval cache/context each turn.
 	systemPrompt := s.systemPrompt
-	if s.adapter != nil {
-		if notes, err := s.relevantNotes(ctx, userMsg); err == nil && len(notes) > 0 {
-			memoryBlock := memory.BuildMemoryBlock(notes)
-			systemPrompt = memory.AssemblePrompt(s.baseSystemPrompt, s.sessionSummary, memoryBlock)
+	if s.retrieval != nil {
+		rc, err := s.retrieval.Assemble(ctx, s.profileID, s.baseSystemPrompt)
+		if err != nil {
+			s.logger.Errorf("context retrieval (turn) failed: %v", err)
+		} else {
+			systemPrompt = rc.AssembledPrompt
+			s.systemPrompt = rc.AssembledPrompt
+			s.cacheHit = rc.CacheHit
+			s.cacheTier = rc.CacheTier
+			s.cacheStale = rc.ServedStale
+			s.cacheReval = rc.RevalidationStarted
+			s.cacheMiss = rc.MissReason
+			s.logger.Infof("context retrieval (turn): tier=%s hit=%t stale=%t revalidate=%t miss_reason=%s", rc.CacheTier, rc.CacheHit, rc.ServedStale, rc.RevalidationStarted, rc.MissReason)
 		}
+	}
+	if s.onContextStatus != nil {
+		s.onContextStatus(s.CacheStatus())
 	}
 	msgs := make([]provider.Message, 0, len(s.history)+1)
 	msgs = append(msgs, provider.Message{Role: "system", Content: systemPrompt})

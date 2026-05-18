@@ -187,6 +187,11 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					prog.Send(tui.NotesSaving())
 				}
 			},
+			func(status string) {
+				if prog != nil {
+					prog.Send(tui.CacheStatusUpdated(status))
+				}
+			},
 			func(u provider.Usage) {
 				if prog != nil {
 					prog.Send(tui.UsageUpdatedMain(u))
@@ -334,6 +339,11 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					func() {
 						if prog != nil {
 							prog.Send(tui.NotesSaving())
+						}
+					},
+					func(status string) {
+						if prog != nil {
+							prog.Send(tui.CacheStatusUpdated(status))
 						}
 					},
 					func(u provider.Usage) {

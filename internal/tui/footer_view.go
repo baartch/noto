@@ -31,7 +31,7 @@ func (m *Model) renderFooter() string {
 	case strings.Contains(cache, "ctx:swr"):
 		leftParts = append(leftParts, blue.Render(cache))
 	case strings.Contains(cache, "ctx:rebuild"):
-		leftParts = append(leftParts, yellow.Render(cache))
+		leftParts = append(leftParts, green.Render(cache))
 	case strings.Contains(cache, "ctx:miss") || strings.Contains(cache, "ctx:error"):
 		leftParts = append(leftParts, yellow.Render(cache))
 	default:

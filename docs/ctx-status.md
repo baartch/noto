@@ -13,13 +13,13 @@ Noto shows a `ctx:` status in the footer to indicate how memory context was prod
 
 ## What users should expect
 
-- `l1-hit`/`l2-hit` usually mean faster startup and lower latency.
+- `l1-hit`/`l2-hit` mean cache served context for the current turn (fast path).
 - `swr` means the app favored responsiveness and is refreshing cache in the background.
 - `rebuild`/`miss(...)` means the app recomputed context to keep correctness.
 
 ## Operator logs
 
-Session startup logs include context retrieval details:
+Session startup and per-turn logs include context retrieval details:
 
 - `tier` (`l1`/`l2`/`none`)
 - `hit` (`true`/`false`)
