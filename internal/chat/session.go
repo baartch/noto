@@ -215,6 +215,9 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	}
 	s.history = append(s.history, userMsgRec)
 
+	// Inject current date/time into user message for LLM awareness
+	injectedMsg := injectDateTime(userMsg)
+
 	// Build provider request.
 	systemPrompt := s.systemPrompt
 	if s.adapter != nil {
@@ -225,8 +228,13 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	}
 	msgs := make([]provider.Message, 0, len(s.history)+1)
 	msgs = append(msgs, provider.Message{Role: "system", Content: systemPrompt})
-	for _, m := range s.history {
-		msgs = append(msgs, provider.Message{Role: string(m.Role), Content: m.Content})
+	for i, m := range s.history {
+		content := m.Content
+		// Use injected message for the most recent user message
+		if m.Role == store.RoleUser && i == len(s.history)-1 {
+			content = injectedMsg
+		}
+		msgs = append(msgs, provider.Message{Role: string(m.Role), Content: content})
 	}
 
 	resp, err := s.adapter.Complete(ctx, provider.CompletionRequest{
@@ -744,4 +752,12 @@ func (h *sessionLogHook) NoteStorageFailed(candidate memory.NoteCandidate, err e
 
 func (h *sessionLogHook) ExtractionPayloadRejected(reason string) {
 	h.logger.Errorf("memory: extraction rejected: %s", reason)
+}
+
+// injectDateTime prepends the current date and time to the user message
+// so the LLM is aware of temporal context.
+func injectDateTime(userMsg string) string {
+	now := time.Now()
+	dateTime := now.Format("Monday, January 2, 2006 at 3:04 PM MST")
+	return fmt.Sprintf("[Current datetime: %s]\n\n%s", dateTime, userMsg)
 }
