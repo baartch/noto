@@ -1,49 +1,51 @@
-# Research: Memory Context Indexing (Prompt Files + Extraction Contract)
+# Research: Cache Hardening Scope (FR-026..FR-037)
 
-## Decision: Store prompts as profile-local Markdown files in `<profile>/prompts/`
+## Decision 1: Cache identity includes embedding model and all request-shaping inputs
 
-**Rationale**: File-based prompt storage makes prompts transparent, versionable, and easy to inspect/edit per profile while removing schema coupling from SQLite.
+**Decision**: Use a cache identity derived from `(profile, system prompt identity/content, notes hash, token budget, embedding model)`.
 
-**Alternatives considered**:
-- Store prompts in SQLite rows (rejected: less transparent and harder to override manually)
-- Global app-level prompt files (rejected: not profile-scoped)
-
-## Decision: Enforce strict extractor JSON payload contract
-
-**Rationale**: A hard contract prevents ambiguous parser behavior and ensures deterministic handling of add/update semantics.
+**Rationale**: Any change in these inputs can alter retrieval output. Identity parity is required to prevent stale/wrong cache reuse.
 
 **Alternatives considered**:
-- Free-form text extraction (rejected: brittle parsing)
-- Partially structured JSON with optional required fields (rejected: leads to silent data quality issues)
+- Keep current key (without embedding model): rejected due to incorrect cross-model reuse.
+- Use TTL-only freshness without strict identity: rejected due to correctness risk.
 
-## Decision: Per-note action semantics with required `target_id` on updates
+## Decision 2: Serve slightly stale entries with asynchronous revalidation
 
-**Rationale**: Mixed add/update operations in one extraction response require note-local intent to avoid global-action ambiguity.
+**Decision**: Apply stale-while-revalidate for entries within a bounded stale window; return immediately, refresh in background.
 
-**Alternatives considered**:
-- Single top-level action (rejected: cannot safely represent mixed note outcomes)
-- Auto-resolve update target by fuzzy matching only (rejected: too error-prone without explicit id)
-
-## Decision: Constrain note categories to `fact|progress|blocker|action_item|other`
-
-**Rationale**: Controlled vocabulary improves downstream ranking/filtering and avoids taxonomy drift.
+**Rationale**: Preserves fast UX while converging cache to fresh state without blocking chat flow.
 
 **Alternatives considered**:
-- Open-ended category strings (rejected: inconsistent taxonomy)
-- Smaller category set (rejected: loses useful distinctions)
+- Block until rebuild for stale entries: rejected (latency spike).
+- Never serve stale entries: rejected (worse cold-start/reopen experience).
 
-## Decision: Accuracy-first prompt policy for user utility
+## Decision 3: Event-driven invalidation for key data/config changes
 
-**Rationale**: The extraction/system prompts should bias toward reliable, high-signal notes to improve retrieval quality and user trust.
+**Decision**: Mark stale or invalidate on note create/update/delete, system prompt change, token budget change, embedding model change.
 
-**Alternatives considered**:
-- Maximize note count aggressively (rejected: introduces noise)
-- Generic summarization prompt (rejected: weaker extraction precision)
-
-## Decision: Reject invalid extraction payloads and log warnings
-
-**Rationale**: Failing closed on invalid JSON/required fields protects data integrity and keeps behavior observable.
+**Rationale**: Event-driven invalidation prevents waiting for TTL expiry when correctness-affecting changes occur.
 
 **Alternatives considered**:
-- Best-effort partial ingestion (rejected: hidden inconsistencies)
-- Silent drop of malformed fields (rejected: hard to debug)
+- TTL-only invalidation: rejected due to stale accuracy windows.
+- Always full profile invalidate on every event: partially acceptable but less efficient; prefer targeted stale marking where possible.
+
+## Decision 4: Two-level cache strategy (L1 in-process, L2 persistent)
+
+**Decision**: Use L1 in-memory cache for fastest repeated lookups in current process; fallback to L2 persistent cache for cross-session reuse.
+
+**Rationale**: Combines low-latency hot-path behavior with restart persistence.
+
+**Alternatives considered**:
+- L2 only: rejected due to avoidable lookup overhead during active sessions.
+- L1 only: rejected due to loss of cross-session benefits.
+
+## Decision 5: Diagnostics include hit/miss rates, rebuild time, miss reasons
+
+**Decision**: Track and expose hit rate, miss rate, average rebuild time, and ranked miss reasons.
+
+**Rationale**: Enables maintainers to tune cache behavior and quickly identify causes of rebuild churn.
+
+**Alternatives considered**:
+- Expose only raw counters: rejected (insufficient for tuning).
+- Expose diagnostics only in debug mode: rejected (reduced operational visibility).

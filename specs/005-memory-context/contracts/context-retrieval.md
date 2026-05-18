@@ -1,74 +1,55 @@
-# Contract: Context Retrieval and Extraction
+# Contract: Context Retrieval Cache Behavior (FR-026..FR-037)
 
-## Inputs
+## Inputs (Cache Identity)
 
 - **profile_id**: string
-- **system_prompt**: string (loaded from `<profile>/prompts/system.md`)
-- **extractor_prompt**: string (loaded from `<profile>/prompts/extractor.md`)
-- **note_budget_tokens**: int (default 1500, configurable)
+- **system_prompt** (or deterministic prompt identity): string
+- **notes_hash**: string
+- **note_budget_tokens**: int
+- **embedding_model**: string
 
-## Behavior
+## Retrieval Behavior Contract
 
-1. Load profile-local prompt files from `<profile>/prompts/`.
-   - If `system.md` or `extractor.md` is missing, auto-bootstrap defaults and continue.
-   - Surface a visible footer warning when bootstrap occurred.
-2. Retrieve relevant notes using vector index (when available).
-3. Apply token budget to selected notes.
-4. If index unavailable, fall back to importance then recency ordering.
-5. Assemble prompt with system prompt + session summary + memory block.
-6. Cache assembled context for reuse across restarts.
-7. If extractor model is missing, use the main model and surface a footer warning.
-8. Extractor response MUST be valid JSON and pass note-level validation before persistence.
-9. Extraction can include mixed per-note actions (`add` and `update`) in one payload.
-10. Updated notes MUST be included in incremental vector sync input so index mutation remains up to date.
+1. Compute cache identity from all five inputs above.
+2. Lookup order MUST be:
+   - L1 (in-session memory cache) first
+   - L2 (persistent cache) second
+3. Cache hit is valid only when identity fully matches.
+4. If entry is **slightly stale** and structurally valid:
+   - return it immediately,
+   - trigger background revalidation,
+   - do not block current request.
+5. Revalidation result is used for subsequent requests.
+6. Event-driven stale/invalidation MUST happen on:
+   - note create/update/delete,
+   - system prompt change,
+   - token budget change,
+   - embedding model change.
+7. Miss reason classification MUST be recorded for non-hit outcomes.
 
-## Extractor Response Contract (JSON)
+## Output Additions
 
-```json
-{
-  "has_new_info": true,
-  "confidence": 0.86,
-  "notes": [
-    {
-      "action": "add",
-      "category": "fact",
-      "content": "User prefers concise responses.",
-      "importance": 7
-    },
-    {
-      "action": "update",
-      "target_id": "note_123",
-      "category": "progress",
-      "content": "Project moved from draft to implementation.",
-      "importance": 8
-    }
-  ]
-}
-```
+In addition to existing retrieval output fields, expose:
 
-Validation rules:
-- Top-level object MUST include `has_new_info` (boolean), `confidence` (float 0.0..1.0), and `notes` array.
-- Each note MUST include `action` with value `add|update`.
-- `action=update` MUST include `target_id`.
-- Each note MUST include `category` in `fact|progress|blocker|action_item|other`.
-- Invalid payloads MUST be rejected and logged.
-
-No-new-info example:
-
-```json
-{
-  "has_new_info": false,
-  "confidence": 0.12,
-  "notes": []
-}
-```
-
-## Output
-
-- **assembled_prompt**: string
-- **memory_block**: string
+- **cache_tier**: `l1 | l2 | none`
 - **cache_hit**: bool
-- **accepted_notes_count**: int
-- **updated_notes_count**: int
-- **rejected_payload**: bool
-- **prompt_bootstrap_warning**: bool (true when missing prompt files were auto-created)
+- **served_stale**: bool
+- **revalidation_started**: bool
+- **miss_reason**: enum (nullable)
+
+## Diagnostics Contract
+
+Expose aggregated diagnostics with at least:
+
+- **hit_rate**
+- **miss_rate**
+- **average_rebuild_time**
+- **top_miss_reasons** (ordered by frequency)
+
+Example miss reasons (non-exhaustive):
+- `notes_changed`
+- `prompt_changed`
+- `token_budget_changed`
+- `embedding_model_changed`
+- `cache_expired`
+- `not_found`

@@ -1,110 +1,95 @@
-# Data Model: Memory Context Indexing
+# Data Model: Cache Hardening (FR-026..FR-037)
 
 ## Entities
 
-### Memory Note
+### CacheIdentity
 
-- **id**: string
-- **profile_id**: string
-- **conversation_id**: string (nullable)
-- **category**: `fact | progress | blocker | action_item | other`
-- **content**: string
-- **importance**: int (1–10)
-- **created_at**: timestamp
-- **updated_at**: timestamp
-
-Validation:
-- `category` MUST be one of the constrained values.
-- `content` MUST be non-empty.
-
-### Prompt File
+Represents the exact retrieval-shaping inputs required for cache correctness.
 
 - **profile_id**: string
-- **name**: `system | extractor`
-- **path**: string (`<profile>/prompts/<name>.md`)
-- **content**: string (markdown)
-- **updated_at**: timestamp
-
-Validation:
-- Prompt files MUST exist or be lazily created with defaults.
-- Prompt storage MUST NOT use SQLite for system/extractor prompt content.
-
-### Extraction Payload
-
-- **has_new_info**: bool
-- **confidence**: float (0.0..1.0)
-- **notes**: array of `ExtractedNote`
-
-Validation:
-- Payload MUST be valid JSON object with top-level `has_new_info`, `confidence`, and `notes`.
-- `confidence` MUST be in range `0.0..1.0`.
-
-### ExtractedNote
-
-- **action**: `add | update`
-- **target_id**: string (required iff `action=update`)
-- **category**: `fact | progress | blocker | action_item | other`
-- **content**: string
-- **importance**: int (optional if model omits; system may default)
-
-Validation:
-- Each note MUST include its own `action`.
-- `target_id` MUST be present for `update`, absent/ignored for `add`.
-- `category` MUST be in allowed set.
-- Invalid notes invalidate the payload.
-
-### Vector Index Entry
-
-- **id**: string
-- **profile_id**: string
-- **source_type**: `memory_note | session_summary | message`
-- **source_id**: string
-- **chunk_hash**: string
+- **system_prompt_fingerprint**: string
+- **notes_hash**: string
+- **token_budget**: integer
 - **embedding_model**: string
-- **embedding_dim**: int
-- **vector_ref**: string
-- **updated_at**: timestamp
-
-### Vector Index Manifest
-
-- **profile_id**: string
-- **index_path**: string
-- **index_format_version**: string
-- **embedding_model**: string
-- **embedding_dim**: int
-- **last_rebuild_at**: timestamp
-- **last_sync_at**: timestamp
-- **source_state_version**: string
-- **status**: `ready | stale | rebuilding | failed`
-
-### Extraction Result (Runtime)
-
-- **notes**: array of newly added `Memory Note`
-- **updated_notes**: array of updated `Memory Note`
-- **updated_count**: int
+- **cache_key**: string (stable derived value)
 
 Validation:
-- `updated_notes` MUST contain notes mutated via `action=update` with valid `target_id`.
-- Both `notes` and `updated_notes` SHOULD be passed to incremental vector sync to keep the index current.
+- All fields are required.
+- Any field change yields a new `cache_key`.
 
-### Context Cache Entry
+### ContextCacheEntry
 
-- **id**: string
-- **profile_id**: string
+Cached assembled retrieval context with freshness metadata.
+
 - **cache_key**: string
+- **profile_id**: string
 - **payload**: string
 - **created_at**: timestamp
 - **expires_at**: timestamp (nullable)
+- **stale_at**: timestamp (nullable)
+- **freshness_state**: `fresh | slightly_stale | stale | invalid`
+
+Validation:
+- Entry must map to one `CacheIdentity`.
+- `slightly_stale` may be served only under SWR policy window.
+
+### CacheTierSnapshot
+
+Transient runtime view of cache lookup path.
+
+- **l1_hit**: boolean
+- **l2_hit**: boolean
+- **served_stale**: boolean
+- **revalidation_triggered**: boolean
+- **miss_reason**: enum (nullable)
+
+Validation:
+- `l1_hit` and `l2_hit` cannot both be true for a single served response.
+- `revalidation_triggered` can be true only when `served_stale` is true.
+
+### CacheInvalidationEvent
+
+Correctness-impacting event that marks entries stale/invalid.
+
+- **event_type**: `note_created | note_updated | note_deleted | system_prompt_changed | token_budget_changed | embedding_model_changed`
+- **profile_id**: string
+- **occurred_at**: timestamp
+- **scope**: `targeted | profile_wide`
+
+Validation:
+- Event type must be one of the six required triggers.
+
+### CacheDiagnosticsSnapshot
+
+Aggregated operational diagnostics for cache behavior.
+
+- **window_start**: timestamp
+- **window_end**: timestamp
+- **total_requests**: integer
+- **hits**: integer
+- **misses**: integer
+- **hit_rate**: number (0..1)
+- **miss_rate**: number (0..1)
+- **avg_rebuild_time_ms**: number
+- **top_miss_reasons**: ordered list of `{reason, count}`
+
+Validation:
+- `hits + misses = total_requests`.
+- `hit_rate + miss_rate = 1.0` (within rounding tolerance).
 
 ## Relationships
 
-- Memory Note 1→N Vector Index Entry (source_id)
-- Prompt File N→1 Profile
-- Vector Index Manifest 1→1 per profile
-- Context Cache Entry 1→1 per cache key
+- `CacheIdentity` 1→N `ContextCacheEntry` over time (new entries on revalidation).
+- `CacheInvalidationEvent` impacts one or more `ContextCacheEntry` records by profile/scope.
+- `CacheTierSnapshot` records runtime decision for one retrieval request.
+- `CacheDiagnosticsSnapshot` aggregates many `CacheTierSnapshot` records.
 
-## State/Flow Notes
+## State Transitions
 
-- Extraction: input message(s) → extractor JSON payload → validated extracted notes → add/update note writes → extraction result (`notes`, `updated_notes`) → incremental index updates.
-- Prompt load/bootstrap: runtime reads `<profile>/prompts/*.md`; if missing, defaults are created and a visible warning state is set.
-- Prompt edits: settings/UI edit → write `<profile>/prompts/*.md` → invalidate context cache when system prompt changes.
+`ContextCacheEntry.freshness_state` transitions:
+
+- `fresh -> slightly_stale` (time/window based)
+- `slightly_stale -> fresh` (successful background revalidation)
+- `slightly_stale -> stale` (window exceeded)
+- `fresh/slightly_stale/stale -> invalid` (event-driven invalidation)
+- `invalid -> fresh` (rebuild + upsert)

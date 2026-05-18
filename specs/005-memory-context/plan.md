@@ -1,36 +1,33 @@
-# Implementation Plan: Memory Context Indexing
+# Implementation Plan: Memory Context Cache Hardening
 
-**Branch**: `005-memory-context` | **Date**: 2026-04-27 | **Spec**: `/specs/005-memory-context/spec.md`
+**Branch**: `005-memory-context` | **Date**: 2026-05-18 | **Spec**: [specs/005-memory-context/spec.md](./spec.md)
 **Input**: Feature specification from `/specs/005-memory-context/spec.md`
 
 ## Summary
 
-Add profile-local Markdown prompt storage (`<profile>/prompts/system.md`, `<profile>/prompts/extractor.md`) and tighten extraction contracts so the extractor always returns valid JSON with top-level `has_new_info` and `confidence`, plus as many meaningful notes as warranted, each note carrying its own `action` (`add|update`), mandatory `target_id` on updates, and constrained category (`fact|progress|blocker|action_item|other`). Missing prompt files are auto-bootstrapped with defaults and a visible warning. Keep existing relevance ranking, token budgeting, persistence, and vector index maintenance behavior.
+Implement only the newly added cache requirements (FR-026 to FR-037): extend cache identity to include embedding model and other retrieval-shaping inputs, add stale-while-revalidate behavior, add event-driven invalidation triggers, introduce a two-level cache strategy (in-session + persistent), and expose actionable cache diagnostics.
 
 ## Technical Context
 
 **Language/Version**: Go 1.26+  
-**Primary Dependencies**: Cobra CLI, Bubble Tea v2, Bubbles v2, Lip Gloss v2, modernc.org/sqlite, OpenAI-compatible provider adapter, internal pure-Go HNSW index  
-**Storage**: Profile-local SQLite (`~/.noto/profiles/<profile>/memory.db`) for notes/cache + profile-local files (`~/.noto/profiles/<profile>/prompts/*.md`, `memory.vec`)  
-**Testing**: `go test ./...` + contract/integration tests for extractor payload validation and prompt persistence  
-**Target Platform**: Cross-platform terminal environments (Linux/macOS primary)  
-**Project Type**: CLI + TUI application  
-**Performance Goals**: Context assembly <200ms at 10k notes; prompt file load/save non-blocking for normal interactions  
-**Constraints**: Deterministic fallback ranking, robust malformed-JSON handling, no DB storage for system/extractor prompts, missing prompt files are non-fatal (auto-bootstrap defaults + visible warning)  
-**Scale/Scope**: Single-user local profiles, up to 10k+ notes per profile, multiple profile directories
+**Primary Dependencies**: Cobra CLI, Bubble Tea/Bubbles/Lip Gloss, modernc.org/sqlite, internal memory/vector packages  
+**Storage**: Profile-local SQLite (`~/.noto/profiles/<profile>/memory.db`) plus in-process memory cache  
+**Testing**: `go test ./...`, plus `make test`, `make lint`, `make fmt`  
+**Target Platform**: Cross-platform CLI/TUI runtime (Linux/macOS/Windows terminals)  
+**Project Type**: CLI/TUI application  
+**Performance Goals**: Preserve responsive context assembly and improve repeated-request latency by preferring in-session cache hits; stale entries should return immediately while refresh happens asynchronously  
+**Constraints**: Cache correctness must reflect profile/prompt/notes hash/token budget/embedding model changes; invalidation events must be reflected before next retrieval; no blocking user chat flow for revalidation  
+**Scale/Scope**: Scoped only to FR-026..FR-037 in `spec.md`; no changes to extractor schema, prompt bootstrap, or vector ranking logic beyond cache identity/invalidation integration
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **I. Code Quality Is Enforced**: PASS — plan includes focused modules for prompt storage and extraction validation, explicit error handling for invalid payloads.
-- **II. Testing Standards Are Non-Negotiable**: PASS — includes unit + integration/contract coverage for JSON schema rules, update target validation, prompt file persistence.
-- **III. User Experience Consistency First**: PASS — keeps existing settings and fallback UX, adds clear behavior on malformed extractor output (reject + warning).
+- **Code Quality Is Enforced**: PASS — plan includes explicit updates to cache modules and deterministic miss-reason classification; validation commands include `make fmt`, `make lint`, `make test`.
+- **Testing Standards Are Non-Negotiable**: PASS — plan requires unit/integration coverage for cache key identity, SWR behavior, invalidation events, tier ordering, and diagnostics aggregation.
+- **User Experience Consistency First**: PASS — stale-while-revalidate returns immediate responses and avoids chat-flow blocking; diagnostics are maintainer-facing and do not alter core user interaction patterns.
 
-Post-Design Re-check (after Phase 1 artifacts):
-- **I. Code Quality Is Enforced**: PASS
-- **II. Testing Standards Are Non-Negotiable**: PASS
-- **III. User Experience Consistency First**: PASS
+Post-Design Re-check: PASS (no principle violations introduced by Phase 1 artifacts).
 
 ## Project Structure
 
@@ -51,36 +48,58 @@ specs/005-memory-context/
 
 ```text
 cmd/
+└── noto/
+
 internal/
-├── config/            # profile + prompt file persistence
-├── memory/            # note extraction + validation orchestration
-├── vector/            # hnsw indexing and retrieval
-└── tui/               # settings and runtime UX feedback
+├── cache/
+│   ├── service.go
+│   ├── invalidation.go
+│   └── doc.go
+├── memory/
+│   └── retrieval.go
+└── store/
+
 tests/
-├── integration/
-└── contract/
+├── unit/
+│   ├── cache/
+│   └── memory/
+└── integration/
+    └── memory/
 ```
 
-**Structure Decision**: Keep single-project Go CLI/TUI architecture and implement prompt persistence in profile config/memory layers; add contract tests for extractor JSON response semantics.
+**Structure Decision**: Use the existing single-project Go CLI/TUI structure and limit implementation to cache/retrieval components plus focused tests.
 
 ## Phase 0: Research Plan
 
-1. Confirm best-practice storage layout and migration for prompt values moving from DB/config to profile-local Markdown files.
-2. Define strict JSON contract for extractor responses with per-note action semantics and update targeting.
-3. Define validation/error strategy for malformed or partially valid extraction output.
-4. Define prompt-writing guidance for accuracy and user utility.
+1. Confirm cache identity dimensions and miss-reason taxonomy for FR-026/027/037.
+2. Select stale-while-revalidate policy boundaries and non-blocking refresh pattern for FR-028/029.
+3. Define event-driven invalidation semantics for FR-030..FR-033.
+4. Define two-level cache read/write ordering and coherence behavior for FR-034/035.
+5. Define diagnostics aggregation window and reporting shape for FR-036/037.
 
 ## Phase 1: Design Plan
 
-1. Extend data model with Prompt File and Extraction Payload entities/validation, including top-level `has_new_info` and `confidence`.
-2. Update contract docs for retrieval + extraction schema invariants, including top-level metadata requirements.
-3. Update quickstart to include prompt file and schema validation scenarios (with top-level metadata checks).
-4. Update agent context reference in `AGENTS.md` to point to this plan.
+1. Update data model docs with cache identity, freshness state, and diagnostics entities.
+2. Update retrieval contract with:
+   - identity inputs including embedding model,
+   - SWR behavior,
+   - invalidation-triggered staleness,
+   - L1/L2 lookup order,
+   - diagnostics output fields.
+3. Update quickstart with scenarios verifying only FR-026..FR-037 behavior.
+4. Update agent context reference to this plan in `AGENTS.md`.
 
-## Phase 2: Task Planning Approach
+## Phase 2: Implementation Planning (for `/speckit.tasks`)
 
-Generate implementation tasks that sequence: file persistence layer → extractor schema validation (including top-level `has_new_info`/`confidence`) → extraction pipeline integration → settings wiring → tests (unit/integration/contract) → docs.
+- Add/adjust cache key creation to include embedding model and all identity dimensions.
+- Implement in-session L1 cache in front of persistent L2 cache.
+- Implement stale-while-revalidate path with safe background refresh and race protection.
+- Wire event-driven invalidation hooks for note/prompt/token-budget/embedding-model changes.
+- Add diagnostics counters/timers and miss-reason aggregation surfaced through existing observability surfaces.
+- Add full automated tests for FR-026..FR-037 and regressions.
 
 ## Complexity Tracking
 
-No constitution violations requiring justification.
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|-------------------------------------|
+| None | N/A | N/A |

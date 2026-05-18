@@ -48,5 +48,5 @@ Go 1.26+: Follow standard conventions
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read:
-- `specs/004-bubbletea-tui/plan.md`
+- `specs/005-memory-context/plan.md`
 <!-- SPECKIT END -->
