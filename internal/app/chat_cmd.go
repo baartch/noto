@@ -114,7 +114,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 	activeModel := ""
 	extractorModel := ""
 	extractorFallback := false
-	cacheStatus := "cache: n/a"
+	cacheStatus := "ctx:n/a"
 	inputHistory := loadInputHistory(ctx, profileDB, activeProfile.ID)
 	startupMessages, startupHistoryErr := loadStartupConversationMessages(ctx, profileDB, activeProfile.ID)
 	embeddingModelMissing := false
@@ -280,7 +280,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			activeModel = ""
 			extractorModel = ""
 			embeddingModel = ""
-			cacheStatus = "cache: n/a"
+			cacheStatus = "ctx:n/a"
 			providerFn = nil
 			listModelsFn = nil
 			listEmbeddingsFn = nil

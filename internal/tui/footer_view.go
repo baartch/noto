@@ -26,10 +26,14 @@ func (m *Model) renderFooter() string {
 
 	cache := strings.TrimSpace(m.cacheStatus)
 	switch {
-	case strings.Contains(cache, "hit"):
-		leftParts = append(leftParts, green.Render("ctx:hit"))
-	case strings.Contains(cache, "miss"):
-		leftParts = append(leftParts, yellow.Render("ctx:miss"))
+	case strings.Contains(cache, "ctx:l1-hit") || strings.Contains(cache, "ctx:l2-hit") || strings.Contains(cache, "ctx:hit"):
+		leftParts = append(leftParts, green.Render(cache))
+	case strings.Contains(cache, "ctx:swr"):
+		leftParts = append(leftParts, blue.Render(cache))
+	case strings.Contains(cache, "ctx:rebuild"):
+		leftParts = append(leftParts, yellow.Render(cache))
+	case strings.Contains(cache, "ctx:miss") || strings.Contains(cache, "ctx:error"):
+		leftParts = append(leftParts, yellow.Render(cache))
 	default:
 		leftParts = append(leftParts, dim.Render("ctx:n/a"))
 	}

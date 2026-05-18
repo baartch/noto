@@ -41,6 +41,10 @@ type Session struct {
 	conversationID string
 	systemPrompt   string
 	cacheHit       bool
+	cacheTier      string
+	cacheStale     bool
+	cacheReval     bool
+	cacheMiss      string
 
 	convRepo          *store.ConversationRepo
 	msgRepo           *store.MessageRepo
@@ -129,6 +133,7 @@ func NewSession(
 	if err != nil {
 		return nil, fmt.Errorf("session: assemble context: %w", err)
 	}
+	logger.Infof("context retrieval: tier=%s hit=%t stale=%t revalidate=%t miss_reason=%s", rc.CacheTier, rc.CacheHit, rc.ServedStale, rc.RevalidationStarted, rc.MissReason)
 
 	// Load recent messages from the previous conversation for context continuity.
 	recentHistory, err := loadRecentHistory(ctx, profileID, convRepo, msgRepo)
@@ -161,6 +166,10 @@ func NewSession(
 		conversationID:    convID,
 		systemPrompt:      rc.AssembledPrompt,
 		cacheHit:          rc.CacheHit,
+		cacheTier:         rc.CacheTier,
+		cacheStale:        rc.ServedStale,
+		cacheReval:        rc.RevalidationStarted,
+		cacheMiss:         rc.MissReason,
 		convRepo:          convRepo,
 		msgRepo:           msgRepo,
 		noteRepo:          noteRepo,
@@ -539,13 +548,25 @@ func (s *Session) SetExtractorModel(model string) {
 	s.extractorFallback = false
 }
 
-// CacheStatus returns a short label for the footer showing whether the
-// memory context was served from cache or rebuilt from SQLite at startup.
+// CacheStatus returns a short label for the footer showing current context state.
 func (s *Session) CacheStatus() string {
-	if s.cacheHit {
-		return "ctx:hit"
+	if s.cacheStale && s.cacheReval {
+		return "ctx:swr"
 	}
-	return "ctx:miss"
+	if s.cacheHit {
+		switch s.cacheTier {
+		case "l1":
+			return "ctx:l1-hit"
+		case "l2":
+			return "ctx:l2-hit"
+		default:
+			return "ctx:hit"
+		}
+	}
+	if s.cacheMiss == "" || s.cacheMiss == "not_found" {
+		return "ctx:rebuild"
+	}
+	return "ctx:miss(" + s.cacheMiss + ")"
 }
 
 // ExtractorFallbackActive reports whether extraction is using the main model.
