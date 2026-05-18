@@ -11,3 +11,12 @@ func footerHasAllFields(footer string) bool {
 	}
 	return true
 }
+
+func containsAny(s string, opts ...string) bool {
+	for _, o := range opts {
+		if strings.Contains(s, o) {
+			return true
+		}
+	}
+	return false
+}

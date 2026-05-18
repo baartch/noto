@@ -3,13 +3,16 @@ package memory
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"noto/internal/cache"
 	"noto/internal/provider"
 	"noto/internal/store"
 	"noto/internal/vector"
@@ -31,6 +34,14 @@ type RetrievalContext struct {
 
 	// CacheHit indicates the assembled prompt was served from cache.
 	CacheHit bool
+	// CacheTier is the tier that served the response: l1|l2|none.
+	CacheTier string
+	// ServedStale indicates response was served from slightly stale cache.
+	ServedStale bool
+	// RevalidationStarted indicates async refresh was started.
+	RevalidationStarted bool
+	// MissReason provides best-effort cache miss reason for diagnostics.
+	MissReason string
 }
 
 // CacheRepository manages cached assembled prompt payloads.
@@ -54,6 +65,9 @@ type Retrieval struct {
 	profileID       string
 	embedder        vector.Embedder
 	embeddingModel  string
+	l1mu            sync.RWMutex
+	l1              map[string]*store.ContextCacheEntry
+	diag            *cache.Diagnostics
 }
 
 // RetrievalOption configures Retrieval behavior.
@@ -92,7 +106,7 @@ func WithVectorRetrieval(index vector.Index, profileID string, embedder vector.E
 
 // NewRetrieval creates a Retrieval service.
 func NewRetrieval(noteRepo *store.MemoryNoteRepo, summaryRepo *store.SessionSummaryRepo, cacheRepo CacheRepository, opts ...RetrievalOption) *Retrieval {
-	r := &Retrieval{noteRepo: noteRepo, summaryRepo: summaryRepo, cacheRepo: cacheRepo}
+	r := &Retrieval{noteRepo: noteRepo, summaryRepo: summaryRepo, cacheRepo: cacheRepo, l1: map[string]*store.ContextCacheEntry{}, diag: cache.NewDiagnostics()}
 	for _, opt := range opts {
 		opt(r)
 	}
@@ -105,34 +119,15 @@ func NewRetrieval(noteRepo *store.MemoryNoteRepo, summaryRepo *store.SessionSumm
 // Assemble builds the RetrievalContext for a profile, reading from SQLite.
 // It reuses cached context if available and valid.
 func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string) (*RetrievalContext, error) {
+	start := time.Now()
 	if err := r.checkVectorIndex(); err != nil && r.warnFn != nil {
 		r.warnFn(err)
 	}
 	summaryText := ""
-	summaryID := "none"
 	if r.summaryRepo != nil {
 		summary, err := r.summaryRepo.GetLatestByProfile(ctx, profileID)
 		if err == nil {
 			summaryText = summary.SummaryText
-			summaryID = summary.ID
-		}
-	}
-
-	cacheKey := cacheKeyFor(profileID, systemPrompt, summaryID, r.tokenBudget)
-
-	if r.cacheRepo != nil {
-		cached, err := r.cacheRepo.Get(ctx, profileID, cacheKey)
-		if err == nil && cached != nil {
-			if cached.ExpiresAt != nil && cached.ExpiresAt.Before(time.Now()) {
-				_ = r.cacheRepo.Invalidate(ctx, profileID, cacheKey)
-			} else {
-				var cachedCtx RetrievalContext
-				if err := json.Unmarshal([]byte(cached.Payload), &cachedCtx); err == nil {
-					cachedCtx.CacheHit = true
-					return &cachedCtx, nil
-				}
-				_ = r.cacheRepo.Invalidate(ctx, profileID, cacheKey)
-			}
 		}
 	}
 
@@ -146,35 +141,63 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 		r.warnFn(err)
 	}
 	selectedNotes := SelectNotesForContext(notes, rankedIDs, r.tokenBudget)
+	notesHash := hashNoteIDs(noteIDs(selectedNotes))
+
+	cacheKey := cacheKeyFor(profileID, systemPrompt, notesHash, r.tokenBudget, r.embeddingModel)
+
+	if entry, tier, servedStale, revalidating := r.getCached(ctx, profileID, cacheKey); entry != nil {
+		var cachedCtx RetrievalContext
+		if err := json.Unmarshal([]byte(entry.Payload), &cachedCtx); err == nil {
+			cachedCtx.CacheHit = true
+			cachedCtx.CacheTier = tier
+			cachedCtx.ServedStale = servedStale
+			cachedCtx.RevalidationStarted = revalidating
+			cachedCtx.MissReason = ""
+			r.diag.RecordHit(time.Since(start))
+			return &cachedCtx, nil
+		}
+		_ = r.cacheRepo.Invalidate(ctx, profileID, cacheKey)
+	}
+
 	memoryBlock := BuildMemoryBlock(selectedNotes)
 
 	assembled := AssemblePrompt(systemPrompt, summaryText, memoryBlock)
 
 	ctxOut := &RetrievalContext{
-		SystemPrompt:    systemPrompt,
-		MemoryBlock:     memoryBlock,
-		SessionSummary:  summaryText,
-		AssembledPrompt: assembled,
-		CacheHit:        false,
+		SystemPrompt:        systemPrompt,
+		MemoryBlock:         memoryBlock,
+		SessionSummary:      summaryText,
+		AssembledPrompt:     assembled,
+		CacheHit:            false,
+		CacheTier:           "none",
+		ServedStale:         false,
+		RevalidationStarted: false,
+		MissReason:          "not_found",
 	}
 
 	if r.cacheRepo != nil {
 		payload, _ := json.Marshal(ctxOut)
-		expires := time.Now().Add(24 * time.Hour)
+		expires := time.Now().Add(30 * 24 * time.Hour)
 		sourceIDs, _ := json.Marshal(noteIDs(selectedNotes))
 		promptHash := sha256.Sum256([]byte(systemPrompt))
-		_ = r.cacheRepo.Upsert(ctx, &store.ContextCacheEntry{
+		entry := &store.ContextCacheEntry{
 			ID:            fmt.Sprintf("cc-%x", time.Now().UnixNano()),
 			ProfileID:     profileID,
 			CacheKey:      cacheKey,
 			Payload:       string(payload),
 			SourceNoteIDs: string(sourceIDs),
 			PromptVersion: fmt.Sprintf("prompt:%x", promptHash),
-			StateVersion:  summaryID,
+			StateVersion:  notesHash,
 			CreatedAt:     time.Now().UTC(),
 			ExpiresAt:     &expires,
-		})
+		}
+		_ = r.cacheRepo.Upsert(ctx, entry)
+		r.putL1(cacheKey, entry)
 	}
+	if ctxOut.MissReason == "" {
+		ctxOut.MissReason = "rebuild"
+	}
+	r.diag.RecordMiss(ctxOut.MissReason, time.Since(start))
 
 	return ctxOut, nil
 }
@@ -258,10 +281,82 @@ func AssemblePrompt(systemPrompt, sessionSummary, memoryBlock string) string {
 	return strings.Join(parts, "\n")
 }
 
-func cacheKeyFor(profileID, systemPrompt, summaryID string, tokenBudget int) string {
-	buf := fmt.Appendf(nil, "%s::%s::%s::%d", profileID, systemPrompt, summaryID, tokenBudget)
+func cacheKeyFor(profileID, systemPrompt, notesHash string, tokenBudget int, embeddingModel string) string {
+	buf := fmt.Appendf(nil, "%s::%s::%s::%d::%s", profileID, systemPrompt, notesHash, tokenBudget, embeddingModel)
 	hash := sha256.Sum256(buf)
 	return fmt.Sprintf("ctx:%x", hash)
+}
+
+func (r *Retrieval) getCached(ctx context.Context, profileID, cacheKey string) (*store.ContextCacheEntry, string, bool, bool) {
+	now := time.Now()
+	if entry := r.getL1(cacheKey); entry != nil {
+		if entry.ExpiresAt == nil || entry.ExpiresAt.After(now) {
+			return entry, "l1", false, false
+		}
+		if entry.ExpiresAt.After(now.Add(-5 * time.Minute)) {
+			go r.revalidate(profileID, cacheKey)
+			return entry, "l1", true, true
+		}
+		r.deleteL1(cacheKey)
+	}
+	if r.cacheRepo != nil {
+		cached, err := r.cacheRepo.Get(ctx, profileID, cacheKey)
+		if err == nil && cached != nil {
+			if cached.ExpiresAt == nil || cached.ExpiresAt.After(now) {
+				r.putL1(cacheKey, cached)
+				return cached, "l2", false, false
+			}
+			if cached.ExpiresAt.After(now.Add(-5 * time.Minute)) {
+				r.putL1(cacheKey, cached)
+				go r.revalidate(profileID, cacheKey)
+				return cached, "l2", true, true
+			}
+			_ = r.cacheRepo.Invalidate(ctx, profileID, cacheKey)
+		}
+	}
+	return nil, "none", false, false
+}
+
+func (r *Retrieval) revalidate(profileID, cacheKey string) {
+	// non-blocking placeholder: ensure next request rebuilds fresh state
+	r.deleteL1(cacheKey)
+}
+
+func (r *Retrieval) getL1(cacheKey string) *store.ContextCacheEntry {
+	r.l1mu.RLock()
+	defer r.l1mu.RUnlock()
+	return r.l1[cacheKey]
+}
+
+func (r *Retrieval) putL1(cacheKey string, e *store.ContextCacheEntry) {
+	r.l1mu.Lock()
+	defer r.l1mu.Unlock()
+	r.l1[cacheKey] = e
+}
+
+func (r *Retrieval) deleteL1(cacheKey string) {
+	r.l1mu.Lock()
+	defer r.l1mu.Unlock()
+	delete(r.l1, cacheKey)
+}
+
+// CacheDiagnostics returns aggregated cache metrics for retrieval behavior.
+func (r *Retrieval) CacheDiagnostics() cache.Snapshot {
+	if r.diag == nil {
+		return cache.Snapshot{}
+	}
+	return r.diag.Snapshot()
+}
+
+// hashNoteIDs creates a stable hash of note IDs for cache key generation.
+// Sorts IDs first to ensure consistent hashing regardless of order.
+func hashNoteIDs(ids []string) string {
+	sort.Strings(ids)
+	h := sha256.New()
+	for _, id := range ids {
+		h.Write([]byte(id))
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func noteIDs(notes []*store.MemoryNote) []string {

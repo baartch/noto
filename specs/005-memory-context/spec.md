@@ -22,6 +22,14 @@
 - Q: How many notes should extraction return? → A: No fixed count; extract all meaningful notes above quality threshold.
 - Q: Where should the system prompt be stored? → A: Profile-local Markdown file in `<profile>/prompts`, not in SQLite.
 
+### Session 2026-05-18
+
+- Q: What dimensions must define context-cache identity? → A: Cache identity includes profile, prompt, notes hash, token budget, and embedding model.
+- Q: How should slightly stale cache entries be handled? → A: Serve immediately, then refresh in the background.
+- Q: Which events should invalidate or stale cache entries? → A: Note create/update/delete, system prompt changes, token budget changes, and embedding model changes.
+- Q: What cache layers are required? → A: Two-level cache with process-local fast cache plus persistent cross-session cache.
+- Q: What diagnostics are required? → A: Track hit/miss rate, average rebuild time, and top miss reasons.
+
 ## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Relevant Memory Context (Priority: P1)
@@ -46,33 +54,37 @@ As a user, I want Noto to add only the most relevant notes to the context so tha
 
 ---
 
-### User Story 2 - Persistent Context Across Sessions (Priority: P2)
+### User Story 2 - Fast and Correct Cache Reuse (Priority: P2)
 
-As a user, I want context retrieval to persist across restarts so that memory behavior is consistent between sessions.
+As a user, I want context retrieval to be fast while still reflecting configuration and note changes, so responses stay snappy and accurate.
 
-**Why this priority**: Persisted context avoids reprocessing and keeps memory continuity intact.
+**Why this priority**: Cache quality directly impacts perceived latency and trust in retrieved memory context.
 
-**Independent Test**: Restart the app and verify that context retrieval reuses stored notes and index state without reinitialization.
+**Independent Test**: Run repeated chat turns across profile reopen/restart and verify immediate reuse for valid entries, stale-while-revalidate behavior for slightly stale entries, and refresh when invalidation events occur.
 
 **Acceptance Scenarios**:
 
-1. **Given** a profile with notes and an index, **When** the app restarts, **Then** retrieval uses the existing index without re-importing notes.
-2. **Given** context cache entries exist, **When** the profile is reopened, **Then** the cache is reused until invalidated.
+1. **Given** a cache entry exists for the same profile, prompt, notes hash, token budget, and embedding model, **When** context is requested, **Then** the system returns the cached result.
+2. **Given** a cache entry is slightly stale but otherwise valid, **When** context is requested, **Then** the system serves the stale entry immediately and starts a background refresh.
+3. **Given** a cache entry is refreshed in the background, **When** the next request arrives, **Then** the newer entry is returned.
+4. **Given** a profile is reopened after restart, **When** a matching entry exists, **Then** context retrieval uses the persistent cache without a full rebuild.
+5. **Given** repeated requests occur within one runtime session, **When** matching data is requested, **Then** the fastest cache tier is used before persistent lookup.
 
 ---
 
-### User Story 3 - Automatic Context Maintenance (Priority: P2)
+### User Story 3 - Observable Cache Health (Priority: P3)
 
-As a maintainer, I want context maintenance (index updates, compaction) to run automatically so that memory relevance stays accurate without manual intervention.
+As a maintainer, I want diagnostics for cache behavior so I can quickly identify why retrieval slows down or rebuilds too often.
 
-**Why this priority**: Automatic maintenance reduces operational overhead and keeps memory reliable.
+**Why this priority**: Visibility into hit quality and miss causes enables effective tuning and avoids blind troubleshooting.
 
-**Independent Test**: Add notes, trigger retrieval, and confirm the index is updated or compacted when required.
+**Independent Test**: Trigger a mix of hits/misses and invalidation events, then verify diagnostics expose hit/miss rates, average rebuild time, and ranked miss reasons.
 
 **Acceptance Scenarios**:
 
-1. **Given** new notes are created, **When** they are stored, **Then** the vector index is updated automatically.
-2. **Given** the index is out of date or too large, **When** retrieval runs, **Then** the system compacts/rebuilds the index without manual commands.
+1. **Given** context requests are processed, **When** diagnostics are viewed, **Then** hit and miss rates are shown for the observed window.
+2. **Given** cache rebuilds occur, **When** diagnostics are viewed, **Then** average rebuild time is reported.
+3. **Given** misses happen for different causes, **When** diagnostics are viewed, **Then** top miss reasons are listed (for example, notes changed or prompt changed).
 
 ---
 
@@ -83,6 +95,9 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 - If note volume exceeds configured limits, the system truncates by relevance and recency.
 - If extractor output is not valid JSON or misses required per-note fields, the system rejects extraction output and logs a warning.
 - If `<profile>/prompts/system.md` or `<profile>/prompts/extractor.md` is missing, the system auto-bootstraps defaults and emits a visible warning (non-fatal).
+- If the embedding model is changed, prior cache entries are not reused for retrieval decisions.
+- If multiple invalidation events happen during an in-flight background refresh, the refresh result is discarded unless it matches the newest cache identity.
+- If diagnostics storage is reset or unavailable, retrieval continues and diagnostics resume from the next successful sample.
 
 ## Requirements _(mandatory)_
 
@@ -113,6 +128,18 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 - **FR-023**: The extractor JSON response MUST include top-level `has_new_info` as a boolean (`true|false`).
 - **FR-024**: The extractor JSON response MUST include top-level `confidence` as a float in the range `0.0..1.0`.
 - **FR-025**: If `<profile>/prompts/system.md` or `<profile>/prompts/extractor.md` is missing, the system MUST auto-create the missing file with defaults and emit a visible warning without failing the flow.
+- **FR-026**: Cache identity MUST include all of the following inputs: profile, system prompt content (or equivalent prompt identity), notes hash, token budget, and embedding model.
+- **FR-027**: The system MUST NOT return a cache hit when any cache identity input differs from the original entry inputs.
+- **FR-028**: If a cache entry is slightly stale and still structurally valid, the system MUST return it immediately and trigger asynchronous revalidation.
+- **FR-029**: Asynchronous revalidation MUST update cache contents for subsequent requests without blocking the current request.
+- **FR-030**: The system MUST invalidate or mark cache entries stale when notes are created, updated, or deleted.
+- **FR-031**: The system MUST invalidate or mark cache entries stale when the system prompt changes.
+- **FR-032**: The system MUST invalidate or mark cache entries stale when the token budget changes.
+- **FR-033**: The system MUST invalidate or mark cache entries stale when the embedding model changes.
+- **FR-034**: The system MUST support two cache layers: a fast in-session cache and a persistent cross-session cache.
+- **FR-035**: The system MUST check the in-session cache before persistent cache for retrieval requests.
+- **FR-036**: The system MUST record cache diagnostics including hit rate, miss rate, and average rebuild time.
+- **FR-037**: The system MUST record and expose the most frequent cache miss reasons.
 
 ### Non-Functional Requirements _(mandatory)_
 
@@ -125,7 +152,9 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 
 - **Memory Note**: A stored fact/progress/action item used for context retrieval.
 - **Vector Index**: Persistent index used to rank notes by relevance.
-- **Context Cache**: Stored assembled prompt context with expiration.
+- **Context Cache**: Stored assembled prompt context with freshness state and identity inputs.
+- **Cache Identity**: The set of request-affecting inputs used to determine whether a cached context is safe to reuse.
+- **Cache Diagnostics Snapshot**: Aggregated cache health metrics including hit/miss rates, rebuild timing, and miss-reason ranking.
 
 ## Success Criteria _(mandatory)_
 
@@ -141,9 +170,15 @@ As a maintainer, I want context maintenance (index updates, compaction) to run a
 - **SC-008**: 100% of accepted extraction payloads conform to the JSON schema (`notes[]`, per-note `action`, `target_id` for updates, valid category).
 - **SC-009**: 100% of accepted extraction payloads include valid `has_new_info` (boolean) and `confidence` (0.0..1.0).
 - **SC-010**: 100% of missing prompt-file cases (`system.md`/`extractor.md`) auto-bootstrap defaults and emit a visible warning while continuing operation.
+- **SC-011**: At least 90% of eligible repeated requests within a session are served from cache without full rebuild.
+- **SC-012**: For slightly stale entries, users receive an immediate response and refreshed data is available by the next request in at least 95% of sampled cases.
+- **SC-013**: 100% of note changes, prompt changes, token budget changes, and embedding model changes trigger cache stale/invalidation behavior before next retrieval.
+- **SC-014**: Diagnostics surface top miss reasons with counts, covering at least 95% of miss events in the reporting window.
 
 ## Assumptions
 
 - Note extraction continues to use the current LLM-based extractor.
 - Vector index storage is local to the profile directory.
 - Relevance ranking uses embeddings from the configured provider.
+- “Slightly stale” uses an existing freshness window policy and does not require user intervention.
+- Cache diagnostics are accessible to maintainers through existing observability surfaces for the feature area.

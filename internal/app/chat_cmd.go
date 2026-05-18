@@ -114,7 +114,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 	activeModel := ""
 	extractorModel := ""
 	extractorFallback := false
-	cacheStatus := "cache: n/a"
+	cacheStatus := "ctx:n/a"
 	inputHistory := loadInputHistory(ctx, profileDB, activeProfile.ID)
 	startupMessages, startupHistoryErr := loadStartupConversationMessages(ctx, profileDB, activeProfile.ID)
 	embeddingModelMissing := false
@@ -185,6 +185,11 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			func() {
 				if prog != nil {
 					prog.Send(tui.NotesSaving())
+				}
+			},
+			func(status string) {
+				if prog != nil {
+					prog.Send(tui.CacheStatusUpdated(status))
 				}
 			},
 			func(u provider.Usage) {
@@ -280,7 +285,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			activeModel = ""
 			extractorModel = ""
 			embeddingModel = ""
-			cacheStatus = "cache: n/a"
+			cacheStatus = "ctx:n/a"
 			providerFn = nil
 			listModelsFn = nil
 			listEmbeddingsFn = nil
@@ -334,6 +339,11 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					func() {
 						if prog != nil {
 							prog.Send(tui.NotesSaving())
+						}
+					},
+					func(status string) {
+						if prog != nil {
+							prog.Send(tui.CacheStatusUpdated(status))
 						}
 					},
 					func(u provider.Usage) {

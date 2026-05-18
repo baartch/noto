@@ -21,7 +21,7 @@ func newTestModel(listModels func(context.Context) ([]provider.ModelInfo, error)
 		"main-model",
 		"extractor-model",
 		"embeddings-model",
-		"ctx:hit",
+		"ctx:l1-hit",
 		"↑0 ↓0 cr:0 cw:0 $0.000",
 		false,
 		false,

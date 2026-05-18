@@ -67,6 +67,9 @@ func NotesSaving() tea.Msg { return notesSavingMsg{} }
 // StatsUpdated returns a tea.Msg that updates the token/cost status in the footer.
 func StatsUpdated(formatted string) tea.Msg { return statsUpdatedMsg{formatted: formatted} }
 
+// CacheStatusUpdated updates the ctx status badge in the footer.
+func CacheStatusUpdated(formatted string) tea.Msg { return cacheStatusUpdatedMsg{formatted: formatted} }
+
 // UpdateAvailableNotice shows a transient update warning in the footer.
 func UpdateAvailableNotice(formatted string) tea.Msg { return updateNoticeMsg{formatted: formatted} }
 
@@ -136,6 +139,7 @@ type editorFinishedMsg struct {
 	onSave func() error
 }
 type statsUpdatedMsg struct{ formatted string }
+type cacheStatusUpdatedMsg struct{ formatted string }
 type updateNoticeMsg struct{ formatted string }
 type usageUpdatedMsg struct {
 	usage  provider.Usage
@@ -823,6 +827,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// ---- stats update -------------------------------------------------------
 	case statsUpdatedMsg:
 		m.tokenStatus = msg.formatted
+
+	case cacheStatusUpdatedMsg:
+		m.cacheStatus = msg.formatted
 
 	case updateNoticeMsg:
 		m.updateNotice = msg.formatted

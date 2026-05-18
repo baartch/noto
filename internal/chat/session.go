@@ -24,8 +24,6 @@ const (
 	// recentHistoryMessages is the number of messages from the most recent
 	// previous conversation to prepend to context on session start.
 	recentHistoryMessages = 20
-	// vectorTopK is the number of vector results to fetch for context.
-	vectorTopK = 6
 )
 
 // NotesCallback is called after extraction completes.
@@ -34,6 +32,9 @@ type NotesCallback func(saved, updated int)
 // NotesSavingCallback is called when extraction starts.
 type NotesSavingCallback func()
 
+// ContextStatusCallback is called when context status changes.
+type ContextStatusCallback func(status string)
+
 // Session manages a single chat session.
 type Session struct {
 	profileID      string
@@ -41,6 +42,10 @@ type Session struct {
 	conversationID string
 	systemPrompt   string
 	cacheHit       bool
+	cacheTier      string
+	cacheStale     bool
+	cacheReval     bool
+	cacheMiss      string
 
 	convRepo          *store.ConversationRepo
 	msgRepo           *store.MessageRepo
@@ -48,6 +53,7 @@ type Session struct {
 	cacheRepo         *store.ContextCacheRepo
 	summaryRepo       *store.SessionSummaryRepo
 	adapter           provider.Adapter
+	retrieval         *memory.Retrieval
 	extractor         *memory.Extractor
 	extractorAdapter  provider.Adapter
 	logger            observe.Logger
@@ -71,10 +77,11 @@ type Session struct {
 	// grows with messages from the current session.
 	history []*store.Message
 
-	onNotes       NotesCallback
-	onNotesSaving NotesSavingCallback
-	stats         provider.Stats
-	onUsage       func(provider.Usage)
+	onNotes         NotesCallback
+	onNotesSaving   NotesSavingCallback
+	onContextStatus ContextStatusCallback
+	stats           provider.Stats
+	onUsage         func(provider.Usage)
 }
 
 // NewSession creates a new conversation, assembles the system prompt with
@@ -94,6 +101,7 @@ func NewSession(
 	logger observe.Logger,
 	onNotes NotesCallback,
 	onNotesSaving NotesSavingCallback,
+	onContextStatus ContextStatusCallback,
 	onUsage func(provider.Usage),
 ) (*Session, error) {
 	// Build system prompt with injected memory notes + session summary.
@@ -129,6 +137,7 @@ func NewSession(
 	if err != nil {
 		return nil, fmt.Errorf("session: assemble context: %w", err)
 	}
+	logger.Infof("context retrieval: tier=%s hit=%t stale=%t revalidate=%t miss_reason=%s", rc.CacheTier, rc.CacheHit, rc.ServedStale, rc.RevalidationStarted, rc.MissReason)
 
 	// Load recent messages from the previous conversation for context continuity.
 	recentHistory, err := loadRecentHistory(ctx, profileID, convRepo, msgRepo)
@@ -161,6 +170,11 @@ func NewSession(
 		conversationID:    convID,
 		systemPrompt:      rc.AssembledPrompt,
 		cacheHit:          rc.CacheHit,
+		cacheTier:         rc.CacheTier,
+		cacheStale:        rc.ServedStale,
+		cacheReval:        rc.RevalidationStarted,
+		cacheMiss:         rc.MissReason,
+		retrieval:         ret,
 		convRepo:          convRepo,
 		msgRepo:           msgRepo,
 		noteRepo:          noteRepo,
@@ -173,6 +187,7 @@ func NewSession(
 		history:           recentHistory,
 		onNotes:           onNotes,
 		onNotesSaving:     onNotesSaving,
+		onContextStatus:   onContextStatus,
 		onUsage:           onUsage,
 		backupStop:        make(chan struct{}),
 		pendingDone:       make(chan struct{}),
@@ -185,6 +200,9 @@ func NewSession(
 		extractorFallback: extractorAdapter == nil && adapter != nil,
 		embeddingModel:    embeddingModel,
 		missingEmbedding:  embeddingModel == "",
+	}
+	if s.onContextStatus != nil {
+		s.onContextStatus(s.CacheStatus())
 	}
 	if profileSlug != "" {
 		s.startBackupTicker()
@@ -215,18 +233,38 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	}
 	s.history = append(s.history, userMsgRec)
 
-	// Build provider request.
+	// Inject current date/time into user message for LLM awareness
+	injectedMsg := injectDateTime(userMsg)
+
+	// Build provider request from retrieval cache/context each turn.
 	systemPrompt := s.systemPrompt
-	if s.adapter != nil {
-		if notes, err := s.relevantNotes(ctx, userMsg); err == nil && len(notes) > 0 {
-			memoryBlock := memory.BuildMemoryBlock(notes)
-			systemPrompt = memory.AssemblePrompt(s.baseSystemPrompt, s.sessionSummary, memoryBlock)
+	if s.retrieval != nil {
+		rc, err := s.retrieval.Assemble(ctx, s.profileID, s.baseSystemPrompt)
+		if err != nil {
+			s.logger.Errorf("context retrieval (turn) failed: %v", err)
+		} else {
+			systemPrompt = rc.AssembledPrompt
+			s.systemPrompt = rc.AssembledPrompt
+			s.cacheHit = rc.CacheHit
+			s.cacheTier = rc.CacheTier
+			s.cacheStale = rc.ServedStale
+			s.cacheReval = rc.RevalidationStarted
+			s.cacheMiss = rc.MissReason
+			s.logger.Infof("context retrieval (turn): tier=%s hit=%t stale=%t revalidate=%t miss_reason=%s", rc.CacheTier, rc.CacheHit, rc.ServedStale, rc.RevalidationStarted, rc.MissReason)
 		}
+	}
+	if s.onContextStatus != nil {
+		s.onContextStatus(s.CacheStatus())
 	}
 	msgs := make([]provider.Message, 0, len(s.history)+1)
 	msgs = append(msgs, provider.Message{Role: "system", Content: systemPrompt})
-	for _, m := range s.history {
-		msgs = append(msgs, provider.Message{Role: string(m.Role), Content: m.Content})
+	for i, m := range s.history {
+		content := m.Content
+		// Use injected message for the most recent user message
+		if m.Role == store.RoleUser && i == len(s.history)-1 {
+			content = injectedMsg
+		}
+		msgs = append(msgs, provider.Message{Role: string(m.Role), Content: content})
 	}
 
 	resp, err := s.adapter.Complete(ctx, provider.CompletionRequest{
@@ -267,88 +305,6 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 
 // Stats returns a snapshot of current session usage stats.
 func (s *Session) Stats() provider.Stats { return s.stats }
-
-func (s *Session) relevantNotes(ctx context.Context, userMsg string) ([]*store.MemoryNote, error) {
-	if s.adapter == nil || s.noteRepo == nil || s.vectorIndex == nil {
-		return nil, nil
-	}
-	if s.embeddingModel == "" {
-		s.missingEmbedding = true
-		return nil, nil
-	}
-	embedResp, err := s.adapter.Embed(ctx, provider.EmbeddingRequest{Input: userMsg, Model: s.embeddingModel})
-	if err != nil {
-		return nil, fmt.Errorf("session: embed query: %w", err)
-	}
-	if s.onUsage != nil {
-		s.onUsage(embedResp.Usage)
-	}
-
-	manifestRepo := store.NewVectorManifestRepo(s.db)
-	entries, err := manifestRepo.ListEntries(ctx, s.profileID)
-	if err != nil {
-		return nil, fmt.Errorf("session: list vector entries: %w", err)
-	}
-	vectorEntries := make([]vector.Entry, 0, len(entries))
-	for _, e := range entries {
-		vectorEntries = append(vectorEntries, vector.Entry{
-			ID:             e.ID,
-			ProfileID:      e.ProfileID,
-			SourceType:     vector.SourceType(e.SourceType),
-			SourceID:       e.SourceID,
-			ChunkHash:      e.ChunkHash,
-			EmbeddingModel: e.EmbeddingModel,
-			EmbeddingDim:   e.EmbeddingDim,
-			VectorRef:      e.VectorRef,
-		})
-	}
-	fileIndex, ok := s.vectorIndex.(*vector.FileIndex)
-	if ok {
-		fileIndex.WithProfile(s.profileID)
-		fileIndex.SeedEntries(vectorEntries)
-		if err := fileIndex.Load(); err != nil {
-			if errors.Is(err, vector.ErrIndexNotFound) || errors.Is(err, vector.ErrIndexCorrupted) {
-				s.logger.Infof("vector index issue: %v", err)
-				return nil, nil
-			}
-			return nil, err
-		}
-	}
-
-	retrieval := vector.NewHybridRetrieval(s.vectorIndex, noteLister{repo: s.noteRepo}, s.profileID)
-	results, err := retrieval.Retrieve(ctx, embedResp.Embedding, vectorTopK)
-	if err != nil {
-		return nil, err
-	}
-
-	noteList, err := s.noteRepo.ListByProfile(ctx, s.profileID)
-	if err != nil {
-		return nil, err
-	}
-
-	rankedIDs := make([]string, 0, len(results))
-	for _, res := range results {
-		rankedIDs = append(rankedIDs, res.Note.ID)
-	}
-	selected := memory.SelectNotesForContext(noteList, rankedIDs, s.memoryTokenBudget)
-	return selected, nil
-}
-
-type noteLister struct {
-	repo *store.MemoryNoteRepo
-}
-
-func (n noteLister) ListByProfile(ctx context.Context, profileID string) ([]vector.MemoryNoteRecord, error) {
-	notes, err := n.repo.ListByProfile(ctx, profileID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]vector.MemoryNoteRecord, 0, len(notes))
-	for _, note := range notes {
-		out = append(out, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
-	}
-	return out, nil
-}
 
 // extractAsync runs note extraction and calls onNotes when done.
 func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote) error {
@@ -531,13 +487,25 @@ func (s *Session) SetExtractorModel(model string) {
 	s.extractorFallback = false
 }
 
-// CacheStatus returns a short label for the footer showing whether the
-// memory context was served from cache or rebuilt from SQLite at startup.
+// CacheStatus returns a short label for the footer showing current context state.
 func (s *Session) CacheStatus() string {
-	if s.cacheHit {
-		return "ctx:hit"
+	if s.cacheStale && s.cacheReval {
+		return "ctx:swr"
 	}
-	return "ctx:miss"
+	if s.cacheHit {
+		switch s.cacheTier {
+		case "l1":
+			return "ctx:l1-hit"
+		case "l2":
+			return "ctx:l2-hit"
+		default:
+			return "ctx:hit"
+		}
+	}
+	if s.cacheMiss == "" || s.cacheMiss == "not_found" {
+		return "ctx:rebuild"
+	}
+	return "ctx:miss(" + s.cacheMiss + ")"
 }
 
 // ExtractorFallbackActive reports whether extraction is using the main model.
@@ -744,4 +712,12 @@ func (h *sessionLogHook) NoteStorageFailed(candidate memory.NoteCandidate, err e
 
 func (h *sessionLogHook) ExtractionPayloadRejected(reason string) {
 	h.logger.Errorf("memory: extraction rejected: %s", reason)
+}
+
+// injectDateTime prepends the current date and time to the user message
+// so the LLM is aware of temporal context.
+func injectDateTime(userMsg string) string {
+	now := time.Now()
+	dateTime := now.Format("Monday, January 2, 2006 at 3:04 PM MST")
+	return fmt.Sprintf("[Current datetime: %s]\n\n%s", dateTime, userMsg)
 }

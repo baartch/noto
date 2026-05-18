@@ -1,5 +1,12 @@
 # Release notes
 
+## 0.4.0
+
+May 18, 2026
+
+- Improve context management with better caching handling
+- Inject date/time into user prompt for the LLMs date awareness
+
 ## 0.3.0
 
 May 10, 2026
