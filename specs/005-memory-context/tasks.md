@@ -40,7 +40,7 @@
 - [ ] T012 [P] Add unit tests for timeline period calculation and zero-window behavior in /home/andy/gitrepos/noto/tests/unit/memory/timeline_test.go
 - [ ] T013 [P] Add unit tests for provider model metadata parsing (`context_length`, tool support) in /home/andy/gitrepos/noto/tests/unit/provider/models_test.go
 - [ ] T014 [P] Add unit tests for provider tool-calling request/response normalization and invalid tool payload handling in /home/andy/gitrepos/noto/tests/unit/provider/tool_calling_test.go
-- [ ] T015 [P] Add unit tests for timeline settings serialization covering arbitrary raw-note day values greater than 0, bounded monthly windows, and `all_remaining` sentinel values in /home/andy/gitrepos/noto/tests/unit/memory/timeline_settings_test.go
+- [ ] T015 [P] Add unit tests for timeline settings serialization and validation covering arbitrary raw-note day values greater than 0, weekly-summary week values greater than 0, rejection of zero weekly/monthly summary values, bounded monthly windows greater than 0, and `all_remaining` sentinel values in /home/andy/gitrepos/noto/tests/unit/memory/timeline_settings_test.go
 
 **Checkpoint**: Foundation ready — user story implementation can begin.
 
@@ -57,7 +57,7 @@
 - [ ] T016 [P] [US1] Add retrieval tests for configured raw-day, weekly-week, and monthly-summary windows plus preceding-Monday fill behavior, weekly-to-monthly no-gap coverage, and boundary-cutover rules in /home/andy/gitrepos/noto/tests/unit/memory/retrieval_timeline_test.go
 - [ ] T017 [P] [US1] Add integration test for timeline-based context assembly across multi-month history in /home/andy/gitrepos/noto/tests/integration/memory/timeline_context_test.go
 - [ ] T018 [P] [US1] Add integration test proving conversation summaries are excluded from assembled context in /home/andy/gitrepos/noto/tests/integration/memory/no_session_summary_test.go
-- [ ] T019 [P] [US1] Add integration test for zero-value layers, bounded monthly-summary windows, and exclusion of history older than the monthly cutoff in /home/andy/gitrepos/noto/tests/integration/memory/timeline_settings_edges_test.go
+- [ ] T019 [P] [US1] Add integration test for bounded monthly-summary windows, rejection of zero weekly/monthly summary settings, and exclusion of history older than the monthly cutoff in /home/andy/gitrepos/noto/tests/integration/memory/timeline_settings_edges_test.go
 
 ### Implementation for User Story 1
 
@@ -130,16 +130,17 @@
 
 ### Tests for User Story 4
 
-- [ ] T044 [P] [US4] Add unit tests for cache identity including timeline settings and summary state in /home/andy/gitrepos/noto/tests/unit/memory/retrieval_cache_identity_timeline_test.go
+- [ ] T044 [P] [US4] Add unit tests for cache identity including timeline settings and summary state, plus internal token-fitting reduction order that drops oldest monthly-summary coverage first, in /home/andy/gitrepos/noto/tests/unit/memory/retrieval_cache_identity_timeline_test.go
 - [ ] T045 [P] [US4] Add integration test for timeline-settings invalidation, including live in-session settings updates, and persistent cache reuse in /home/andy/gitrepos/noto/tests/integration/memory/timeline_cache_invalidation_test.go
 - [ ] T046 [P] [US4] Add integration test for summary-state-driven cache invalidation and miss-reason classification in /home/andy/gitrepos/noto/tests/integration/memory/summary_cache_invalidation_test.go
 
 ### Implementation for User Story 4
 
 - [ ] T047 [US4] Extend cache key construction with raw-note day settings, weekly-summary week settings, monthly-summary month settings, and assembled summary state in /home/andy/gitrepos/noto/internal/memory/retrieval.go
-- [ ] T048 [US4] Invalidate or stale cache entries on timeline-setting changes, including live in-session updates, in /home/andy/gitrepos/noto/internal/cache/invalidation.go and /home/andy/gitrepos/noto/internal/app/chat_cmd.go
-- [ ] T049 [US4] Invalidate or stale cache entries on summary artifact changes and classify corresponding miss reasons in /home/andy/gitrepos/noto/internal/cache/invalidation.go and /home/andy/gitrepos/noto/internal/memory/summary_rollups.go
-- [ ] T050 [US4] Preserve L1→L2 and stale-while-revalidate behavior under timeline retrieval in /home/andy/gitrepos/noto/internal/memory/retrieval.go and /home/andy/gitrepos/noto/internal/cache/service.go
+- [ ] T048 [US4] Remove user-facing token-budget configuration paths while preserving internal token fitting safeguards, including dropping the oldest monthly-summary coverage first when assembled context must be reduced before touching newer timeline layers, in /home/andy/gitrepos/noto/internal/app/chat_cmd.go and /home/andy/gitrepos/noto/internal/memory/retrieval.go
+- [ ] T049 [US4] Invalidate or stale cache entries on timeline-setting changes, including live in-session updates, in /home/andy/gitrepos/noto/internal/cache/invalidation.go and /home/andy/gitrepos/noto/internal/app/chat_cmd.go
+- [ ] T050 [US4] Invalidate or stale cache entries on summary artifact changes and classify corresponding miss reasons in /home/andy/gitrepos/noto/internal/cache/invalidation.go and /home/andy/gitrepos/noto/internal/memory/summary_rollups.go
+- [ ] T051 [US4] Preserve L1→L2 and stale-while-revalidate behavior under timeline retrieval in /home/andy/gitrepos/noto/internal/memory/retrieval.go and /home/andy/gitrepos/noto/internal/cache/service.go
 
 **Checkpoint**: User Story 4 should maintain fast reuse without incorrect hits.
 
@@ -153,18 +154,18 @@
 
 ### Tests for User Story 5
 
-- [ ] T051 [P] [US5] Add unit tests for footer token/context-capacity formatting and unknown-capacity fallback in /home/andy/gitrepos/noto/tests/unit/tui/footer_telemetry_test.go
-- [ ] T052 [P] [US5] Add integration test for footer updates after model metadata and usage changes in /home/andy/gitrepos/noto/tests/integration/tui/footer_context_capacity_test.go
-- [ ] T053 [P] [US5] Add integration test for rollup/tool/cache diagnostics visibility and miss-reason completeness in /home/andy/gitrepos/noto/tests/integration/memory/memory_diagnostics_test.go
+- [ ] T052 [P] [US5] Add unit tests for footer token/context-capacity formatting and unknown-capacity fallback in /home/andy/gitrepos/noto/tests/unit/tui/footer_telemetry_test.go
+- [ ] T053 [P] [US5] Add integration test for footer updates after model metadata and usage changes in /home/andy/gitrepos/noto/tests/integration/tui/footer_context_capacity_test.go
+- [ ] T054 [P] [US5] Add integration test for rollup/tool/cache diagnostics visibility and miss-reason completeness in /home/andy/gitrepos/noto/tests/integration/memory/memory_diagnostics_test.go
 
 ### Implementation for User Story 5
 
-- [ ] T054 [US5] Extend provider model listing to parse and return `context_length` and supported tool parameters in /home/andy/gitrepos/noto/internal/provider/models.go
-- [ ] T055 [US5] Fetch/cache active model metadata during startup, profile switch, and model change flows in /home/andy/gitrepos/noto/internal/app/chat_cmd.go and /home/andy/gitrepos/noto/internal/chat/session.go
-- [ ] T056 [US5] Propagate active model context maximum into session stats in /home/andy/gitrepos/noto/internal/provider/stats.go and /home/andy/gitrepos/noto/internal/chat/session.go
-- [ ] T057 [US5] Update footer token/status rendering to show max context and used percentage next to tokens in /home/andy/gitrepos/noto/internal/tui/footer_view.go and /home/andy/gitrepos/noto/internal/tui/model.go
-- [ ] T058 [US5] Add unknown-capacity footer fallback behavior in /home/andy/gitrepos/noto/internal/tui/footer_view.go
-- [ ] T059 [US5] Extend diagnostics reporting with recent rollup activity, tool-call outcomes, timeline/summary miss-reason completeness, and bounded monthly-cutoff exclusion visibility in /home/andy/gitrepos/noto/internal/memory/retrieval.go and /home/andy/gitrepos/noto/internal/chat/pipeline.go
+- [ ] T055 [US5] Extend provider model listing to parse and return `context_length` and supported tool parameters in /home/andy/gitrepos/noto/internal/provider/models.go
+- [ ] T056 [US5] Fetch/cache active model metadata during startup, profile switch, and model change flows in /home/andy/gitrepos/noto/internal/app/chat_cmd.go and /home/andy/gitrepos/noto/internal/chat/session.go
+- [ ] T057 [US5] Propagate active model context maximum into session stats in /home/andy/gitrepos/noto/internal/provider/stats.go and /home/andy/gitrepos/noto/internal/chat/session.go
+- [ ] T058 [US5] Update footer token/status rendering to show max context and used percentage next to tokens in /home/andy/gitrepos/noto/internal/tui/footer_view.go and /home/andy/gitrepos/noto/internal/tui/model.go
+- [ ] T059 [US5] Add unknown-capacity footer fallback behavior in /home/andy/gitrepos/noto/internal/tui/footer_view.go
+- [ ] T060 [US5] Extend diagnostics reporting with recent rollup activity, tool-call outcomes, timeline/summary miss-reason completeness, and bounded monthly-cutoff exclusion visibility in /home/andy/gitrepos/noto/internal/memory/retrieval.go and /home/andy/gitrepos/noto/internal/chat/pipeline.go
 
 **Checkpoint**: All user stories should now be independently functional.
 
@@ -174,9 +175,9 @@
 
 **Purpose**: Final cleanup, docs alignment, and full validation across all stories.
 
-- [ ] T060 [P] Update implementation-aligned notes in /home/andy/gitrepos/noto/specs/005-memory-context/data-model.md and /home/andy/gitrepos/noto/specs/005-memory-context/contracts/context-retrieval.md
-- [ ] T061 [P] Remove obsolete session-summary-specific comments or dead paths in /home/andy/gitrepos/noto/internal/memory/doc.go, /home/andy/gitrepos/noto/internal/chat/session.go, and /home/andy/gitrepos/noto/docs/CONTEXT_AT_A_GLANCE.txt
-- [ ] T062 Run full verification suite (`make fmt`, `make lint`, `make test`) and capture outcomes in /home/andy/gitrepos/noto/specs/005-memory-context/quickstart.md
+- [ ] T061 [P] Update implementation-aligned notes in /home/andy/gitrepos/noto/specs/005-memory-context/data-model.md and /home/andy/gitrepos/noto/specs/005-memory-context/contracts/context-retrieval.md
+- [ ] T062 [P] Remove obsolete session-summary-specific comments or dead paths in /home/andy/gitrepos/noto/internal/memory/doc.go, /home/andy/gitrepos/noto/internal/chat/session.go, and /home/andy/gitrepos/noto/docs/CONTEXT_AT_A_GLANCE.txt
+- [ ] T063 Run full verification suite (`make fmt`, `make lint`, `make test`) and capture outcomes in /home/andy/gitrepos/noto/specs/005-memory-context/quickstart.md
 
 ---
 
@@ -216,8 +217,8 @@
 - **US2**: T026–T028 can run in parallel; T031 and T033 can run in parallel
 - **US3**: T035–T038 can run in parallel; T039 and T040 can run in parallel
 - **US4**: T044–T046 can run in parallel; T048 and T049 can run in parallel
-- **US5**: T051–T053 can run in parallel; T057 and T058 can run in parallel
-- **Polish**: T060 and T061 can run in parallel before T062
+- **US5**: T052–T054 can run in parallel; T058 and T059 can run in parallel
+- **Polish**: T061 and T062 can run in parallel before T063
 
 ---
 
@@ -273,6 +274,12 @@ With multiple developers:
 
 - This task set focuses on the newly adjusted timeline-memory, tool-calling, cache, and footer-telemetry scope.
 - Legacy extraction and prompt-bootstrap requirements already implemented in the product are intentionally not re-tasked here.
+- Traceability by scope:
+  - US1 covers timeline window settings and default context assembly
+  - US2 covers weekly/monthly rollup generation, uniqueness, and regeneration
+  - US3 covers LLM memory search tools and tool-calling integration
+  - US4 covers cache identity, invalidation, and stale-while-revalidate behavior
+  - US5 covers diagnostics, model context metadata, and footer telemetry
 - All tasks use the required checklist format with checkbox, ID, optional `[P]`, story label where applicable, and exact file paths.
 - Tasks are specific enough to execute directly against the documented plan, contracts, and data model.
 - Automated tests are included because the constitution and plan explicitly require them.

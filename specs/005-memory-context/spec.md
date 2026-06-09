@@ -3,14 +3,12 @@
 **Feature Branch**: `005-memory-context`
 **Created**: 2026-04-10
 **Status**: Draft
-**Input**: User description: "Notes are stored in SQLite. Notes are extracted using the current logic. A vector index should be maintained to find notes easier. Notes should be added to the context by relevance. The context should be persistant between session restarts. The context should be maintained automatically and compacted it required." Updated with: "The provided context is not comprehensive enough. Currently the context is like docs/CONTEXT_AT_A_GLANCE.txt. Instead of having previous session summary and long-term memory notes, the context should include all notes from the last month, weekly summaries from the prior two months, and monthly summaries from every remaining month. Weekly and monthly summaries must be generated whenever a new week or month begins. Conversation summaries are no longer needed and should be removed. The LLM should also receive search tools: keyword-based vector search and time-range note search."
+**Input**: User description: "Notes are stored in SQLite. Notes are extracted using the current logic. A vector index should be maintained to find notes easier. Notes should be added to the context by relevance. The context should be persistant between session restarts. The context should be maintained automatically and compacted it required." Updated with: "The provided context is not comprehensive enough. Currently the context is like docs/CONTEXT_AT_A_GLANCE.txt. Instead of having previous session summary and long-term memory notes, the context should include all recent notes plus older weekly and monthly rollups, with weekly and monthly summaries generated whenever a new week or month begins. Conversation summaries are no longer needed and should be removed. The LLM should also receive search tools: keyword-based vector search and time-range note search."
 
 ## Clarifications
 
 ### Session 2026-04-10
 
-- Q: How should we limit injected notes? → A: Use a fixed token budget for relevance selection.
-- Q: What should the token budget be? → A: 1,500 tokens by default, adjustable via settings.
 - Q: How do users open settings? → A: Press `Ctrl+J` to open the settings dialog.
 - Q: What should the fallback ranking be when the vector index is unavailable? → A: Importance then recency.
 - Q: How should the vector index be generated/updated? → A: Incremental updates on note changes with periodic rebuild/compaction.
@@ -24,15 +22,15 @@
 
 ### Session 2026-05-18
 
-- Q: What dimensions must define context-cache identity? → A: Cache identity includes profile, prompt, notes hash, token budget, and embedding model.
+- Q: What dimensions must define context-cache identity? → A: Cache identity includes profile, prompt, assembled memory state, embedding model, and timeline window settings.
 - Q: How should slightly stale cache entries be handled? → A: Serve immediately, then refresh in the background.
-- Q: Which events should invalidate or stale cache entries? → A: Note create/update/delete, system prompt changes, token budget changes, and embedding model changes.
+- Q: Which events should invalidate or stale cache entries? → A: Note create/update/delete, system prompt changes, embedding model changes, timeline window setting changes, and summary-state changes.
 - Q: What cache layers are required? → A: Two-level cache with process-local fast cache plus persistent cross-session cache.
 - Q: What diagnostics are required? → A: Track hit/miss rate, average rebuild time, and top miss reasons.
 
 ### Session 2026-06-09
 
-- Q: What should replace previous-session summaries and long-term-memory note snippets in the assembled context? → A: A time-layered context consisting of all notes from the last month, weekly summaries covering the two months before that, and monthly summaries for all older months.
+- Q: What should replace previous-session summaries and long-term-memory note snippets in the assembled context? → A: A time-layered context consisting of recent raw notes, mid-range weekly summaries, and older monthly summaries according to the configured day/week/month windows.
 - Q: When should weekly and monthly summaries be created? → A: Automatically when the system enters a new week or a new month.
 - Q: Are conversation summaries still needed? → A: No, conversation summaries should be removed from the feature scope and from assembled context.
 - Q: What retrieval tools should be available to the LLM? → A: A keyword-based vector search tool and a time-range note search tool.
@@ -105,7 +103,7 @@ As a user, I want context retrieval to remain fast while still reflecting timeli
 
 **Acceptance Scenarios**:
 
-1. **Given** a cache entry exists for the same profile, prompt, selected memory state, token budget, and embedding model, **When** context is requested, **Then** the system returns the cached result.
+1. **Given** a cache entry exists for the same profile, prompt, selected memory state, timeline window settings, and embedding model, **When** context is requested, **Then** the system returns the cached result.
 2. **Given** a cache entry is slightly stale but otherwise valid, **When** context is requested, **Then** the system serves the stale entry immediately and starts a background refresh.
 3. **Given** summary rollups or note changes alter the assembled timeline context, **When** the next retrieval occurs, **Then** the prior cache entry is not reused as a valid hit.
 4. **Given** a profile is reopened after restart, **When** a matching entry exists, **Then** context retrieval uses the persistent cache without a full rebuild.
@@ -132,16 +130,17 @@ As a maintainer, I want diagnostics for context assembly, rollups, and retrieval
 
 - If no notes exist for the configured raw-note day window, the recent-notes section is omitted without creating placeholder noise.
 - If the configured number of monthly-summary months is limited instead of set to all remaining months, older history outside that configured window is excluded from the assembled default context.
-- If users configure zero months for one or more timeline layers, the system skips that layer and applies the remaining configured layers in order without failing context assembly.
 - If a week or month boundary is crossed while the app is not running, summaries are generated the next time the relevant profile is processed.
 - If a period contains too little content for a meaningful summary, the system still preserves that period without inventing unsupported details.
-- If weekly summaries do not yet exist for a portion of the two-month weekly window, the system uses the best available source for that period until rollup generation completes.
+- If weekly summaries do not yet exist for a portion of the configured weekly-summary window, the system uses the best available source for that period until rollup generation completes.
 - If monthly summaries do not yet exist for older history, the system uses the best available source for that period until rollup generation completes.
 - If a note is edited after a weekly or monthly summary has been created, the affected summary becomes eligible for regeneration before it is trusted as current.
 - If the vector index cannot support keyword search temporarily, standard context assembly still works and the search tool reports no results rather than failing the conversation.
 - If a time-range search spans periods represented by both raw notes and summaries, the returned result set preserves the requested time boundaries and clearly distinguishes the returned record types.
 - If summary generation fails, retrieval continues with best available data and the failure is surfaced in diagnostics.
 - If conversation summaries still exist from older data, they are ignored for context assembly once the new timeline model is active.
+- If the assembled timeline context exceeds the internal prompt-fitting limit, the system reduces context internally by dropping the oldest monthly-summary coverage first before reducing newer timeline layers.
+- If additional reduction is still required after monthly-summary coverage has been exhausted, the system continues reducing older timeline coverage before newer timeline coverage.
 
 ## Requirements _(mandatory)_
 
@@ -155,6 +154,8 @@ As a maintainer, I want diagnostics for context assembly, rollups, and retrieval
 - **FR-006**: The raw-note setting MUST accept any integer number of days greater than 0.
 - **FR-007**: The system MUST allow users to configure in settings the number of following weeks represented by weekly summaries, with a default of 8 weeks.
 - **FR-008**: The system MUST allow users to configure in settings the number of older months represented by monthly summaries, with a default of all remaining months.
+- **FR-008a**: The weekly-summary setting MUST accept only integer week values greater than 0.
+- **FR-008b**: The monthly-summary setting MUST accept either `all remaining` or an integer number of months greater than 0.
 - **FR-009**: The assembled context MUST include all notes from the configured recent raw-note day window for the active profile.
 - **FR-010**: The recent raw-note window MUST cover at least the configured rolling-day span and extend backward to the preceding Monday so there is no gap before the weekly-summary layer.
 - **FR-011**: The assembled context MUST include weekly summaries for the configured number of weeks immediately preceding the raw-note window, starting with the first full week before the raw-note boundary.
@@ -181,32 +182,33 @@ As a maintainer, I want diagnostics for context assembly, rollups, and retrieval
 - **FR-030**: The extractor JSON response MUST include top-level `has_new_info` as a boolean (`true|false`).
 - **FR-031**: The extractor JSON response MUST include top-level `confidence` as a float in the range `0.0..1.0`.
 - **FR-032**: If `<profile>/prompts/system.md` or `<profile>/prompts/extractor.md` is missing, the system MUST auto-create the missing file with defaults and emit a visible warning without failing the flow.
-- **FR-033**: Cache identity MUST include all of the following inputs: profile, system prompt content (or equivalent prompt identity), assembled memory state, token budget, embedding model, and the configured timeline window settings.
+- **FR-033**: Cache identity MUST include all of the following inputs: profile, system prompt content (or equivalent prompt identity), assembled memory state, embedding model, and the configured timeline window settings.
 - **FR-034**: The system MUST NOT return a cache hit when any cache identity input differs from the original entry inputs.
 - **FR-035**: If a cache entry is slightly stale and still structurally valid, the system MUST return it immediately and trigger asynchronous revalidation.
 - **FR-036**: Asynchronous revalidation MUST update cache contents for subsequent requests without blocking the current request.
 - **FR-037**: The system MUST invalidate or mark cache entries stale when notes are created, updated, or deleted.
 - **FR-038**: The system MUST invalidate or mark cache entries stale when the system prompt changes.
-- **FR-039**: The system MUST invalidate or mark cache entries stale when the token budget changes.
-- **FR-040**: The system MUST invalidate or mark cache entries stale when the embedding model changes.
-- **FR-041**: The system MUST invalidate or mark cache entries stale when any timeline window setting changes.
-- **FR-042**: The system MUST support two cache layers: a fast in-session cache and a persistent cross-session cache.
-- **FR-043**: The system MUST check the in-session cache before persistent cache for retrieval requests.
-- **FR-044**: The system MUST record diagnostics including hit rate, miss rate, and average rebuild time.
-- **FR-045**: The system MUST record and expose the most frequent cache miss reasons.
-- **FR-046**: The system MUST remove conversation summaries from context assembly and from ongoing feature scope for memory retrieval.
-- **FR-047**: The system MUST NOT require a previous-session summary in order to assemble context successfully.
-- **FR-048**: The system MUST make a keyword-based memory search tool available to the LLM for retrieving relevant notes on demand.
-- **FR-049**: The keyword-based memory search tool MUST return results relevant to the supplied keywords.
-- **FR-050**: The system MUST make a time-range memory search tool available to the LLM for retrieving notes by date boundaries.
-- **FR-051**: The time-range memory search tool MUST return only records whose timestamps fall within the requested range.
-- **FR-052**: The assembled context MUST distinguish between raw recent notes, weekly summaries, and monthly summaries so the assistant can interpret the historical granularity correctly.
-- **FR-053**: Weekly and monthly summaries MUST be stored and reused as first-class memory artifacts rather than regenerated for every request.
-- **FR-054**: The system MUST prevent duplicate weekly summaries for the same profile and calendar week.
-- **FR-055**: The system MUST prevent duplicate monthly summaries for the same profile and calendar month.
-- **FR-056**: If a stored summary becomes outdated because underlying notes changed, the system MUST mark that summary for regeneration before it is relied on as current context.
-- **FR-057**: Time-range search MUST be able to return both raw notes and summary records when both fall within the requested period.
-- **FR-058**: The system MUST preserve context assembly when one or more summary periods are missing by using the best available memory for those periods until summaries are generated.
+- **FR-039**: The system MUST invalidate or mark cache entries stale when the embedding model changes.
+- **FR-040**: The system MUST invalidate or mark cache entries stale when any timeline window setting changes.
+- **FR-041**: The system MUST support two cache layers: a fast in-session cache and a persistent cross-session cache.
+- **FR-042**: The system MUST check the in-session cache before persistent cache for retrieval requests.
+- **FR-043**: The system MUST record diagnostics including hit rate, miss rate, and average rebuild time.
+- **FR-044**: The system MUST record and expose the most frequent cache miss reasons.
+- **FR-045**: The system MUST remove conversation summaries from context assembly and from ongoing feature scope for memory retrieval.
+- **FR-046**: The system MUST NOT require a previous-session summary in order to assemble context successfully.
+- **FR-047**: The system MUST make a keyword-based memory search tool available to the LLM for retrieving relevant notes on demand.
+- **FR-048**: The keyword-based memory search tool MUST return results relevant to the supplied keywords.
+- **FR-049**: The system MUST make a time-range memory search tool available to the LLM for retrieving notes by date boundaries.
+- **FR-050**: The time-range memory search tool MUST return only records whose timestamps fall within the requested range.
+- **FR-051**: The assembled context MUST distinguish between raw recent notes, weekly summaries, and monthly summaries so the assistant can interpret the historical granularity correctly.
+- **FR-052**: Weekly and monthly summaries MUST be stored and reused as first-class memory artifacts rather than regenerated for every request.
+- **FR-053**: The system MUST prevent duplicate weekly summaries for the same profile and calendar week.
+- **FR-054**: The system MUST prevent duplicate monthly summaries for the same profile and calendar month.
+- **FR-055**: If a stored summary becomes outdated because underlying notes changed, the system MUST mark that summary for regeneration before it is relied on as current context.
+- **FR-056**: Time-range search MUST be able to return both raw notes and summary records when both fall within the requested period.
+- **FR-057**: The system MUST preserve context assembly when one or more summary periods are missing by using the best available memory for those periods until summaries are generated.
+- **FR-058**: If assembled timeline context must be reduced to fit the internal prompt budget, the system MUST drop the oldest monthly-summary coverage first before reducing newer timeline layers.
+- **FR-059**: If additional reduction is still required after monthly-summary coverage has been exhausted, the system MUST continue reducing older timeline coverage before newer timeline coverage.
 
 ### Non-Functional Requirements _(mandatory)_
 
@@ -241,7 +243,7 @@ As a maintainer, I want diagnostics for context assembly, rollups, and retrieval
 - **SC-007**: 100% of successful time-range searches return only records within the requested date range.
 - **SC-008**: At least 90% of eligible repeated requests within a session are served from cache without full rebuild.
 - **SC-009**: For slightly stale entries, users receive an immediate response and refreshed data is available by the next request in at least 95% of sampled cases.
-- **SC-010**: 100% of note changes, summary changes, prompt changes, token budget changes, embedding model changes, and timeline window setting changes trigger stale or invalidation behavior before the next retrieval.
+- **SC-010**: 100% of note changes, summary changes, prompt changes, embedding model changes, and timeline window setting changes trigger stale or invalidation behavior before the next retrieval.
 - **SC-011**: Diagnostics surface top miss reasons with counts, covering at least 95% of miss events in the reporting window.
 - **SC-012**: At least 90% of evaluated responses to questions about older history are judged by maintainers as having sufficient historical context without needing manual restatement from the user.
 
@@ -249,7 +251,7 @@ As a maintainer, I want diagnostics for context assembly, rollups, and retrieval
 
 - Note extraction continues to use the current extraction approach for creating raw notes.
 - By default, the recent raw-note window is 30 days, the weekly-summary window is 8 weeks, and the monthly-summary window covers all remaining older months.
-- The raw-note setting can be adjusted to any integer number of days greater than 0, the weekly-summary layer is adjusted in weeks, and the monthly-summary layer is adjusted in months.
+- The raw-note setting can be adjusted to any integer number of days greater than 0, the weekly-summary setting can be adjusted only to integer week values greater than 0, and the monthly-summary setting can be adjusted to `all remaining` or an integer number of months greater than 0.
 - The recent raw-note window uses at least the configured rolling-day span and extends backward to the preceding Monday so there is no gap before the weekly-summary layer.
 - The weekly-summary layer starts with the first full week before the raw-note boundary.
 - The monthly-summary layer begins only after the weekly-summary layer and switches only on completed calendar periods.
@@ -258,3 +260,4 @@ As a maintainer, I want diagnostics for context assembly, rollups, and retrieval
 - Search tools are intended for assistant use during conversations rather than as an end-user command surface in this phase.
 - If multiple memory sources are available for the same time range, the system prefers the summary level appropriate to that period in the default assembled context.
 - Existing cache, prompt, and index capabilities remain in scope and must adapt to the new timeline-based context model.
+- Token fitting remains an internal implementation concern rather than a user-facing setting; when reduction is necessary, the oldest monthly-summary coverage is dropped first, and any further reduction continues from older timeline coverage toward newer coverage.

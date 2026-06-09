@@ -8,14 +8,14 @@
   - `raw_note_days`
   - `weekly_summary_weeks`
   - `monthly_summary_months`
-
-Validation:
-- `raw_note_days > 0`
-- `weekly_summary_weeks > 0`
-- `monthly_summary_months` is either `all_remaining` or an integer `>= 0`
-- **note_budget_tokens**: int
 - **embedding_model**: string
 - **current_time**: timestamp
+
+## Input Validation
+
+- `raw_note_days > 0`
+- `weekly_summary_weeks > 0`
+- `monthly_summary_months` is either `all_remaining` or an integer `> 0`
 
 ## Context Assembly Contract
 
@@ -26,10 +26,11 @@ Validation:
 5. The weekly-summary layer MUST extend as needed to cover at least the first day of the following monthly-summary month so there is no gap before the monthly-summary layer.
 6. The system MUST include monthly summaries for the configured older-history monthly-summary window, switching only on completed calendar periods after the weekly-summary layer.
 7. If `monthly_summary_months` is a bounded integer instead of `all_remaining`, any history older than that monthly cutoff MUST be excluded from the default assembled context.
-8. If a configured layer has value `0`, that layer is skipped without failing context assembly.
-9. If a required summary is missing or stale, the system MUST use the best available memory for that period until regeneration completes.
-10. Conversation summaries MUST NOT be required or included in the default assembled context.
-11. The assembled context MUST distinguish raw notes, weekly summaries, and monthly summaries in its formatted output.
+8. If a required summary is missing or stale, the system MUST use the best available memory for that period until regeneration completes.
+9. Conversation summaries MUST NOT be required or included in the default assembled context.
+10. The assembled context MUST distinguish raw notes, weekly summaries, and monthly summaries in its formatted output.
+11. If assembled context must be reduced to fit the internal prompt budget, the system MUST drop the oldest monthly-summary coverage first before reducing newer timeline layers.
+12. If additional reduction is still required after monthly-summary coverage has been exhausted, the system SHOULD continue reducing older timeline coverage before newer timeline coverage.
 
 ## Rollup Generation Contract
 
@@ -41,7 +42,7 @@ Validation:
 
 ## Cache Contract
 
-1. Cache identity MUST include profile, prompt identity, assembled memory state, token budget, embedding model, and timeline settings.
+1. Cache identity MUST include profile, prompt identity, assembled memory state, embedding model, and timeline settings.
 2. Lookup order MUST be:
    - L1 (in-session memory cache) first
    - L2 (persistent cache) second
@@ -50,7 +51,7 @@ Validation:
    - return it immediately,
    - trigger background revalidation,
    - do not block the current request.
-5. Cache entries MUST be invalidated or marked stale when notes, summaries, prompt, token budget, embedding model, or timeline settings change.
+5. Cache entries MUST be invalidated or marked stale when notes, summaries, prompt, embedding model, or timeline settings change.
 
 ## Retrieval Output Contract
 

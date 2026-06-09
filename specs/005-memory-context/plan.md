@@ -116,8 +116,9 @@ tests/
 - Expose keyword/vector and time-range memory search as OpenRouter-compatible tools in the provider completion loop, with orchestration kept in `internal/chat/` and provider transport/schema support kept in `internal/provider/`.
 - Extend provider model metadata loading to capture `context_length` from OpenRouter model objects, cache/fetch it for the active model during startup/profile switch/model change flows, and propagate it into session stats.
 - Update footer telemetry to show tokens plus max-context usage percentage and context maximum on the left side next to existing token information.
-- Extend cache identity and invalidation to include timeline window settings and summary-state changes.
-- Add automated tests covering timeline composition, rollup catch-up, duplicate summary prevention, tool calls and invalid tool inputs, provider metadata parsing, missing/unknown context-length handling, mixed raw+summary time-range results, and footer rendering.
+- Extend cache identity and invalidation to include timeline window settings and summary-state changes while keeping token fitting as an internal implementation concern rather than a user-facing setting.
+- Define internal token fitting so that when assembled context must be reduced to fit the prompt, the oldest monthly-summary coverage is dropped first before reducing newer timeline layers, and any additional reduction continues from older timeline coverage toward newer coverage.
+- Add automated tests covering timeline composition, rollup catch-up, duplicate summary prevention, tool calls and invalid tool inputs, provider metadata parsing, missing/unknown context-length handling, mixed raw+summary time-range results, footer rendering, and internal token-fitting reduction order.
 
 ## Complexity Tracking
 

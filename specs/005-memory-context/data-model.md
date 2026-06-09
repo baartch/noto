@@ -15,7 +15,7 @@ Represents the profile-local settings that shape default memory context composit
 Validation:
 - `raw_note_days > 0`
 - `weekly_summary_weeks > 0`
-- `monthly_summary_months` is either `all_remaining` or an integer `>= 0`
+- `monthly_summary_months` is either `all_remaining` or an integer `> 0`
 - Setting changes take effect on the next context assembly.
 
 ### MemoryNote
@@ -188,13 +188,12 @@ Represents the retrieval-shaping inputs required for safe context-cache reuse.
 - **profile_id**: string
 - **system_prompt_fingerprint**: string
 - **assembled_memory_state**: string
-- **token_budget**: integer
 - **embedding_model**: string
 - **timeline_settings_fingerprint**: string
 - **cache_key**: string
 
 Validation:
-- Any change to prompt, assembled memory state, token budget, embedding model, or timeline settings yields a new cache identity.
+- Any change to prompt, assembled memory state, embedding model, or timeline settings yields a new cache identity.
 
 ## Relationships
 
@@ -221,7 +220,7 @@ Validation:
 `TimelineSettings` transitions:
 
 - updated settings invalidate cache identity for subsequent retrievals
-- zero-value layers remain valid and simply skip that layer in context assembly
+- invalid zero values for weekly or monthly summary settings are rejected during validation rather than treated as valid context layers
 
 ### Tool Call Lifecycle
 

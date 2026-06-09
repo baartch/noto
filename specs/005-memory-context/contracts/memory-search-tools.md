@@ -89,6 +89,6 @@ Ordered list of result items containing:
 
 ## Traceability
 
-- Spec §FR-044 through §FR-047
-- Spec §FR-053
+- Spec §FR-047 through §FR-050
+- Spec §FR-056
 - Spec §SC-006 through §SC-007

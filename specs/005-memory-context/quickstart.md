@@ -15,14 +15,14 @@ This quickstart validates the broadened memory feature, including timeline-based
 ### 1. Configurable Timeline Context
 
 1. Set timeline settings to defaults:
-   - raw-note months = 1
-   - weekly-summary months = 2
+   - raw-note days = 30
+   - weekly-summary weeks = 8
    - monthly-summary months = all remaining
 2. Start a chat turn with profile history spanning more than three months.
 3. Verify the assembled context contains:
-   - raw recent notes for the configured recent window,
-   - weekly summaries for the configured mid-range window,
-   - monthly summaries for the configured older-history window.
+   - raw recent notes for the configured recent rolling-day window,
+   - weekly summaries for the configured mid-range week window,
+   - monthly summaries for the configured older-history month window.
 4. Change one or more timeline settings and repeat.
 5. Verify the assembled context reflects the new configured windows on the next retrieval.
 
@@ -56,13 +56,19 @@ This quickstart validates the broadened memory feature, including timeline-based
    - prompt
    - notes
    - summary state
-   - token budget
    - embedding model
    - timeline settings
 3. Verify cache reuse is rejected or marked stale when identity no longer matches.
 4. Verify slightly stale entries still use stale-while-revalidate behavior.
 
-### 6. Footer Context-Capacity Telemetry
+### 6. Internal Token-Fitting Safeguard
+
+1. Prepare a profile whose assembled timeline context is large enough to exceed the internal prompt-fitting limit.
+2. Trigger context assembly with monthly summaries available for older history.
+3. Verify the system preserves newer layers first and reduces context by dropping the oldest monthly-summary coverage before touching newer timeline layers.
+4. Verify the conversation still proceeds without exposing any user-facing token-budget setting.
+
+### 7. Footer Context-Capacity Telemetry
 
 1. Open chat with a model whose metadata includes `context_length`.
 2. Send one or more messages.
