@@ -130,9 +130,9 @@
 
 ### Tests for User Story 4
 
-- [ ] T044 [P] [US4] Add unit tests for cache identity including timeline settings and summary state, plus internal token-fitting reduction order that drops oldest monthly-summary coverage first, in /home/andy/gitrepos/noto/tests/unit/memory/retrieval_cache_identity_timeline_test.go
-- [ ] T045 [P] [US4] Add integration test for timeline-settings invalidation, including live in-session settings updates, and persistent cache reuse in /home/andy/gitrepos/noto/tests/integration/memory/timeline_cache_invalidation_test.go
-- [ ] T046 [P] [US4] Add integration test for summary-state-driven cache invalidation and miss-reason classification in /home/andy/gitrepos/noto/tests/integration/memory/summary_cache_invalidation_test.go
+- [X] T044 [P] [US4] Add unit tests for cache identity including timeline settings and summary state, plus internal token-fitting reduction order that drops oldest monthly-summary coverage first, in /home/andy/gitrepos/noto/tests/unit/memory/retrieval_cache_identity_timeline_test.go
+- [X] T045 [P] [US4] Add integration test for timeline-settings invalidation, including live in-session settings updates, and persistent cache reuse in /home/andy/gitrepos/noto/tests/integration/memory/timeline_cache_invalidation_test.go
+- [X] T046 [P] [US4] Add integration test for summary-state-driven cache invalidation and miss-reason classification in /home/andy/gitrepos/noto/tests/integration/memory/summary_cache_invalidation_test.go
 
 ### Implementation for User Story 4
 

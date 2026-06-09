@@ -442,6 +442,33 @@ func hashTimelineState(rawNotes []*store.MemoryNote, weeklySummaries []*store.Me
 	return hashNoteIDs(parts)
 }
 
+// BuildTimelineStateHashForTest exposes deterministic timeline-state hashing for tests.
+func BuildTimelineStateHashForTest(rawNoteIDs []string, weeklyStates []string, monthlyStates []string, settings *store.TimelineSettings) string {
+	rawNotes := make([]*store.MemoryNote, 0, len(rawNoteIDs))
+	for _, id := range rawNoteIDs {
+		rawNotes = append(rawNotes, &store.MemoryNote{ID: id})
+	}
+	weeklySummaries := make([]*store.MemorySummary, 0, len(weeklyStates))
+	for _, state := range weeklyStates {
+		parts := strings.SplitN(state, ":", 2)
+		freshness := ""
+		if len(parts) > 1 {
+			freshness = parts[1]
+		}
+		weeklySummaries = append(weeklySummaries, &store.MemorySummary{ID: parts[0], FreshnessState: freshness})
+	}
+	monthlySummaries := make([]*store.MemorySummary, 0, len(monthlyStates))
+	for _, state := range monthlyStates {
+		parts := strings.SplitN(state, ":", 2)
+		freshness := ""
+		if len(parts) > 1 {
+			freshness = parts[1]
+		}
+		monthlySummaries = append(monthlySummaries, &store.MemorySummary{ID: parts[0], FreshnessState: freshness})
+	}
+	return hashTimelineState(rawNotes, weeklySummaries, monthlySummaries, settings)
+}
+
 func (r *Retrieval) assembleTimelineLayers(ctx context.Context, profileID string, notes []*store.MemoryNote, window TimelineWindow) ([]*store.MemoryNote, []*store.MemorySummary, []*store.MemorySummary) {
 	rawNotes := filterNotesInRange(notes, window.RawStart, window.RawEnd)
 

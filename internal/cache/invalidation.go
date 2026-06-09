@@ -33,10 +33,18 @@ func (t *InvalidationTriggers) OnMemoryChange(ctx context.Context, profileID str
 	return nil
 }
 
-// OnTokenBudgetChange invalidates cache entries when token budget changes.
-func (t *InvalidationTriggers) OnTokenBudgetChange(ctx context.Context, profileID string) error {
+// OnTimelineSettingsChange invalidates cache entries when timeline settings change.
+func (t *InvalidationTriggers) OnTimelineSettingsChange(ctx context.Context, profileID string) error {
 	if err := t.cacheRepo.InvalidateAll(ctx, profileID); err != nil {
-		return fmt.Errorf("cache: invalidate on token budget change: %w", err)
+		return fmt.Errorf("cache: invalidate on timeline settings change: %w", err)
+	}
+	return nil
+}
+
+// OnSummaryChange invalidates cache entries when summary artifacts change.
+func (t *InvalidationTriggers) OnSummaryChange(ctx context.Context, profileID string) error {
+	if err := t.cacheRepo.InvalidateAll(ctx, profileID); err != nil {
+		return fmt.Errorf("cache: invalidate on summary change: %w", err)
 	}
 	return nil
 }

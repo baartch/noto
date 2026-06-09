@@ -15,7 +15,10 @@ func TestInvalidationTriggers_AdditionalEvents(t *testing.T) {
 	repo := store.NewContextCacheRepo(db)
 	tr := cache.NewInvalidationTriggers(repo)
 	ctx := context.Background()
-	if err := tr.OnTokenBudgetChange(ctx, "p1"); err != nil {
+	if err := tr.OnTimelineSettingsChange(ctx, "p1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tr.OnSummaryChange(ctx, "p1"); err != nil {
 		t.Fatal(err)
 	}
 	if err := tr.OnEmbeddingModelChange(ctx, "p1"); err != nil {
