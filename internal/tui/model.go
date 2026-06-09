@@ -18,6 +18,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"noto/internal/cache"
 	"noto/internal/chat"
 	"noto/internal/commands"
 	"noto/internal/profile"
@@ -280,16 +281,19 @@ type Model struct {
 	profileDeleteCandidate string
 
 	// profile settings
-	memoryTokenBudget int
-	systemPrompt      string
-	providerEndpoint  string
-	providerAPIKey    string // decrypted; displayed obfuscated
+	rawNoteDays          int
+	weeklySummaryWeeks   int
+	monthlySummaryMonths string
+	systemPrompt         string
+	providerEndpoint     string
+	providerAPIKey       string // decrypted; displayed obfuscated
 
 	// notes badge
 	notesIndicator string
 
-	updateNotice string
-	usage        usageAccumulator
+	updateNotice          string
+	usage                 usageAccumulator
+	hasAuthoritativeStats bool
 
 	// pending assistant state
 	pending      bool
@@ -827,6 +831,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// ---- stats update -------------------------------------------------------
 	case statsUpdatedMsg:
 		m.tokenStatus = msg.formatted
+		m.hasAuthoritativeStats = true
 
 	case cacheStatusUpdatedMsg:
 		m.cacheStatus = msg.formatted
@@ -836,7 +841,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case usageUpdatedMsg:
 		m.usage.addFromUsage(msg.usage)
-		m.tokenStatus = m.usage.formatTokenStatus()
+		if !m.hasAuthoritativeStats {
+			m.tokenStatus = m.usage.formatTokenStatus()
+		}
 
 	case profileSwitchedMsg:
 		m.profileName = msg.profileName
@@ -846,6 +853,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.embeddingModelMissing = msg.embeddingModelMissing
 		m.cacheStatus = msg.cacheStatus
 		m.tokenStatus = msg.tokenStatus
+		m.hasAuthoritativeStats = msg.tokenStatus != ""
+		m.usage = usageAccumulator{}
+		if !m.hasAuthoritativeStats {
+			m.tokenStatus = m.usage.formatTokenStatus()
+		}
 		m.provider = msg.provider
 		m.listModels = msg.listModels
 		m.listEmbeddings = msg.listEmbeddings
@@ -854,7 +866,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.extractorModelSelected = msg.extractorModelSelected
 		m.embeddingModel = msg.embeddingModel
 		m.settingsMenu = msg.settings
-		m.memoryTokenBudget = 0
+		m.rawNoteDays = 0
+		m.weeklySummaryWeeks = 0
+		m.monthlySummaryMonths = ""
 		m.systemPrompt = ""
 		m.settingsEditEntry = nil
 		m.settingsEditing = false
@@ -1331,7 +1345,7 @@ func (m *Model) loadOlderInputHistoryBatch() {
 // View implements tea.Model.
 func (m Model) View() tea.View {
 	if !m.ready {
-		return tea.NewView("\n  Initializing…")
+		return tea.NewView("")
 	}
 
 	// ---- middle: picker or suggestions ----
@@ -1791,11 +1805,36 @@ func (m Model) handleSettingsSave() (tea.Model, tea.Cmd) {
 			m.settingsErr = err.Error()
 			return m, nil
 		}
-		m.memoryTokenBudget = parsed
-		entry.Value = strconv.Itoa(parsed)
-		if err := profile.WriteSettings(m.execCtx.ProfileSlug, &profile.Settings{MemoryTokenBudget: parsed}); err != nil {
-			m.settingsErr = err.Error()
-			return m, nil
+		switch entry.ID {
+		case settingsIDRawNoteDays, settingsIDWeeklySummaryWeeks:
+			if m.execCtx == nil || m.execCtx.DB == nil || m.execCtx.ProfileID == "" {
+				m.settingsErr = "timeline settings unavailable"
+				return m, nil
+			}
+			repo := store.NewTimelineSettingsRepo(m.execCtx.DB)
+			current, err := repo.GetOrDefault(context.Background(), m.execCtx.ProfileID)
+			if err != nil {
+				m.settingsErr = err.Error()
+				return m, nil
+			}
+			switch entry.ID {
+			case settingsIDRawNoteDays:
+				current.RawNoteDays = parsed
+				m.rawNoteDays = parsed
+			case settingsIDWeeklySummaryWeeks:
+				current.WeeklySummaryWeeks = parsed
+				m.weeklySummaryWeeks = parsed
+			}
+			if err := repo.Upsert(context.Background(), current); err != nil {
+				m.settingsErr = err.Error()
+				return m, nil
+			}
+			if m.execCtx != nil && m.execCtx.DB != nil {
+				_ = cache.NewInvalidationTriggers(store.NewContextCacheRepo(m.execCtx.DB)).OnTimelineSettingsChange(context.Background(), m.execCtx.ProfileID)
+			}
+			entry.Value = strconv.Itoa(parsed)
+		default:
+			entry.Value = strconv.Itoa(parsed)
 		}
 	}
 	if entry.ValueType == SettingsValueText {
@@ -1820,6 +1859,38 @@ func (m Model) handleSettingsSave() (tea.Model, tea.Cmd) {
 			if err := m.saveProviderAPIKey(val); err != nil {
 				m.settingsErr = err.Error()
 				return m, nil
+			}
+		case settingsIDMonthlySummaryMonths:
+			if m.execCtx == nil || m.execCtx.DB == nil || m.execCtx.ProfileID == "" {
+				m.settingsErr = "timeline settings unavailable"
+				return m, nil
+			}
+			repo := store.NewTimelineSettingsRepo(m.execCtx.DB)
+			current, err := repo.GetOrDefault(context.Background(), m.execCtx.ProfileID)
+			if err != nil {
+				m.settingsErr = err.Error()
+				return m, nil
+			}
+			if strings.EqualFold(val, "all_remaining") || strings.EqualFold(val, "all remaining") {
+				current.MonthlySummaryMonths = store.MonthlySummaryAllRemaining
+				m.monthlySummaryMonths = "all_remaining"
+				entry.Value = "all_remaining"
+			} else {
+				parsed, err := parsePositiveInt(val)
+				if err != nil {
+					m.settingsErr = "value must be a positive number or all_remaining"
+					return m, nil
+				}
+				current.MonthlySummaryMonths = parsed
+				m.monthlySummaryMonths = strconv.Itoa(parsed)
+				entry.Value = strconv.Itoa(parsed)
+			}
+			if err := repo.Upsert(context.Background(), current); err != nil {
+				m.settingsErr = err.Error()
+				return m, nil
+			}
+			if m.execCtx != nil && m.execCtx.DB != nil {
+				_ = cache.NewInvalidationTriggers(store.NewContextCacheRepo(m.execCtx.DB)).OnTimelineSettingsChange(context.Background(), m.execCtx.ProfileID)
 			}
 		default:
 			entry.Value = val
@@ -1866,9 +1937,16 @@ func (m *Model) refreshSettingsValues() {
 		return
 	}
 	ctx := context.Background()
-	if m.execCtx.ProfileSlug != "" {
-		if settings, err := profile.ReadSettings(m.execCtx.ProfileSlug); err == nil {
-			m.memoryTokenBudget = settings.MemoryTokenBudget
+	if m.execCtx.ProfileID != "" && m.execCtx.DB != nil {
+		timelineRepo := store.NewTimelineSettingsRepo(m.execCtx.DB)
+		if settings, err := timelineRepo.GetOrDefault(ctx, m.execCtx.ProfileID); err == nil {
+			m.rawNoteDays = settings.RawNoteDays
+			m.weeklySummaryWeeks = settings.WeeklySummaryWeeks
+			if settings.MonthlySummaryMonths == store.MonthlySummaryAllRemaining {
+				m.monthlySummaryMonths = "all_remaining"
+			} else {
+				m.monthlySummaryMonths = strconv.Itoa(settings.MonthlySummaryMonths)
+			}
 		}
 	}
 	if m.execCtx.ProfileID != "" && m.execCtx.DB != nil {
@@ -1903,10 +1981,16 @@ func applyToMenu(menu *SettingsMenu, m *Model) {
 	copy(entries, menu.Entries)
 	for i := range entries {
 		switch entries[i].ID {
-		case settingsIDMemoryTokenLimit:
-			if m.memoryTokenBudget > 0 {
-				entries[i].Value = strconv.Itoa(m.memoryTokenBudget)
+		case settingsIDRawNoteDays:
+			if m.rawNoteDays > 0 {
+				entries[i].Value = strconv.Itoa(m.rawNoteDays)
 			}
+		case settingsIDWeeklySummaryWeeks:
+			if m.weeklySummaryWeeks > 0 {
+				entries[i].Value = strconv.Itoa(m.weeklySummaryWeeks)
+			}
+		case settingsIDMonthlySummaryMonths:
+			entries[i].Value = m.monthlySummaryMonths
 		case settingsIDSystemPrompt:
 			entries[i].Value = m.systemPrompt
 		case settingsIDProviderEndpoint:
@@ -2111,8 +2195,12 @@ func (m *Model) renderSettingsEditor(height int) string {
 
 func settingsEditorDescription(entryID string) string {
 	switch entryID {
-	case settingsIDMemoryTokenLimit:
-		return "Limits how much memory context is injected into replies. Higher values use more tokens."
+	case settingsIDRawNoteDays:
+		return "Sets how many recent rolling days of raw notes are included. Must be greater than 0."
+	case settingsIDWeeklySummaryWeeks:
+		return "Sets how many weeks before the raw-note layer are represented by weekly summaries. Must be greater than 0."
+	case settingsIDMonthlySummaryMonths:
+		return "Sets how many older months are represented by monthly summaries. Use a positive number or all_remaining."
 	case settingsIDSystemPrompt:
 		return "Sets the system role prompt that guides every reply."
 	default:

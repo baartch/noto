@@ -153,22 +153,54 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 	endpoint = strings.TrimSuffix(endpoint, "/embeddings")
 	endpoint = strings.TrimSuffix(endpoint, "/embeddings/models")
 	endpoint = strings.TrimRight(endpoint, "/")
-	endpoint += "/responses"
+	endpoint += "/chat/completions"
 
 	model := req.Model
 	if model == "" {
 		model = a.cfg.Model
 	}
-	payload := openAIResponsesRequest{
-		Model:           model,
-		MaxOutputTokens: req.MaxTokens,
-		Temperature:     req.Temperature,
+	payload := openAIChatCompletionsRequest{
+		Model:       model,
+		MaxTokens:   req.MaxTokens,
+		Temperature: req.Temperature,
+	}
+	for _, tool := range req.Tools {
+		payload.Tools = append(payload.Tools, openAIChatCompletionsToolDefinition{
+			Type: "function",
+			Function: openAIChatCompletionsFunctionDefinition{
+				Name:        tool.Name,
+				Description: tool.Description,
+				Parameters:  tool.Parameters,
+			},
+		})
 	}
 	for _, m := range req.Messages {
-		payload.Input = append(payload.Input, openAIResponsesMessage{
-			Role:    m.Role,
-			Content: []openAIResponsesContent{{Type: "input_text", Text: m.Content}},
-		})
+		switch {
+		case m.Role == "assistant" && m.ToolCallID != "":
+			payload.Messages = append(payload.Messages, openAIChatCompletionsMessage{
+				Role:    "assistant",
+				Content: nil,
+				ToolCalls: []openAIChatCompletionsToolCall{{
+					ID:   m.ToolCallID,
+					Type: "function",
+					Function: openAIChatCompletionsFunctionCall{
+						Name:      m.ToolCallName,
+						Arguments: m.ToolCallArguments,
+					},
+				}},
+			})
+		case m.Role == "tool" && m.ToolCallID != "":
+			payload.Messages = append(payload.Messages, openAIChatCompletionsMessage{
+				Role:       "tool",
+				Content:    m.Content,
+				ToolCallID: m.ToolCallID,
+			})
+		default:
+			payload.Messages = append(payload.Messages, openAIChatCompletionsMessage{
+				Role:    m.Role,
+				Content: m.Content,
+			})
+		}
 	}
 
 	body, err := json.Marshal(payload)
@@ -189,9 +221,7 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrProviderUnavailable, err)
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return nil, ErrInvalidCredentials
@@ -205,16 +235,28 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 	if err != nil {
 		return nil, fmt.Errorf("provider: read response: %w", err)
 	}
-	var apiResp openAIResponsesResponse
+	var apiResp openAIChatCompletionsResponse
 	if err := json.Unmarshal(bodyBytes, &apiResp); err != nil {
 		return nil, fmt.Errorf("provider: decode response: %w: %s", err, string(bodyBytes))
 	}
-
 	if apiResp.Error != nil {
-		return nil, fmt.Errorf("provider: responses error %s: %s", apiResp.Error.Code, apiResp.Error.Message)
+		return nil, fmt.Errorf("provider: chat completions error %s: %s", apiResp.Error.Code, apiResp.Error.Message)
 	}
-	content := extractResponseText(apiResp.Output)
-	if content == "" {
+	if len(apiResp.Choices) == 0 {
+		return nil, errors.New("provider: no choices in response")
+	}
+	msg := apiResp.Choices[0].Message
+	content := ""
+	if s, ok := msg.Content.(string); ok {
+		content = s
+	}
+	toolCalls := make([]ToolCall, 0, len(msg.ToolCalls))
+	for _, call := range msg.ToolCalls {
+		if call.Type == "function" && call.Function.Name != "" {
+			toolCalls = append(toolCalls, ToolCall{ID: call.ID, CallID: call.ID, Name: call.Function.Name, Arguments: call.Function.Arguments})
+		}
+	}
+	if content == "" && len(toolCalls) == 0 {
 		return nil, errors.New("provider: no content in response")
 	}
 
@@ -222,71 +264,67 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 	if modelName == "" {
 		modelName = a.cfg.Model
 	}
-	promptTokens := apiResp.Usage.InputTokens
+	promptTokens := apiResp.Usage.PromptTokens
 	if promptTokens == 0 {
-		promptTokens = apiResp.Usage.PromptTokens
+		promptTokens = apiResp.Usage.InputTokens
 	}
-	completionTokens := apiResp.Usage.OutputTokens
+	completionTokens := apiResp.Usage.CompletionTokens
 	if completionTokens == 0 {
-		completionTokens = apiResp.Usage.CompletionTokens
-	}
-	if completionTokens == 0 && apiResp.Usage.TotalTokens > 0 {
-		completionTokens = apiResp.Usage.TotalTokens - promptTokens
+		completionTokens = apiResp.Usage.OutputTokens
 	}
 	totalTokens := apiResp.Usage.TotalTokens
 	if totalTokens == 0 {
 		totalTokens = promptTokens + completionTokens
 	}
 	info := modelInfo(modelName)
-
 	usage := Usage{HasUsage: false}
-	if apiResp.Usage.TotalTokens > 0 || apiResp.Usage.PromptTokensDetails.CachedTokens > 0 || apiResp.Usage.PromptTokensDetails.CacheWriteTokens > 0 || apiResp.Usage.Cost > 0 {
-		usage = Usage{
-			PromptTokens:     promptTokens,
-			CompletionTokens: completionTokens,
-			CachedTokens:     apiResp.Usage.PromptTokensDetails.CachedTokens,
-			CacheWriteTokens: apiResp.Usage.PromptTokensDetails.CacheWriteTokens,
-			TotalTokens:      totalTokens,
-			Cost:             apiResp.Usage.Cost,
-			HasUsage:         true,
-		}
+	if totalTokens > 0 || apiResp.Usage.PromptTokensDetails.CachedTokens > 0 || apiResp.Usage.PromptTokensDetails.CacheWriteTokens > 0 || apiResp.Usage.Cost > 0 {
+		usage = Usage{PromptTokens: promptTokens, CompletionTokens: completionTokens, CachedTokens: apiResp.Usage.PromptTokensDetails.CachedTokens, CacheWriteTokens: apiResp.Usage.PromptTokensDetails.CacheWriteTokens, TotalTokens: totalTokens, Cost: apiResp.Usage.Cost, HasUsage: true}
 		if err := ValidateUsage(usage); err != nil {
 			usage = Usage{}
 		}
 	}
 
-	return &CompletionResponse{
-		Content:          content,
-		Model:            modelName,
-		PromptTokens:     promptTokens,
-		CompletionTokens: completionTokens,
-		TotalTokens:      totalTokens,
-		EstimatedCostUSD: estimateCost(modelName, promptTokens, completionTokens),
-		Usage:            usage,
-		ContextMax:       info.contextWindow,
-	}, nil
+	return &CompletionResponse{Content: content, Model: modelName, PromptTokens: promptTokens, CompletionTokens: completionTokens, TotalTokens: totalTokens, ToolCalls: toolCalls, EstimatedCostUSD: estimateCost(modelName, promptTokens, completionTokens), Usage: usage, ContextMax: info.contextWindow}, nil
 }
 
 // ---- wire types (unexported) ------------------------------------------------
 
-type openAIResponsesContent struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
+type openAIChatCompletionsFunctionDefinition struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	Parameters  map[string]any `json:"parameters,omitempty"`
 }
 
-type openAIResponsesMessage struct {
-	Role    string                   `json:"role"`
-	Content []openAIResponsesContent `json:"content"`
+type openAIChatCompletionsToolDefinition struct {
+	Type     string                                  `json:"type"`
+	Function openAIChatCompletionsFunctionDefinition `json:"function"`
 }
 
-type openAIResponsesRequest struct {
-	Model            string                   `json:"model"`
-	Input            []openAIResponsesMessage `json:"input"`
-	MaxOutputTokens  int                      `json:"max_output_tokens,omitempty"`
-	Temperature      float64                  `json:"temperature,omitempty"`
-	TopP             float64                  `json:"top_p,omitempty"`
-	FrequencyPenalty float64                  `json:"frequency_penalty,omitempty"`
-	PresencePenalty  float64                  `json:"presence_penalty,omitempty"`
+type openAIChatCompletionsFunctionCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+type openAIChatCompletionsToolCall struct {
+	ID       string                            `json:"id,omitempty"`
+	Type     string                            `json:"type"`
+	Function openAIChatCompletionsFunctionCall `json:"function"`
+}
+
+type openAIChatCompletionsMessage struct {
+	Role       string                          `json:"role"`
+	Content    any                             `json:"content"`
+	ToolCalls  []openAIChatCompletionsToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string                          `json:"tool_call_id,omitempty"`
+}
+
+type openAIChatCompletionsRequest struct {
+	Model       string                                `json:"model"`
+	Messages    []openAIChatCompletionsMessage        `json:"messages"`
+	Tools       []openAIChatCompletionsToolDefinition `json:"tools,omitempty"`
+	MaxTokens   int                                   `json:"max_tokens,omitempty"`
+	Temperature float64                               `json:"temperature,omitempty"`
 }
 
 type openAIResponsesPromptTokensDetails struct {
@@ -304,16 +342,15 @@ type openAIResponsesUsage struct {
 	Cost                float64                            `json:"cost"`
 }
 
-type openAIResponsesResponse struct {
-	Model  string `json:"model"`
-	Status string `json:"status"`
-	Error  *struct {
+type openAIChatCompletionsResponse struct {
+	Model string `json:"model"`
+	Error *struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	} `json:"error"`
-	Output []struct {
-		Content []openAIResponsesContent `json:"content"`
-	} `json:"output"`
+	Choices []struct {
+		Message openAIChatCompletionsMessage `json:"message"`
+	} `json:"choices"`
 	Usage openAIResponsesUsage `json:"usage"`
 }
 
@@ -328,19 +365,4 @@ type openAIEmbeddingResponse struct {
 		Embedding []float64 `json:"embedding"`
 	} `json:"data"`
 	Usage openAIResponsesUsage `json:"usage"`
-}
-
-func extractResponseText(outputs []struct {
-	Content []openAIResponsesContent `json:"content"`
-}) string {
-	for _, output := range outputs {
-		for _, content := range output.Content {
-			if content.Type == "output_text" || content.Type == "text" || content.Type == "input_text" || content.Type == "" {
-				if content.Text != "" {
-					return content.Text
-				}
-			}
-		}
-	}
-	return ""
 }

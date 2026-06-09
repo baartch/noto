@@ -3,6 +3,8 @@ package observe
 import (
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -73,8 +75,35 @@ func (fl *FileLogger) Emit(e Event) {
 		fl.rotateLog()
 	}
 
-	msg := fmt.Sprintf("[%s] [%s] %s\n", time.Now().Format("15:04:05"), e.EventType, e.Status)
-	n, _ := fl.file.WriteString(msg)
+	var b strings.Builder
+	b.WriteString("[")
+	b.WriteString(time.Now().Format("15:04:05"))
+	b.WriteString("] [")
+	b.WriteString(string(e.EventType))
+	b.WriteString("] ")
+	b.WriteString(string(e.Status))
+	if e.ProfileID != "" {
+		b.WriteString(" profile=")
+		b.WriteString(e.ProfileID)
+	}
+	if e.LatencyMs != nil {
+		_, _ = fmt.Fprintf(&b, " latency_ms=%d", *e.LatencyMs)
+	}
+	if len(e.Metadata) > 0 {
+		keys := make([]string, 0, len(e.Metadata))
+		for k := range e.Metadata {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			b.WriteString(" ")
+			b.WriteString(k)
+			b.WriteString("=")
+			_, _ = fmt.Fprint(&b, e.Metadata[k])
+		}
+	}
+	b.WriteString("\n")
+	n, _ := fl.file.WriteString(b.String())
 	fl.currentSize += int64(n)
 }
 

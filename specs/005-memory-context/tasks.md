@@ -1,4 +1,4 @@
-# Tasks: Memory Context Cache Hardening
+# Tasks: Memory Context Timeline & Tooling
 
 **Input**: Design documents from `/specs/005-memory-context/`
 **Prerequisites**: plan.md (required), spec.md (required), research.md, data-model.md, contracts/, quickstart.md
@@ -10,94 +10,174 @@
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)
-- **[Story]**: User story label (`[US2]`, `[US3]`)
+- **[Story]**: User story label (`[US1]`, `[US2]`, `[US3]`, `[US4]`, `[US5]`)
 - All tasks include exact file paths
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-**Purpose**: Prepare scaffolding for scoped cache-hardening changes.
+**Purpose**: Prepare the codebase and specs for the broadened timeline-memory scope.
 
-- [X] T001 Review and align cache-hardening scope notes in specs/005-memory-context/plan.md
-- [X] T002 Create cache-hardening test fixture helpers in tests/integration/memory/cache_hardening_fixtures_test.go
-- [X] T003 [P] Add diagnostics/miss-reason constants shared by tests in tests/unit/cache/testdata/miss_reasons.go
+- [X] T001 Align implementation scope notes and validation targets in /home/andy/gitrepos/noto/specs/005-memory-context/plan.md
+- [X] T002 Create integration test fixtures for day-based raw windows, monthly summary windows, rollups, and tool calling in /home/andy/gitrepos/noto/tests/integration/memory/timeline_fixtures_test.go
+- [X] T003 [P] Add shared test helpers/constants for OpenRouter tool-calling payloads in /home/andy/gitrepos/noto/tests/unit/provider/testdata/tool_calling.go
+- [X] T004 [P] Add shared footer telemetry formatting fixtures in /home/andy/gitrepos/noto/tests/unit/tui/testdata/footer_telemetry.go
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Core cache primitives required before user-story implementation.
+**Purpose**: Core infrastructure required before any user story can be completed.
 
-- [X] T004 Define cache identity value object and key builder in internal/cache/identity.go
-- [X] T005 [P] Add cache freshness state model and helpers in internal/cache/freshness.go
-- [X] T006 [P] Add cache diagnostics aggregator primitives in internal/cache/diagnostics.go
-- [X] T007 Extend cache service interfaces for tier metadata and diagnostics in internal/cache/service.go
-- [X] T008 Add unit tests for identity/freshness primitives in tests/unit/cache/identity_test.go
-- [X] T009 Add unit tests for diagnostics aggregation primitives in tests/unit/cache/diagnostics_test.go
+**⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-**Checkpoint**: Foundation complete; user story implementation can begin.
+- [X] T005 Add timeline settings persistence model and accessors for raw-note days, weekly-summary weeks, and monthly-summary months in /home/andy/gitrepos/noto/internal/store/timeline_settings_repo.go
+- [X] T006 [P] Add weekly/monthly summary persistence models and repositories in /home/andy/gitrepos/noto/internal/store/memory_summary_repo.go
+- [X] T007 [P] Add profile DB migration for timeline settings and summary artifacts in /home/andy/gitrepos/noto/internal/store/migrations/profile/0003_memory_timeline.sql
+- [X] T008 Define timeline window selection primitives and period helpers in /home/andy/gitrepos/noto/internal/memory/timeline.go
+- [X] T009 [P] Extend provider model metadata types to include context length and tool support in /home/andy/gitrepos/noto/internal/provider/models.go and /home/andy/gitrepos/noto/internal/provider/adapter.go
+- [X] T010 [P] Extend OpenAI-compatible provider request/response types for tool definitions and tool call turns in /home/andy/gitrepos/noto/internal/provider/openai_compatible.go
+- [X] T011 Add summary freshness/versioning helpers in /home/andy/gitrepos/noto/internal/memory/summary_rollups.go
+- [X] T012 [P] Add unit tests for timeline period calculation and zero-window behavior in /home/andy/gitrepos/noto/tests/unit/memory/timeline_test.go
+- [X] T013 [P] Add unit tests for provider model metadata parsing (`context_length`, tool support) in /home/andy/gitrepos/noto/tests/unit/provider/models_test.go
+- [X] T014 [P] Add unit tests for provider tool-calling request/response normalization and invalid tool payload handling in /home/andy/gitrepos/noto/tests/unit/provider/tool_calling_test.go
+- [X] T015 [P] Add unit tests for timeline settings serialization and validation covering arbitrary raw-note day values greater than 0, weekly-summary week values greater than 0, rejection of zero weekly/monthly summary values, bounded monthly windows greater than 0, and `all_remaining` sentinel values in /home/andy/gitrepos/noto/tests/unit/memory/timeline_settings_test.go
+
+**Checkpoint**: Foundation ready — user story implementation can begin.
 
 ---
 
-## Phase 3: User Story 2 - Fast and Correct Cache Reuse (Priority: P2) 🎯 MVP
+## Phase 3: User Story 1 - Time-Layered Context Assembly (Priority: P1) 🎯 MVP
 
-**Goal**: Deliver correct cache identity matching, SWR behavior, event-driven invalidation, and L1→L2 lookup order.
+**Goal**: Deliver configurable default context assembly using a day-based raw-note window plus weekly-summary and monthly-summary windows without conversation summaries.
 
-**Independent Test**: Run retrieval flows where prompt/notes/token budget/embedding model vary and verify invalidation + SWR + tier order behavior without full rebuild on eligible repeats.
+**Independent Test**: Populate a profile with notes spanning several months, vary the timeline settings, and verify the assembled context includes the correct raw notes for the configured rolling-day window, weekly summaries for the configured week span, and monthly summaries for the configured older-history window.
+
+### Tests for User Story 1
+
+- [X] T016 [P] [US1] Add retrieval tests for configured raw-day, weekly-week, and monthly-summary windows plus preceding-Monday fill behavior, weekly-to-monthly no-gap coverage, and boundary-cutover rules in /home/andy/gitrepos/noto/tests/unit/memory/retrieval_timeline_test.go
+- [X] T017 [P] [US1] Add integration test for timeline-based context assembly across multi-month history in /home/andy/gitrepos/noto/tests/integration/memory/timeline_context_test.go
+- [X] T018 [P] [US1] Add integration test proving conversation summaries are excluded from assembled context in /home/andy/gitrepos/noto/tests/integration/memory/no_session_summary_test.go
+- [X] T019 [P] [US1] Add integration test for bounded monthly-summary windows, rejection of zero weekly/monthly summary settings, and exclusion of history older than the monthly cutoff in /home/andy/gitrepos/noto/tests/integration/memory/timeline_settings_edges_test.go
+
+### Implementation for User Story 1
+
+- [X] T020 [US1] Add raw-note day settings (any integer greater than 0), weekly-summary week settings, and monthly-summary month settings to chat settings state and menu wiring in /home/andy/gitrepos/noto/internal/tui/model.go
+- [X] T021 [US1] Load, persist, and apply raw-note day settings (any integer greater than 0), weekly-summary week settings, and monthly-summary month settings in chat bootstrap, live settings updates, and profile switching flows in /home/andy/gitrepos/noto/internal/app/chat_cmd.go
+- [X] T022 [US1] Replace session-summary-based memory selection with timeline-window context assembly that fills the raw-note day window backward to the preceding Monday and extends weekly coverage to at least the first day of the following monthly-summary month in /home/andy/gitrepos/noto/internal/memory/retrieval.go
+- [X] T023 [US1] Add formatted memory-block sections for raw notes, weekly summaries, and monthly summaries in /home/andy/gitrepos/noto/internal/memory/retrieval.go
+- [X] T024 [US1] Remove reliance on conversation summaries during chat context assembly in /home/andy/gitrepos/noto/internal/chat/session.go and /home/andy/gitrepos/noto/internal/memory/retrieval.go
+- [X] T025 [US1] Add fallback behavior for missing summary layers using best available memory in /home/andy/gitrepos/noto/internal/memory/retrieval.go
+
+**Checkpoint**: User Story 1 should be fully functional and testable independently.
+
+---
+
+## Phase 4: User Story 2 - Automatic Summary Rollups (Priority: P2)
+
+**Goal**: Automatically create, reuse, and regenerate weekly/monthly summary artifacts as profile history advances.
+
+**Independent Test**: Cross week/month boundaries with eligible notes, verify summaries are created automatically, then edit underlying notes and verify affected summaries become stale and are regenerated or queued for regeneration.
 
 ### Tests for User Story 2
 
-- [X] T010 [P] [US2] Add retrieval cache-key mismatch tests (including embedding model) in tests/unit/memory/retrieval_cache_key_test.go
-- [X] T011 [P] [US2] Add stale-while-revalidate behavior tests in tests/unit/memory/retrieval_swr_test.go
-- [X] T012 [P] [US2] Add L1-before-L2 tier selection tests in tests/unit/cache/service_tiers_test.go
-- [X] T013 [P] [US2] Add event-driven invalidation trigger tests in tests/unit/cache/invalidation_triggers_test.go
-- [X] T014 [US2] Add integration test for cross-session persistent-cache reuse in tests/integration/memory/cache_persistence_test.go
-- [X] T015 [US2] Add integration test for prompt/token/embedding invalidation pathways in tests/integration/memory/cache_invalidation_test.go
+- [X] T026 [P] [US2] Add unit tests for weekly/monthly rollup eligibility and duplicate prevention in /home/andy/gitrepos/noto/tests/unit/memory/summary_rollups_test.go
+- [X] T027 [P] [US2] Add integration test for catch-up rollup generation after inactive periods in /home/andy/gitrepos/noto/tests/integration/memory/rollup_catchup_test.go
+- [X] T028 [P] [US2] Add integration test for stale-summary marking and failure fallback after covered-note changes in /home/andy/gitrepos/noto/tests/integration/memory/rollup_regeneration_test.go
 
 ### Implementation for User Story 2
 
-- [X] T016 [US2] Update retrieval cache key construction to include embedding model and full identity inputs in internal/memory/retrieval.go
-- [X] T017 [US2] Implement in-process L1 cache with L1→L2 lookup and L2 promotion in internal/cache/service.go
-- [X] T018 [US2] Implement slightly-stale serve path and async revalidation workflow in internal/cache/service.go
-- [X] T019 [US2] Guard against stale refresh race overwrite using identity/freshness checks in internal/cache/service.go
-- [X] T020 [US2] Wire note create/update/delete invalidation events in internal/cache/invalidation.go
-- [X] T021 [US2] Wire system prompt, token budget, and embedding model invalidation events in internal/cache/invalidation.go
-- [X] T022 [US2] Propagate tier/served-stale/revalidation metadata through retrieval result in internal/memory/retrieval.go
-- [X] T023 [US2] Update cache behavior contract to match implemented US2 semantics in specs/005-memory-context/contracts/context-retrieval.md
+- [X] T029 [US2] Implement weekly and monthly summary creation logic in /home/andy/gitrepos/noto/internal/memory/summary_rollups.go
+- [X] T030 [US2] Trigger opportunistic rollup generation during profile processing/chat turns in /home/andy/gitrepos/noto/internal/chat/session.go
+- [X] T031 [US2] Persist and query summary artifacts through repositories in /home/andy/gitrepos/noto/internal/store/memory_summary_repo.go
+- [X] T032 [US2] Enforce unique weekly/monthly summary periods at repository and migration level in /home/andy/gitrepos/noto/internal/store/memory_summary_repo.go and /home/andy/gitrepos/noto/internal/store/migrations/profile/0003_memory_timeline.sql
+- [X] T033 [US2] Mark summaries stale when covered notes are added or updated in /home/andy/gitrepos/noto/internal/memory/processor.go and /home/andy/gitrepos/noto/internal/memory/extractor.go
+- [X] T034 [US2] Add regeneration path for stale summaries, failure handling, and safe replacement semantics in /home/andy/gitrepos/noto/internal/memory/summary_rollups.go
 
-**Checkpoint**: User Story 2 is independently functional and testable.
+**Checkpoint**: User Stories 1 and 2 should work independently and together.
 
 ---
 
-## Phase 4: User Story 3 - Observable Cache Health (Priority: P3)
+## Phase 5: User Story 3 - LLM Memory Search Tools (Priority: P3)
 
-**Goal**: Expose actionable cache diagnostics (hit/miss rate, average rebuild time, top miss reasons).
+**Goal**: Expose keyword/vector and time-range memory search through OpenRouter-compatible tool calling.
 
-**Independent Test**: Trigger mixed hit/miss outcomes and verify diagnostics report accurate rates, rebuild timing, and ranked miss reasons.
+**Independent Test**: Ask the assistant questions that require topical and date-bounded memory lookup, verify tool definitions are sent, tool calls are executed locally, and final replies use the returned search results.
 
 ### Tests for User Story 3
 
-- [X] T024 [P] [US3] Add diagnostics snapshot accuracy tests in tests/unit/cache/diagnostics_snapshot_test.go
-- [X] T025 [P] [US3] Add miss-reason classification tests in tests/unit/memory/retrieval_miss_reason_test.go
-- [X] T026 [US3] Add integration test for diagnostics reporting window in tests/integration/memory/cache_diagnostics_test.go
+- [X] T035 [P] [US3] Add unit tests for keyword search tool schema, execution, and deterministic fallback behavior in /home/andy/gitrepos/noto/tests/unit/memory/keyword_search_tool_test.go
+- [X] T036 [P] [US3] Add unit tests for time-range search tool schema, mixed raw+summary results, and execution in /home/andy/gitrepos/noto/tests/unit/memory/time_range_search_tool_test.go
+- [X] T037 [P] [US3] Add integration test for OpenRouter tool-calling round-trip in /home/andy/gitrepos/noto/tests/integration/provider/tool_calling_roundtrip_test.go
+- [X] T038 [P] [US3] Add integration test for no-tool-support graceful degradation and invalid tool-call payload handling in /home/andy/gitrepos/noto/tests/integration/provider/tool_support_fallback_test.go
 
 ### Implementation for User Story 3
 
-- [X] T027 [US3] Record hit/miss/rebuild timing and miss reasons during retrieval lifecycle in internal/memory/retrieval.go
-- [X] T028 [US3] Expose diagnostics snapshot API from cache service in internal/cache/service.go
-- [X] T029 [US3] Surface diagnostics fields in retrieval-facing output contract in specs/005-memory-context/contracts/context-retrieval.md
-- [X] T030 [US3] Document diagnostics validation workflow in specs/005-memory-context/quickstart.md
+- [X] T039 [US3] Implement keyword/vector memory search executor with deterministic fallback in /home/andy/gitrepos/noto/internal/memory/search_tools.go
+- [X] T040 [US3] Implement time-range SQLite memory search executor with mixed raw+summary result support in /home/andy/gitrepos/noto/internal/memory/search_tools.go
+- [X] T041 [US3] Add OpenRouter-compatible tool definitions and follow-up request handling in /home/andy/gitrepos/noto/internal/provider/openai_compatible.go
+- [X] T042 [US3] Integrate and keep canonical tool-call orchestration in /home/andy/gitrepos/noto/internal/chat/pipeline.go and /home/andy/gitrepos/noto/internal/chat/session.go
+- [X] T043 [US3] Gate tool exposure on model/provider capability metadata in /home/andy/gitrepos/noto/internal/provider/models.go and /home/andy/gitrepos/noto/internal/chat/session.go
 
-**Checkpoint**: User Story 3 is independently functional and testable.
+**Checkpoint**: User Story 3 should be independently functional with or without default timeline context.
 
 ---
 
-## Phase 5: Polish & Cross-Cutting Concerns
+## Phase 6: User Story 4 - Fast and Correct Cache Reuse (Priority: P4)
 
-**Purpose**: Final verification and cleanup across stories.
+**Goal**: Preserve and extend cache correctness under timeline settings, summary state changes, and broadened retrieval state.
 
-- [X] T031 [P] Refine cache hardening data-model notes for final implementation alignment in specs/005-memory-context/data-model.md
-- [X] T032 Run full verification suite (`make fmt`, `make lint`, `make test`) and capture outcomes in specs/005-memory-context/quickstart.md
-- [X] T033 [P] Remove dead code/obsolete comments from pre-hardening cache paths in internal/cache/doc.go
+**Independent Test**: Warm the cache, change settings or summary state, and verify valid hits, stale-while-revalidate behavior, and invalidation when any retrieval-shaping input changes.
+
+### Tests for User Story 4
+
+- [X] T044 [P] [US4] Add unit tests for cache identity including timeline settings and summary state, plus internal token-fitting reduction order that drops oldest monthly-summary coverage first, in /home/andy/gitrepos/noto/tests/unit/memory/retrieval_cache_identity_timeline_test.go
+- [X] T045 [P] [US4] Add integration test for timeline-settings invalidation, including live in-session settings updates, and persistent cache reuse in /home/andy/gitrepos/noto/tests/integration/memory/timeline_cache_invalidation_test.go
+- [X] T046 [P] [US4] Add integration test for summary-state-driven cache invalidation and miss-reason classification in /home/andy/gitrepos/noto/tests/integration/memory/summary_cache_invalidation_test.go
+
+### Implementation for User Story 4
+
+- [X] T047 [US4] Extend cache key construction with raw-note day settings, weekly-summary week settings, monthly-summary month settings, and assembled summary state in /home/andy/gitrepos/noto/internal/memory/retrieval.go
+- [X] T048 [US4] Remove user-facing token-budget configuration paths while preserving internal token fitting safeguards, including dropping the oldest monthly-summary coverage first when assembled context must be reduced before touching newer timeline layers, in /home/andy/gitrepos/noto/internal/app/chat_cmd.go and /home/andy/gitrepos/noto/internal/memory/retrieval.go
+- [X] T049 [US4] Invalidate or stale cache entries on timeline-setting changes, including live in-session updates, in /home/andy/gitrepos/noto/internal/cache/invalidation.go and /home/andy/gitrepos/noto/internal/app/chat_cmd.go
+- [X] T050 [US4] Invalidate or stale cache entries on summary artifact changes and classify corresponding miss reasons in /home/andy/gitrepos/noto/internal/cache/invalidation.go and /home/andy/gitrepos/noto/internal/memory/summary_rollups.go
+- [X] T051 [US4] Preserve L1→L2 and stale-while-revalidate behavior under timeline retrieval in /home/andy/gitrepos/noto/internal/memory/retrieval.go and /home/andy/gitrepos/noto/internal/cache/service.go
+
+**Checkpoint**: User Story 4 should maintain fast reuse without incorrect hits.
+
+---
+
+## Phase 7: User Story 5 - Observable Memory Health (Priority: P5)
+
+**Goal**: Surface actionable diagnostics for rollups, retrieval, tool usage, and footer context-capacity telemetry.
+
+**Independent Test**: Trigger rollup events, cache hits/misses, tool calls, and model switches, then verify diagnostics and footer telemetry accurately reflect the current state.
+
+### Tests for User Story 5
+
+- [X] T052 [P] [US5] Add unit tests for footer token/context-capacity formatting and unknown-capacity fallback in /home/andy/gitrepos/noto/tests/unit/tui/footer_telemetry_test.go
+- [X] T053 [P] [US5] Add integration test for footer updates after model metadata and usage changes in /home/andy/gitrepos/noto/tests/integration/tui/footer_context_capacity_test.go
+- [X] T054 [P] [US5] Add integration test for rollup/tool/cache diagnostics visibility and miss-reason completeness in /home/andy/gitrepos/noto/tests/integration/memory/memory_diagnostics_test.go
+
+### Implementation for User Story 5
+
+- [X] T055 [US5] Extend provider model listing to parse and return `context_length` and supported tool parameters in /home/andy/gitrepos/noto/internal/provider/models.go
+- [X] T056 [US5] Fetch/cache active model metadata during startup, profile switch, and model change flows in /home/andy/gitrepos/noto/internal/app/chat_cmd.go and /home/andy/gitrepos/noto/internal/chat/session.go
+- [X] T057 [US5] Propagate active model context maximum into session stats in /home/andy/gitrepos/noto/internal/provider/stats.go and /home/andy/gitrepos/noto/internal/chat/session.go
+- [X] T058 [US5] Update footer token/status rendering to show max context and used percentage next to tokens in /home/andy/gitrepos/noto/internal/tui/footer_view.go and /home/andy/gitrepos/noto/internal/tui/model.go
+- [X] T059 [US5] Add unknown-capacity footer fallback behavior in /home/andy/gitrepos/noto/internal/tui/footer_view.go
+- [X] T060 [US5] Extend diagnostics reporting with recent rollup activity, tool-call outcomes, timeline/summary miss-reason completeness, and bounded monthly-cutoff exclusion visibility in /home/andy/gitrepos/noto/internal/memory/retrieval.go and /home/andy/gitrepos/noto/internal/chat/pipeline.go
+
+**Checkpoint**: All user stories should now be independently functional.
+
+---
+
+## Phase 8: Polish & Cross-Cutting Concerns
+
+**Purpose**: Final cleanup, docs alignment, and full validation across all stories.
+
+- [X] T061 [P] Update implementation-aligned notes in /home/andy/gitrepos/noto/specs/005-memory-context/data-model.md and /home/andy/gitrepos/noto/specs/005-memory-context/contracts/context-retrieval.md
+- [X] T062 [P] Remove obsolete session-summary-specific comments or dead paths in /home/andy/gitrepos/noto/internal/memory/doc.go, /home/andy/gitrepos/noto/internal/chat/session.go, and /home/andy/gitrepos/noto/docs/CONTEXT_AT_A_GLANCE.txt
+- [X] T063 Run full verification suite (`make fmt`, `make lint`, `make test`) and capture outcomes in /home/andy/gitrepos/noto/specs/005-memory-context/quickstart.md
 
 ---
 
@@ -106,64 +186,100 @@
 ### Phase Dependencies
 
 - **Phase 1 (Setup)**: starts immediately
-- **Phase 2 (Foundational)**: depends on Phase 1; blocks story work
-- **Phase 3 (US2)**: depends on Phase 2
-- **Phase 4 (US3)**: depends on Phase 2 and can start after US2 core telemetry hooks (T022)
-- **Phase 5 (Polish)**: depends on completion of US2 and US3
+- **Phase 2 (Foundational)**: depends on Setup completion; blocks all user story work
+- **Phase 3 (US1)**: depends on Foundational completion
+- **Phase 4 (US2)**: depends on Foundational completion; builds on US1 retrieval shapes but remains independently testable
+- **Phase 5 (US3)**: depends on Foundational completion and can start once provider tool-call primitives are in place
+- **Phase 6 (US4)**: depends on US1 retrieval behavior and summary-state primitives from US2
+- **Phase 7 (US5)**: depends on provider metadata work and completed telemetry hooks from earlier stories
+- **Phase 8 (Polish)**: depends on all desired stories being complete
 
 ### User Story Dependencies
 
-- **US2 (P2)**: no dependency on US3; delivers MVP for this scoped work
-- **US3 (P3)**: depends on US2 instrumentation points but remains independently testable once available
+- **US1 (P1)**: first MVP slice; no dependency on later stories
+- **US2 (P2)**: depends on US1 timeline assembly foundations
+- **US3 (P3)**: independent of US2 for basic tool execution, but benefits from US1 timeline context and shared summary entities
+- **US4 (P4)**: depends on US1 and US2 because cache identity must include timeline settings and summary state
+- **US5 (P5)**: depends on US3/US4 telemetry and diagnostics hooks
 
-### Within User Stories
+### Within Each User Story
 
-- Test tasks should be authored first and executed before finalizing implementation tasks.
-- Core implementation precedes contract/doc updates.
+- Tests are authored before or alongside implementation and should fail before the final implementation is considered complete.
+- Storage/repository updates precede service orchestration.
+- Service logic precedes chat/provider/TUI integration.
+- Story-specific validation completes before moving to lower-priority polish.
 
-## Parallel Opportunities
+### Parallel Opportunities
 
-- **Setup**: T003 can run with T001/T002
-- **Foundational**: T005 and T006 can run in parallel; T008 and T009 can run in parallel after T004–T006
-- **US2**: T010–T013 can run in parallel; T020 and T021 can run in parallel; T014 and T015 can run in parallel after implementation
-- **US3**: T024 and T025 can run in parallel; T029 and T030 can run in parallel after T027/T028
-- **Polish**: T031 and T033 can run in parallel before T032 final gate
+- **Setup**: T003 and T004 can run in parallel after T001/T002 framing work
+- **Foundational**: T006, T007, T009, and T010 can run in parallel; T012–T014 can run in parallel after their corresponding primitives exist
+- **US1**: T016–T019 can run in parallel; T020 and T021 can run in parallel
+- **US2**: T026–T028 can run in parallel; T031 and T033 can run in parallel
+- **US3**: T035–T038 can run in parallel; T039 and T040 can run in parallel
+- **US4**: T044–T046 can run in parallel; T048 and T049 can run in parallel
+- **US5**: T052–T054 can run in parallel; T058 and T059 can run in parallel
+- **Polish**: T061 and T062 can run in parallel before T063
 
 ---
 
-## Parallel Example: User Story 2
+## Parallel Example: User Story 3
 
 ```bash
-# Parallel tests
-Task: "T010 [US2] tests/unit/memory/retrieval_cache_key_test.go"
-Task: "T011 [US2] tests/unit/memory/retrieval_swr_test.go"
-Task: "T012 [US2] tests/unit/cache/service_tiers_test.go"
-Task: "T013 [US2] tests/unit/cache/invalidation_triggers_test.go"
+# Parallel tests for User Story 3
+Task: "T035 [US3] /home/andy/gitrepos/noto/tests/unit/memory/keyword_search_tool_test.go"
+Task: "T036 [US3] /home/andy/gitrepos/noto/tests/unit/memory/time_range_search_tool_test.go"
+Task: "T037 [US3] /home/andy/gitrepos/noto/tests/integration/provider/tool_calling_roundtrip_test.go"
+Task: "T038 [US3] /home/andy/gitrepos/noto/tests/integration/provider/tool_support_fallback_test.go"
 
-# Parallel invalidation wiring
-Task: "T020 [US2] internal/cache/invalidation.go (note events)"
-Task: "T021 [US2] internal/cache/invalidation.go (prompt/token/embedding events)"
+# Parallel implementation for search executors
+Task: "T039 [US3] /home/andy/gitrepos/noto/internal/memory/search_tools.go"
+Task: "T040 [US3] /home/andy/gitrepos/noto/internal/memory/search_tools.go"
 ```
+
+---
 
 ## Implementation Strategy
 
-### MVP First (US2)
+### MVP First (User Story 1 Only)
 
-1. Complete Phase 1 and Phase 2
-2. Complete US2 (Phase 3)
-3. Validate US2 independent test criteria and quickstart checks
-4. Ship scoped MVP
+1. Complete Phase 1: Setup
+2. Complete Phase 2: Foundational
+3. Complete Phase 3: User Story 1
+4. **STOP and VALIDATE**: Confirm timeline-based context assembly works independently
+5. Demo/deploy the MVP slice if desired
 
 ### Incremental Delivery
 
-1. Deliver US2 cache correctness + latency behavior
-2. Deliver US3 diagnostics visibility
-3. Final polish and full-suite validation
+1. Deliver US1 configurable timeline context assembly
+2. Deliver US2 rollup creation/regeneration
+3. Deliver US3 OpenRouter tool-calling search tools
+4. Deliver US4 cache correctness for the broadened retrieval model
+5. Deliver US5 diagnostics and footer telemetry
+6. Finish with cross-cutting cleanup and validation
 
-### Format Validation Checklist
+### Parallel Team Strategy
 
-- All tasks use `- [ ]` checkbox format
-- All tasks include sequential IDs `T001`..`T033`
-- `[P]` marker used only for parallelizable tasks
-- User-story tasks include `[US2]` or `[US3]` labels
-- Every task includes an explicit file path
+With multiple developers:
+
+1. Complete Setup + Foundational together
+2. Then split by story focus:
+   - Developer A: US1/US2 memory timeline + rollups
+   - Developer B: US3 provider tool calling + search execution
+   - Developer C: US4/US5 cache identity + footer telemetry + diagnostics
+3. Re-integrate through the shared validation scenarios in `quickstart.md`
+
+---
+
+## Notes
+
+- This task set focuses on the newly adjusted timeline-memory, tool-calling, cache, and footer-telemetry scope.
+- Legacy extraction and prompt-bootstrap requirements already implemented in the product are intentionally not re-tasked here.
+- Traceability by scope:
+  - US1 covers timeline window settings and default context assembly
+  - US2 covers weekly/monthly rollup generation, uniqueness, and regeneration
+  - US3 covers LLM memory search tools and tool-calling integration
+  - US4 covers cache identity, invalidation, and stale-while-revalidate behavior
+  - US5 covers diagnostics, model context metadata, and footer telemetry
+- All tasks use the required checklist format with checkbox, ID, optional `[P]`, story label where applicable, and exact file paths.
+- Tasks are specific enough to execute directly against the documented plan, contracts, and data model.
+- Automated tests are included because the constitution and plan explicitly require them.

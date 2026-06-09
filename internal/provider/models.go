@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -13,8 +14,12 @@ import (
 
 // ModelInfo holds metadata about a single model returned by the provider.
 type ModelInfo struct {
-	ID      string
-	OwnedBy string
+	ID                 string
+	OwnedBy            string
+	ContextLength      int
+	TopProviderContext int
+	Pricing            ModelPricing
+	ToolSupport        ToolSupport
 }
 
 // ListModels fetches available models from the provider's /models endpoint.
@@ -54,8 +59,23 @@ func ListModels(ctx context.Context, cfg Config) ([]ModelInfo, error) {
 
 	var result struct {
 		Data []struct {
-			ID      string `json:"id"`
-			OwnedBy string `json:"owned_by"`
+			ID                  string   `json:"id"`
+			OwnedBy             string   `json:"owned_by"`
+			ContextLength       int      `json:"context_length"`
+			SupportedParameters []string `json:"supported_parameters"`
+			Pricing             struct {
+				Prompt            string `json:"prompt"`
+				Completion        string `json:"completion"`
+				Request           string `json:"request"`
+				Image             string `json:"image"`
+				WebSearch         string `json:"web_search"`
+				InternalReasoning string `json:"internal_reasoning"`
+				InputCacheRead    string `json:"input_cache_read"`
+				InputCacheWrite   string `json:"input_cache_write"`
+			} `json:"pricing"`
+			TopProvider struct {
+				ContextLength int `json:"context_length"`
+			} `json:"top_provider"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -64,7 +84,24 @@ func ListModels(ctx context.Context, cfg Config) ([]ModelInfo, error) {
 
 	models := make([]ModelInfo, 0, len(result.Data))
 	for _, m := range result.Data {
-		models = append(models, ModelInfo{ID: m.ID, OwnedBy: m.OwnedBy})
+		supportsTools := slices.Contains(m.SupportedParameters, "tools")
+		models = append(models, ModelInfo{
+			ID:                 m.ID,
+			OwnedBy:            m.OwnedBy,
+			ContextLength:      m.ContextLength,
+			TopProviderContext: m.TopProvider.ContextLength,
+			Pricing: ModelPricing{
+				Prompt:            m.Pricing.Prompt,
+				Completion:        m.Pricing.Completion,
+				Request:           m.Pricing.Request,
+				Image:             m.Pricing.Image,
+				WebSearch:         m.Pricing.WebSearch,
+				InternalReasoning: m.Pricing.InternalReasoning,
+				InputCacheRead:    m.Pricing.InputCacheRead,
+				InputCacheWrite:   m.Pricing.InputCacheWrite,
+			},
+			ToolSupport: ToolSupport{SupportsTools: supportsTools},
+		})
 	}
 	sort.Slice(models, func(i, j int) bool {
 		return models[i].ID < models[j].ID

@@ -115,6 +115,9 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, profileSlug, con
 	}
 
 	processor := NewProcessor(e.noteRepo, e.deduper, e.logHook)
+	if e.noteRepo != nil && e.noteRepo.DB() != nil {
+		processor.WithSummaryRollups(NewSummaryRollupBuilder(e.noteRepo, store.NewMemorySummaryRepo(e.noteRepo.DB())))
+	}
 	notes, updated, err := processor.Process(ctx, profileID, conversationID, addItems, sourceMessageIDs)
 	if err != nil {
 		return nil, err
@@ -240,6 +243,9 @@ func (e *Extractor) updateNote(ctx context.Context, profileID, targetID string, 
 	}
 	if err := e.noteRepo.Update(ctx, note); err != nil {
 		return nil, false, err
+	}
+	if e.noteRepo != nil && e.noteRepo.DB() != nil {
+		_ = NewSummaryRollupBuilder(e.noteRepo, store.NewMemorySummaryRepo(e.noteRepo.DB())).MarkCoveredSummariesStale(ctx, profileID, note.CreatedAt)
 	}
 	if e.invalidator != nil {
 		_ = e.invalidator.InvalidateAll(ctx, profileID)

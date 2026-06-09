@@ -19,7 +19,7 @@ func TestUsageAccumulator_AddFromUsage(t *testing.T) {
 	if acc.up != 10 || acc.down != 3 || acc.cacheRead != 2 || acc.cacheWrite != 1 {
 		t.Fatalf("unexpected accumulator values: %+v", acc)
 	}
-	if got := acc.formatTokenStatus(); got != "↑10 ↓3 R2 W1 $0.120" {
+	if got := acc.formatTokenStatus(); got != "↑10 ↓3 R2 W1 $0.120 ?/%?" {
 		t.Fatalf("unexpected status format: %s", got)
 	}
 }
@@ -30,7 +30,7 @@ func TestUsageAccumulator_SkipsMissingUsage(t *testing.T) {
 	if acc.up != 0 || acc.down != 0 || acc.cacheRead != 0 || acc.cacheWrite != 0 || acc.cost != 0 {
 		t.Fatalf("expected unchanged accumulator, got %+v", acc)
 	}
-	if got := acc.formatTokenStatus(); got != "↑0 ↓0 $0.000" {
+	if got := acc.formatTokenStatus(); got != "↑0 ↓0 $0.000 ?/%?" {
 		t.Fatalf("unexpected status format: %s", got)
 	}
 }

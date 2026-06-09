@@ -20,8 +20,15 @@ func (s *Stats) Add(resp *CompletionResponse) {
 	s.TokensIn += resp.PromptTokens
 	s.TokensOut += resp.CompletionTokens
 	s.TotalTokens += resp.PromptTokens + resp.CompletionTokens
-	s.CostUSD += resp.EstimatedCostUSD
+	if resp.Usage.HasUsage {
+		s.CostUSD += resp.Usage.Cost
+	} else {
+		s.CostUSD += resp.EstimatedCostUSD
+	}
 	s.ContextUsed = resp.PromptTokens // last request's prompt size
+	if resp.ContextMax > 0 {
+		s.ContextMax = resp.ContextMax
+	}
 }
 
 // Format returns a compact status-line string like:
@@ -36,6 +43,8 @@ func (s Stats) Format() string {
 	if s.ContextMax > 0 {
 		pct := float64(s.ContextUsed) / float64(s.ContextMax) * 100
 		line += fmt.Sprintf("  %.0f%%/%s", pct, formatTokens(s.ContextMax))
+	} else {
+		line += "  ?/%?"
 	}
 	return line
 }

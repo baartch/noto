@@ -13,8 +13,45 @@ var ErrInvalidCredentials = errors.New("provider: invalid credentials")
 
 // Message represents a single turn in a chat completion request.
 type Message struct {
-	Role    string
-	Content string
+	Role              string
+	Content           string
+	ToolCallID        string
+	ToolCallName      string
+	ToolCallArguments string
+	ToolID            string
+}
+
+// ToolSupport describes normalized provider tool-calling capability metadata.
+type ToolSupport struct {
+	SupportsTools bool
+}
+
+// ModelPricing captures OpenRouter /models pricing metadata for a model.
+type ModelPricing struct {
+	Prompt            string
+	Completion        string
+	Request           string
+	Image             string
+	WebSearch         string
+	InternalReasoning string
+	InputCacheRead    string
+	InputCacheWrite   string
+}
+
+// ToolDefinition represents a tool/function exposed to the model.
+type ToolDefinition struct {
+	Type        string
+	Name        string
+	Description string
+	Parameters  map[string]any
+}
+
+// ToolCall is a normalized tool invocation emitted by the model.
+type ToolCall struct {
+	ID        string
+	CallID    string
+	Name      string
+	Arguments string
 }
 
 // CompletionRequest is the normalized request payload sent to a provider.
@@ -23,6 +60,7 @@ type CompletionRequest struct {
 	Model       string
 	MaxTokens   int
 	Temperature float64
+	Tools       []ToolDefinition
 }
 
 // CompletionResponse is the normalized response from a provider.
@@ -32,6 +70,7 @@ type CompletionResponse struct {
 	PromptTokens     int
 	CompletionTokens int
 	TotalTokens      int
+	ToolCalls        []ToolCall
 	// EstimatedCostUSD is a rough cost estimate based on known model pricing.
 	// Zero if the model is not in the pricing table.
 	EstimatedCostUSD float64

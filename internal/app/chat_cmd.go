@@ -115,6 +115,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 	extractorModel := ""
 	extractorFallback := false
 	cacheStatus := "ctx:n/a"
+	tokenStatus := "tokens: n/a"
 	inputHistory := loadInputHistory(ctx, profileDB, activeProfile.ID)
 	startupMessages, startupHistoryErr := loadStartupConversationMessages(ctx, profileDB, activeProfile.ID)
 	embeddingModelMissing := false
@@ -192,6 +193,11 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					prog.Send(tui.CacheStatusUpdated(status))
 				}
 			},
+			func(stats provider.Stats) {
+				if prog != nil {
+					prog.Send(tui.StatsUpdated(stats.Format()))
+				}
+			},
 			func(u provider.Usage) {
 				if prog != nil {
 					prog.Send(tui.UsageUpdatedMain(u))
@@ -204,6 +210,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 		defer sess.Close(context.Background())
 
 		cacheStatus = sess.CacheStatus()
+		tokenStatus = sess.Stats().Format()
 		extractorFallback = sess.ExtractorFallbackActive()
 		embeddingModelMissing = sess.EmbeddingModelMissingActive()
 		embeddingModel = sess.EmbeddingModel()
@@ -219,6 +226,22 @@ func runChat(cmd *cobra.Command, _ []string) error {
 		listModelsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 			return provider.ListModels(callCtx, adapterCfg)
 		}
+		if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
+			for _, mi := range models {
+				if mi.ID == activeModel && sess != nil {
+					sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
+					ctxMax := mi.ContextLength
+					if ctxMax == 0 {
+						ctxMax = mi.TopProviderContext
+					}
+					sess.SetModelContextMax(ctxMax)
+					if prog != nil {
+						prog.Send(tui.StatsUpdated(sess.Stats().Format()))
+					}
+					break
+				}
+			}
+		}
 		listEmbeddingsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 			return provider.ListEmbeddingModels(callCtx, adapterCfg)
 		}
@@ -229,6 +252,19 @@ func runChat(cmd *cobra.Command, _ []string) error {
 				return err
 			}
 			activeModel = modelID
+			if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
+				for _, mi := range models {
+					if mi.ID == modelID && sess != nil {
+						sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
+						ctxMax := mi.ContextLength
+						if ctxMax == 0 {
+							ctxMax = mi.TopProviderContext
+						}
+						sess.SetModelContextMax(ctxMax)
+						break
+					}
+				}
+			}
 			return nil
 		}
 		embeddingModelSelectedFn = func(modelID string) error {
@@ -286,6 +322,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			extractorModel = ""
 			embeddingModel = ""
 			cacheStatus = "ctx:n/a"
+			tokenStatus = "tokens: n/a"
 			providerFn = nil
 			listModelsFn = nil
 			listEmbeddingsFn = nil
@@ -346,6 +383,11 @@ func runChat(cmd *cobra.Command, _ []string) error {
 							prog.Send(tui.CacheStatusUpdated(status))
 						}
 					},
+					func(stats provider.Stats) {
+						if prog != nil {
+							prog.Send(tui.StatsUpdated(stats.Format()))
+						}
+					},
 					func(u provider.Usage) {
 						if prog != nil {
 							prog.Send(tui.UsageUpdatedMain(u))
@@ -357,6 +399,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 				}
 
 				cacheStatus = sess.CacheStatus()
+				tokenStatus = sess.Stats().Format()
 				extractorFallback = sess.ExtractorFallbackActive()
 				embeddingModelMissing = sess.EmbeddingModelMissingActive()
 				embeddingModel = sess.EmbeddingModel()
@@ -372,6 +415,22 @@ func runChat(cmd *cobra.Command, _ []string) error {
 				listModelsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 					return provider.ListModels(callCtx, adapterCfg)
 				}
+				if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
+					for _, mi := range models {
+						if mi.ID == activeModel && sess != nil {
+							sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
+							ctxMax := mi.ContextLength
+							if ctxMax == 0 {
+								ctxMax = mi.TopProviderContext
+							}
+							sess.SetModelContextMax(ctxMax)
+							if prog != nil {
+								prog.Send(tui.StatsUpdated(sess.Stats().Format()))
+							}
+							break
+						}
+					}
+				}
 				listEmbeddingsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 					return provider.ListEmbeddingModels(callCtx, adapterCfg)
 				}
@@ -382,6 +441,19 @@ func runChat(cmd *cobra.Command, _ []string) error {
 						return err
 					}
 					activeModel = modelID
+					if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
+						for _, mi := range models {
+							if mi.ID == modelID && sess != nil {
+								sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
+								ctxMax := mi.ContextLength
+								if ctxMax == 0 {
+									ctxMax = mi.TopProviderContext
+								}
+								sess.SetModelContextMax(ctxMax)
+								break
+							}
+						}
+					}
 					return nil
 				}
 				embeddingModelSelectedFn = func(modelID string) error {
@@ -408,7 +480,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			}
 
 			startupMessages, startupHistoryErr := loadStartupConversationMessages(ctx, profileDB, p.ID)
-			return tui.ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, "tokens: n/a", extractorFallback, embeddingModelMissing, providerFn, listModelsFn, listEmbeddingsFn, modelSelectedFn, embeddingModelSelectedFn, extractorModelSelectedFn, tui.DefaultSettingsMenu(), inputHistory, startupMessages, startupHistoryErr)
+			return tui.ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, tokenStatus, extractorFallback, embeddingModelMissing, providerFn, listModelsFn, listEmbeddingsFn, modelSelectedFn, embeddingModelSelectedFn, extractorModelSelectedFn, tui.DefaultSettingsMenu(), inputHistory, startupMessages, startupHistoryErr)
 		}
 	}
 	listBackupsFn := func(ctx context.Context) ([]string, error) {
@@ -430,7 +502,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 
 	m := tui.New(
 		activeProfile.Name, activeModel, extractorModel, embeddingModel,
-		cacheStatus, "tokens: n/a", extractorFallback, embeddingModelMissing,
+		cacheStatus, tokenStatus, extractorFallback, embeddingModelMissing,
 		dispatcher, execCtx,
 		providerFn, listModelsFn, listEmbeddingsFn, modelSelectedFn, embeddingModelSelectedFn,
 		profSvc,

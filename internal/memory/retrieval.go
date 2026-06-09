@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"noto/internal/cache"
-	"noto/internal/provider"
 	"noto/internal/store"
 	"noto/internal/vector"
 )
@@ -51,23 +50,23 @@ type CacheRepository interface {
 	Invalidate(ctx context.Context, profileID, cacheKey string) error
 }
 
-const vectorTopK = 6
-
 // Retrieval assembles context for a chat turn from SQLite source-of-truth data.
 type Retrieval struct {
-	noteRepo        *store.MemoryNoteRepo
-	summaryRepo     *store.SessionSummaryRepo
-	cacheRepo       CacheRepository
-	vectorIndexPath string
-	warnFn          func(error)
-	tokenBudget     int
-	vectorIndex     vector.Index
-	profileID       string
-	embedder        vector.Embedder
-	embeddingModel  string
-	l1mu            sync.RWMutex
-	l1              map[string]*store.ContextCacheEntry
-	diag            *cache.Diagnostics
+	noteRepo             *store.MemoryNoteRepo
+	sessionSummaryRepo   *store.SessionSummaryRepo
+	memorySummaryRepo    *store.MemorySummaryRepo
+	timelineSettingsRepo *store.TimelineSettingsRepo
+	cacheRepo            CacheRepository
+	vectorIndexPath      string
+	warnFn               func(error)
+	tokenBudget          int
+	vectorIndex          vector.Index
+	profileID            string
+	embedder             vector.Embedder
+	embeddingModel       string
+	l1mu                 sync.RWMutex
+	l1                   map[string]*store.ContextCacheEntry
+	diag                 *cache.Diagnostics
 }
 
 // RetrievalOption configures Retrieval behavior.
@@ -94,6 +93,14 @@ func WithTokenBudget(budget int) RetrievalOption {
 	}
 }
 
+// WithTimeline stores the repositories needed for time-layered retrieval.
+func WithTimeline(settingsRepo *store.TimelineSettingsRepo, summaryRepo *store.MemorySummaryRepo) RetrievalOption {
+	return func(r *Retrieval) {
+		r.timelineSettingsRepo = settingsRepo
+		r.memorySummaryRepo = summaryRepo
+	}
+}
+
 // WithVectorRetrieval wires vector ranking into Retrieval.
 func WithVectorRetrieval(index vector.Index, profileID string, embedder vector.Embedder, model string) RetrievalOption {
 	return func(r *Retrieval) {
@@ -106,12 +113,9 @@ func WithVectorRetrieval(index vector.Index, profileID string, embedder vector.E
 
 // NewRetrieval creates a Retrieval service.
 func NewRetrieval(noteRepo *store.MemoryNoteRepo, summaryRepo *store.SessionSummaryRepo, cacheRepo CacheRepository, opts ...RetrievalOption) *Retrieval {
-	r := &Retrieval{noteRepo: noteRepo, summaryRepo: summaryRepo, cacheRepo: cacheRepo, l1: map[string]*store.ContextCacheEntry{}, diag: cache.NewDiagnostics()}
+	r := &Retrieval{noteRepo: noteRepo, sessionSummaryRepo: summaryRepo, cacheRepo: cacheRepo, l1: map[string]*store.ContextCacheEntry{}, diag: cache.NewDiagnostics()}
 	for _, opt := range opts {
 		opt(r)
-	}
-	if r.tokenBudget <= 0 {
-		r.tokenBudget = 1500
 	}
 	return r
 }
@@ -123,12 +127,13 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 	if err := r.checkVectorIndex(); err != nil && r.warnFn != nil {
 		r.warnFn(err)
 	}
-	summaryText := ""
-	if r.summaryRepo != nil {
-		summary, err := r.summaryRepo.GetLatestByProfile(ctx, profileID)
-		if err == nil {
-			summaryText = summary.SummaryText
+	settings := store.DefaultTimelineSettings(profileID)
+	if r.timelineSettingsRepo != nil {
+		loaded, err := r.timelineSettingsRepo.GetOrDefault(ctx, profileID)
+		if err != nil {
+			return nil, fmt.Errorf("memory: get timeline settings: %w", err)
 		}
+		settings = loaded
 	}
 
 	notes, err := r.noteRepo.ListByProfile(ctx, profileID)
@@ -136,14 +141,15 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 		return nil, fmt.Errorf("memory: list notes: %w", err)
 	}
 
-	rankedIDs, err := r.rankNotes(ctx, systemPrompt, summaryText)
-	if err != nil && r.warnFn != nil {
-		r.warnFn(err)
+	window, err := ComputeTimelineWindow(start, settings)
+	if err != nil {
+		return nil, fmt.Errorf("memory: compute timeline window: %w", err)
 	}
-	selectedNotes := SelectNotesForContext(notes, rankedIDs, r.tokenBudget)
-	notesHash := hashNoteIDs(noteIDs(selectedNotes))
 
-	cacheKey := cacheKeyFor(profileID, systemPrompt, notesHash, r.tokenBudget, r.embeddingModel)
+	rawNotes, weeklySummaries, monthlySummaries := r.assembleTimelineLayers(ctx, profileID, notes, window)
+	stateHash := hashTimelineState(rawNotes, weeklySummaries, monthlySummaries, settings)
+
+	cacheKey := cacheKeyFor(profileID, systemPrompt, stateHash, r.embeddingModel)
 
 	if entry, tier, servedStale, revalidating := r.getCached(ctx, profileID, cacheKey); entry != nil {
 		var cachedCtx RetrievalContext
@@ -159,14 +165,14 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 		_ = r.cacheRepo.Invalidate(ctx, profileID, cacheKey)
 	}
 
-	memoryBlock := BuildMemoryBlock(selectedNotes)
+	memoryBlock := BuildTimelineMemoryBlock(rawNotes, weeklySummaries, monthlySummaries)
 
-	assembled := AssemblePrompt(systemPrompt, summaryText, memoryBlock)
+	assembled := AssemblePrompt(systemPrompt, "", memoryBlock)
 
 	ctxOut := &RetrievalContext{
 		SystemPrompt:        systemPrompt,
 		MemoryBlock:         memoryBlock,
-		SessionSummary:      summaryText,
+		SessionSummary:      "",
 		AssembledPrompt:     assembled,
 		CacheHit:            false,
 		CacheTier:           "none",
@@ -178,7 +184,7 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 	if r.cacheRepo != nil {
 		payload, _ := json.Marshal(ctxOut)
 		expires := time.Now().Add(30 * 24 * time.Hour)
-		sourceIDs, _ := json.Marshal(noteIDs(selectedNotes))
+		sourceIDs, _ := json.Marshal(noteIDs(rawNotes))
 		promptHash := sha256.Sum256([]byte(systemPrompt))
 		entry := &store.ContextCacheEntry{
 			ID:            fmt.Sprintf("cc-%x", time.Now().UnixNano()),
@@ -187,7 +193,7 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 			Payload:       string(payload),
 			SourceNoteIDs: string(sourceIDs),
 			PromptVersion: fmt.Sprintf("prompt:%x", promptHash),
-			StateVersion:  notesHash,
+			StateVersion:  stateHash,
 			CreatedAt:     time.Now().UTC(),
 			ExpiresAt:     &expires,
 		}
@@ -213,6 +219,39 @@ func BuildMemoryBlock(notes []*store.MemoryNote) string {
 		fmt.Fprintf(&sb, "- [%s] %s\n", n.Category, n.Content)
 	}
 	return sb.String()
+}
+
+// BuildTimelineMemoryBlock formats raw notes, weekly summaries, and monthly summaries
+// into distinct sections for prompt assembly.
+func BuildTimelineMemoryBlock(rawNotes []*store.MemoryNote, weeklySummaries []*store.MemorySummary, monthlySummaries []*store.MemorySummary) string {
+	var sb strings.Builder
+
+	if len(rawNotes) > 0 {
+		sb.WriteString("## Raw Notes\n")
+		for _, n := range rawNotes {
+			fmt.Fprintf(&sb, "- [%s] %s\n", n.Category, n.Content)
+		}
+	}
+	if len(weeklySummaries) > 0 {
+		if sb.Len() > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString("## Weekly Summaries\n")
+		for _, s := range weeklySummaries {
+			fmt.Fprintf(&sb, "- [%s] %s\n", s.PeriodKey, s.Content)
+		}
+	}
+	if len(monthlySummaries) > 0 {
+		if sb.Len() > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString("## Monthly Summaries\n")
+		for _, s := range monthlySummaries {
+			fmt.Fprintf(&sb, "- [%s] %s\n", s.PeriodKey, s.Content)
+		}
+	}
+
+	return strings.TrimRight(sb.String(), "\n")
 }
 
 // SelectNotesForContext orders notes by relevance (rankedIDs) and enforces token budget.
@@ -269,20 +308,19 @@ func estimateTokens(content string) int {
 	return len(fields)
 }
 
-// AssemblePrompt merges system prompt, summary, and memory block into the final prompt.
+// AssemblePrompt merges system prompt and memory block into the final prompt.
+// sessionSummary is intentionally ignored because conversation summaries are no
+// longer part of assembled memory context.
 func AssemblePrompt(systemPrompt, sessionSummary, memoryBlock string) string {
 	parts := []string{systemPrompt}
-	if sessionSummary != "" {
-		parts = append(parts, "\n## Previous Session Summary\n"+sessionSummary)
-	}
 	if memoryBlock != "" {
 		parts = append(parts, "\n"+memoryBlock)
 	}
 	return strings.Join(parts, "\n")
 }
 
-func cacheKeyFor(profileID, systemPrompt, notesHash string, tokenBudget int, embeddingModel string) string {
-	buf := fmt.Appendf(nil, "%s::%s::%s::%d::%s", profileID, systemPrompt, notesHash, tokenBudget, embeddingModel)
+func cacheKeyFor(profileID, systemPrompt, stateHash, embeddingModel string) string {
+	buf := fmt.Appendf(nil, "%s::%s::%s::%s", profileID, systemPrompt, stateHash, embeddingModel)
 	hash := sha256.Sum256(buf)
 	return fmt.Sprintf("ctx:%x", hash)
 }
@@ -384,79 +422,121 @@ func (r *Retrieval) checkVectorIndex() error {
 	return nil
 }
 
-type noteLister struct {
-	repo *store.MemoryNoteRepo
+func hashTimelineState(rawNotes []*store.MemoryNote, weeklySummaries []*store.MemorySummary, monthlySummaries []*store.MemorySummary, settings *store.TimelineSettings) string {
+	parts := make([]string, 0, len(rawNotes)+len(weeklySummaries)+len(monthlySummaries)+3)
+	parts = append(parts, fmt.Sprintf("raw:%d", settings.RawNoteDays))
+	parts = append(parts, fmt.Sprintf("weekly:%d", settings.WeeklySummaryWeeks))
+	parts = append(parts, fmt.Sprintf("monthly:%d", settings.MonthlySummaryMonths))
+	for _, n := range rawNotes {
+		parts = append(parts, "n:"+n.ID)
+	}
+	for _, s := range weeklySummaries {
+		parts = append(parts, "w:"+s.ID+":"+s.FreshnessState)
+	}
+	for _, s := range monthlySummaries {
+		parts = append(parts, "m:"+s.ID+":"+s.FreshnessState)
+	}
+	return hashNoteIDs(parts)
 }
 
-func (n noteLister) ListByProfile(ctx context.Context, profileID string) ([]vector.MemoryNoteRecord, error) {
-	notes, err := n.repo.ListByProfile(ctx, profileID)
-	if err != nil {
-		return nil, err
+// BuildTimelineStateHashForTest exposes deterministic timeline-state hashing for tests.
+func BuildTimelineStateHashForTest(rawNoteIDs []string, weeklyStates []string, monthlyStates []string, settings *store.TimelineSettings) string {
+	rawNotes := make([]*store.MemoryNote, 0, len(rawNoteIDs))
+	for _, id := range rawNoteIDs {
+		rawNotes = append(rawNotes, &store.MemoryNote{ID: id})
 	}
-	out := make([]vector.MemoryNoteRecord, 0, len(notes))
-	for _, note := range notes {
-		out = append(out, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
+	weeklySummaries := make([]*store.MemorySummary, 0, len(weeklyStates))
+	for _, state := range weeklyStates {
+		parts := strings.SplitN(state, ":", 2)
+		freshness := ""
+		if len(parts) > 1 {
+			freshness = parts[1]
+		}
+		weeklySummaries = append(weeklySummaries, &store.MemorySummary{ID: parts[0], FreshnessState: freshness})
 	}
-	return out, nil
+	monthlySummaries := make([]*store.MemorySummary, 0, len(monthlyStates))
+	for _, state := range monthlyStates {
+		parts := strings.SplitN(state, ":", 2)
+		freshness := ""
+		if len(parts) > 1 {
+			freshness = parts[1]
+		}
+		monthlySummaries = append(monthlySummaries, &store.MemorySummary{ID: parts[0], FreshnessState: freshness})
+	}
+	return hashTimelineState(rawNotes, weeklySummaries, monthlySummaries, settings)
 }
 
-func (r *Retrieval) rankNotes(ctx context.Context, systemPrompt, summaryText string) ([]string, error) {
-	if r.vectorIndex == nil || r.embedder == nil || r.profileID == "" {
-		return nil, nil
-	}
-	if err := r.checkVectorIndex(); err != nil {
-		return nil, err
-	}
-	queryText := strings.TrimSpace(systemPrompt)
-	if summaryText != "" {
-		queryText = queryText + "\n" + summaryText
-	}
-	if r.embeddingModel == "" {
-		return nil, nil
-	}
-	if queryText == "" {
-		return nil, nil
-	}
-	model := r.embeddingModel
-	resp, err := r.embedder.Embed(ctx, provider.EmbeddingRequest{Input: queryText, Model: model})
-	if err != nil {
-		return nil, err
+func (r *Retrieval) assembleTimelineLayers(ctx context.Context, profileID string, notes []*store.MemoryNote, window TimelineWindow) ([]*store.MemoryNote, []*store.MemorySummary, []*store.MemorySummary) {
+	rawNotes := filterNotesInRange(notes, window.RawStart, window.RawEnd)
+
+	weeklySummaries := make([]*store.MemorySummary, 0)
+	monthlySummaries := make([]*store.MemorySummary, 0)
+	if r.memorySummaryRepo == nil {
+		return rawNotes, weeklySummaries, monthlySummaries
 	}
 
-	manifestRepo := store.NewVectorManifestRepo(r.noteRepo.DB())
-	entries, err := manifestRepo.ListEntries(ctx, r.profileID)
-	if err != nil {
-		return nil, err
+	weekly, err := r.memorySummaryRepo.ListByProfileAndType(ctx, profileID, store.SummaryTypeWeekly)
+	if err == nil {
+		for _, s := range weekly {
+			if !s.PeriodStart.Before(window.WeeklyStart) && s.PeriodStart.Before(window.WeeklyEnd) && s.FreshnessState == store.SummaryFresh {
+				weeklySummaries = append(weeklySummaries, s)
+			}
+		}
 	}
-	vectorEntries := make([]vector.Entry, 0, len(entries))
-	for _, e := range entries {
-		vectorEntries = append(vectorEntries, vector.Entry{
-			ID:             e.ID,
-			ProfileID:      e.ProfileID,
-			SourceType:     vector.SourceType(e.SourceType),
-			SourceID:       e.SourceID,
-			ChunkHash:      e.ChunkHash,
-			EmbeddingModel: e.EmbeddingModel,
-			EmbeddingDim:   e.EmbeddingDim,
-			VectorRef:      e.VectorRef,
-		})
-	}
-	if fileIndex, ok := r.vectorIndex.(*vector.FileIndex); ok {
-		fileIndex.WithProfile(r.profileID)
-		fileIndex.SeedEntries(vectorEntries)
-		if err := fileIndex.Load(); err != nil {
-			return nil, err
+	monthly, err := r.memorySummaryRepo.ListByProfileAndType(ctx, profileID, store.SummaryTypeMonthly)
+	if err == nil {
+		for _, s := range monthly {
+			if !s.PeriodStart.Before(window.MonthlyStart) {
+				continue
+			}
+			if window.MonthlyCutoff != nil && s.PeriodStart.Before(*window.MonthlyCutoff) {
+				continue
+			}
+			if s.FreshnessState == store.SummaryFresh {
+				monthlySummaries = append(monthlySummaries, s)
+			}
 		}
 	}
 
-	retrieval := vector.NewHybridRetrieval(r.vectorIndex, noteLister{repo: r.noteRepo}, r.profileID)
-	results, err := retrieval.Retrieve(ctx, resp.Embedding, vectorTopK)
-	if err != nil {
-		return nil, err
+	if len(weeklySummaries) == 0 && !window.WeeklyStart.Equal(window.WeeklyEnd) {
+		rawNotes = append(rawNotes, filterNotesInRange(notes, window.WeeklyStart, window.WeeklyEnd)...)
 	}
-	ranked := make([]string, 0, len(results))
-	for _, res := range results {
-		ranked = append(ranked, res.Note.ID)
+	if len(monthlySummaries) == 0 {
+		monthlyEnd := window.MonthlyStart
+		monthlyStart := time.Time{}
+		if window.MonthlyCutoff != nil {
+			monthlyStart = *window.MonthlyCutoff
+		}
+		if !monthlyEnd.IsZero() {
+			rawNotes = append(rawNotes, filterNotesInRange(notes, monthlyStart, monthlyEnd)...)
+		}
 	}
-	return ranked, nil
+
+	sort.Slice(rawNotes, func(i, j int) bool { return rawNotes[i].CreatedAt.After(rawNotes[j].CreatedAt) })
+	sort.Slice(weeklySummaries, func(i, j int) bool { return weeklySummaries[i].PeriodStart.After(weeklySummaries[j].PeriodStart) })
+	sort.Slice(monthlySummaries, func(i, j int) bool { return monthlySummaries[i].PeriodStart.After(monthlySummaries[j].PeriodStart) })
+	return dedupeNotes(rawNotes), weeklySummaries, monthlySummaries
+}
+
+func filterNotesInRange(notes []*store.MemoryNote, start, end time.Time) []*store.MemoryNote {
+	out := make([]*store.MemoryNote, 0)
+	for _, n := range notes {
+		if (n.CreatedAt.Equal(start) || n.CreatedAt.After(start)) && n.CreatedAt.Before(end) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func dedupeNotes(notes []*store.MemoryNote) []*store.MemoryNote {
+	seen := make(map[string]struct{}, len(notes))
+	out := make([]*store.MemoryNote, 0, len(notes))
+	for _, n := range notes {
+		if _, ok := seen[n.ID]; ok {
+			continue
+		}
+		seen[n.ID] = struct{}{}
+		out = append(out, n)
+	}
+	return out
 }

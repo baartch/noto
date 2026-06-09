@@ -7,19 +7,17 @@ THE MESSAGE ARRAY SENT TO LLM:
 
 [
   Message 0: SYSTEM ROLE
-  ├─ Base System Prompt (300 tokens)
+  ├─ Base System Prompt
   │  └─ "You are a helpful assistant..."
   │
-  ├─ Previous Session Summary (400 tokens)  
-  │  └─ Last 6 messages summarized
-  │
-  └─ Long-Term Memory Notes (1500 tokens)
-     ├─ [fact] ...
-     ├─ [progress] ...
-     ├─ [blocker] ...
-     ├─ [action_item] ...
-     └─ [fact] ... 
-     
+  └─ Time-Layered Memory Context
+     ├─ Raw Notes
+     │  └─ Recent notes from the configured rolling-day window
+     ├─ Weekly Summaries
+     │  └─ Mid-range weekly rollups for completed weeks
+     └─ Monthly Summaries
+        └─ Older monthly rollups for completed months
+
   Message 1-20+: USER/ASSISTANT ROLES (conversation history)
   ├─ Message 1: User - Previous session message
   ├─ Message 2: Asst - Response
@@ -34,220 +32,73 @@ COMPONENT BREAKDOWN:
 ─────────────────────────────────────────────────────────────────────────────
 
 ┌─ 1. BASE SYSTEM PROMPT
-│  ├─ Source: Profile settings
-│  ├─ Example: "You are a helpful coding assistant"
-│  ├─ Size: 200-500 tokens
-│  └─ Status: ✅ Always there, never changes
+│  ├─ Source: Profile prompt files
+│  └─ Status: ✅ Always present
 │
-├─ 2. PREVIOUS SESSION SUMMARY  
-│  ├─ Source: Last session's closeout
-│  ├─ Contains: Last ~6 messages summarized
-│  ├─ Size: 200-500 tokens
-│  └─ Status: 🟡 Empty if first session
+├─ 2. RAW NOTES
+│  ├─ Source: Memory notes table
+│  ├─ Window: Configured raw-note days, extended back to Monday
+│  └─ Status: 🟢 Recent detailed memory
 │
-├─ 3. LONG-TERM MEMORY NOTES
-│  ├─ Source: Extracted from all previous chats
-│  ├─ Selection: Vector-ranked by relevance
-│  ├─ Size: 0-1500 tokens (token budget)
-│  ├─ Categories: fact, progress, blocker, action_item, other
-│  ├─ Format: "- [category] content text"
-│  └─ Status: 🟢 Always included (can be empty)
+├─ 3. WEEKLY SUMMARIES
+│  ├─ Source: memory_summaries table
+│  ├─ Window: Configured weekly-summary weeks
+│  └─ Status: 🟢 Mid-range compressed history
 │
-└─ 4. CONVERSATION HISTORY
-   ├─ Source: In-memory array (grows each turn)
-   ├─ Initial: Last 20 messages from previous session
-   ├─ Growth: +2 per turn (user + assistant)
-   ├─ Current turn: Latest user message with datetime injected
-   └─ Status: 🟢 Always included, unbounded growth
+├─ 4. MONTHLY SUMMARIES
+│  ├─ Source: memory_summaries table
+│  ├─ Window: Configured monthly-summary months or all remaining
+│  └─ Status: 🟢 Older compressed history
+│
+└─ 5. CONVERSATION HISTORY
+   ├─ Source: In-memory conversation state
+   ├─ Initial: Last 20 messages from previous conversation history
+   └─ Status: 🟢 Always included
 
 ═════════════════════════════════════════════════════════════════════════════
 
-HOW MEMORY NOTES ARE SELECTED:
+CACHE IDENTITY SHAPES:
 ─────────────────────────────────────────────────────────────────────────────
 
-Step 1: VECTOR RANKING
-  Input: System prompt + session summary
-  Process: Embed → Vector search in note store → Find top 6 most similar
-  Output: Ranked note IDs by similarity
-
-Step 2: IMPORTANCE REORDERING  
-  Input: Ranked notes from step 1
-  Process: Sort by importance score (1-10) then by recency
-  Output: Reordered note list
-
-Step 3: TOKEN BUDGETING
-  Input: Reordered notes + budget (default: 1500 tokens)
-  Process: Add notes until budget exhausted
-  Output: Selected notes (subset)
-
-Example:
-  Budget: 1500 tokens
-  
-  Selected:
-  ✓ Note A: [fact] Python uses FastAPI (100 tokens) → total: 100
-  ✓ Note B: [fact] PostgreSQL with Alembic (120 tokens) → total: 220
-  ✓ Note C: [progress] Auth 70% complete (150 tokens) → total: 370
-  ✓ Note D: [blocker] OAuth2 pending (110 tokens) → total: 480
-  ✓ Note E: [action_item] Meet with security (85 tokens) → total: 565
-  ✓ Note F: [fact] Deployment uses Docker (95 tokens) → total: 660
-  
-  Cannot add more notes (next would exceed 1500 token budget)
-
-═════════════════════════════════════════════════════════════════════════════
-
-WHAT GETS CACHED:
-─────────────────────────────────────────────────────────────────────────────
-
-Cached: The ENTIRE assembled context
-├─ Base prompt
-├─ Session summary  
-├─ Memory notes (formatted)
-└─ All three combined
-
-Cache Key Based On:
+Cache key is based on:
   hash(
-    profileID,           ← Which profile
-    systemPrompt,        ← What instructions
-    notesHash,           ← Which notes selected (our fix!)
-    tokenBudget          ← How many tokens available
+    profileID,
+    systemPrompt,
+    assembled timeline state,
+    embeddingModel
   )
 
-Cache Duration: 30 days
-Cache Hit When: Same notes selected (most of the time)
-Cache Miss When: New notes extracted or system prompt changes
+Timeline state includes:
+  - raw-note settings
+  - weekly-summary settings
+  - monthly-summary settings
+  - included raw note IDs
+  - included summary IDs and freshness state
 
 ═════════════════════════════════════════════════════════════════════════════
 
-REAL EXAMPLE - APP OPEN:
+SEARCH TOOLS:
 ─────────────────────────────────────────────────────────────────────────────
 
-You: Open app
-  ↓
-Alice loads profile "coding"
-  ├─ Has 47 notes in database
-  ├─ System prompt: "You are a helpful coding assistant"
-  ├─ Latest summary: "Discussed testing frameworks..."
-  │
-  ├─ Vector rank notes against system prompt
-  │  └─ Top 6 most relevant notes identified
-  │
-  ├─ Hash those 6 note IDs
-  │  └─ notesHash = "abc123def456..."
-  │
-  ├─ Generate cache key
-  │  └─ cacheKey = hash(...abc123def456...) = "ctx:xyz123..."
-  │
-  ├─ Check context_cache table
-  │  └─ ✅ FOUND! (from 2 hours ago)
-  │
-  └─ ✅ Load from cache (50ms)
-     Status bar shows: "ctx: hit"
+The assistant may call:
+- search_memory_keywords
+- search_memory_time_range
+
+These are exposed only when the active model supports tool calling.
 
 ═════════════════════════════════════════════════════════════════════════════
 
-TOKEN USAGE EXAMPLE:
+FOOTER TELEMETRY:
 ─────────────────────────────────────────────────────────────────────────────
 
-Total Token Budget: 2000 tokens
+Footer token telemetry now includes:
+- total input tokens
+- total output tokens
+- estimated cost
+- context used percentage when model context max is known
+- model max context size when available
 
-Base System Prompt:      300 tokens (15%)
-Previous Summary:        400 tokens (20%)
-Memory Notes:            800 tokens (40%)  ← Limited by budget
-Conversation History:    500 tokens (25%)  ← Grows per turn
-                        ────────────────
-Total:                  2000 tokens
-
-If you chat 5 more turns (10 messages):
-  → History grows to ~1500 tokens
-  → Memory notes get squeezed to ~350 tokens
-  → Less knowledge from previous notes
-
-═════════════════════════════════════════════════════════════════════════════
-
-MEMORY CATEGORIES EXPLAINED:
-─────────────────────────────────────────────────────────────────────────────
-
-[fact]
-  ├─ Static information about your project
-  ├─ Example: "Frontend uses React 18"
-  └─ Importance: Stays relevant long-term
-
-[progress]
-  ├─ Status updates on ongoing work
-  ├─ Example: "API endpoints 70% complete"
-  └─ Importance: Changes over time
-
-[blocker]  
-  ├─ Issues or problems to solve
-  ├─ Example: "OAuth2 integration not started"
-  └─ Importance: High - needs LLM attention
-
-[action_item]
-  ├─ Things you need to do
-  ├─ Example: "Schedule architecture review"
-  └─ Importance: High - actionable
-
-[other]
-  ├─ Miscellaneous notes
-  └─ Importance: Lower priority
-
-═════════════════════════════════════════════════════════════════════════════
-
-CACHE INVALIDATION TRIGGERS:
-─────────────────────────────────────────────────────────────────────────────
-
-✅ Cache HIT (context reused):
-   └─ Same notes selected on app open
-
-❌ Cache MISS (context rebuilt):
-   ├─ New notes extracted in previous session
-   ├─ System prompt changed
-   ├─ Token budget changed
-   ├─ Different embedding model selected
-   └─ Profile deleted/recreated
-
-═════════════════════════════════════════════════════════════════════════════
-
-THE 3-LAYER PYRAMID:
-─────────────────────────────────────────────────────────────────────────────
-
-        ╱╲
-       ╱  ╲─────── Layer 1: System Prompt
-      ╱────╲       (Static instructions)
-     ╱      ╲
-    ╱────────╲──── Layer 2: Session Summary  
-   ╱          ╲    (Last session recap)
-  ╱────────────╲
- ╱              ╲─ Layer 3: Memory Notes
-╱________________╲ (Distilled knowledge)
-
-Plus conversation history on top!
-
-═════════════════════════════════════════════════════════════════════════════
-
-DATA SIZE PROGRESSION:
-─────────────────────────────────────────────────────────────────────────────
-
-Session 1 (no history):
-  System prompt:    300 tokens
-  Summary:            0 tokens (first session)
-  Memory:             0 tokens (no notes yet)
-  History:           50 tokens (first message)
-  Total:            350 tokens
-
-Session 5 (established):
-  System prompt:    300 tokens
-  Summary:          400 tokens (from session 4)
-  Memory:         1200 tokens (8 relevant notes)
-  History:         500 tokens (after 10 turns)
-  Total:          2400 tokens
-
-Session 50 (mature):
-  System prompt:    300 tokens
-  Summary:          400 tokens (from session 49)
-  Memory:         1500 tokens (max budget, many relevant notes)
-  History:         500 tokens (grows, then stabilizes)
-  Total:          2700 tokens
+If model context max is unknown, the footer remains honest and omits the percentage.
 
 ═════════════════════════════════════════════════════════════════════════════
 
@@ -256,11 +107,10 @@ KEY TAKEAWAY:
 
 The LLM receives:
 1. Instructions (system prompt)
-2. Recent context (session summary)
-3. Long-term knowledge (memory notes, vector-ranked)
-4. Conversation thread (full history)
-5. Current time (datetime injected)
+2. Recent detailed memory (raw notes)
+3. Mid-range rollups (weekly summaries)
+4. Older rollups (monthly summaries)
+5. Conversation thread and current datetime
+6. On-demand memory search tools when supported
 
-All intelligently cached, token-limited, and semantically relevant!
-
-═════════════════════════════════════════════════════════════════════════════
+This replaces the old previous-session-summary plus long-term-snippet model.

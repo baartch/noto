@@ -1,4 +1,15 @@
 {
+  "version": "0.10.0",
+  "integration_state_schema": 1,
+  "installed_integrations": [
+    "pi"
+  ],
+  "integration_settings": {
+    "pi": {
+      "script": "sh",
+      "invoke_separator": "."
+    }
+  },
   "integration": "pi",
-  "version": "0.8.1"
+  "default_integration": "pi"
 }

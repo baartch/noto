@@ -49,7 +49,7 @@ func TestEmbeddingsModelPicker_SelectsModel(t *testing.T) {
 	m := updated.(tui.Model)
 	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	m = updated.(tui.Model)
-	for range 2 {
+	for range 1 {
 		updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 		m = updated.(tui.Model)
 	}
@@ -61,7 +61,7 @@ func TestEmbeddingsModelPicker_SelectsModel(t *testing.T) {
 	msg := cmd()
 	updated, _ = m.Update(msg)
 	m = updated.(tui.Model)
-	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	_, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if selected != "embed-1" {
 		t.Fatalf("expected selected model, got %q", selected)

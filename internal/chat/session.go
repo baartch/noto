@@ -12,7 +12,6 @@ import (
 	"noto/internal/config"
 	"noto/internal/memory"
 	"noto/internal/observe"
-	"noto/internal/profile"
 	"noto/internal/provider"
 	"noto/internal/store"
 	"noto/internal/vector"
@@ -58,14 +57,14 @@ type Session struct {
 	extractorAdapter  provider.Adapter
 	logger            observe.Logger
 	baseSystemPrompt  string
-	sessionSummary    string
 	db                *store.DB
 	vectorIndexPath   string
 	vectorIndex       vector.Index
-	memoryTokenBudget int
 	extractorFallback bool
 	embeddingModel    string
 	missingEmbedding  bool
+	toolsEnabled      bool
+	modelContextMax   int
 
 	backupStop   chan struct{}
 	pendingNotes int
@@ -80,6 +79,7 @@ type Session struct {
 	onNotes         NotesCallback
 	onNotesSaving   NotesSavingCallback
 	onContextStatus ContextStatusCallback
+	onStats         func(provider.Stats)
 	stats           provider.Stats
 	onUsage         func(provider.Usage)
 }
@@ -102,15 +102,12 @@ func NewSession(
 	onNotes NotesCallback,
 	onNotesSaving NotesSavingCallback,
 	onContextStatus ContextStatusCallback,
+	onStats func(provider.Stats),
 	onUsage func(provider.Usage),
 ) (*Session, error) {
-	// Build system prompt with injected memory notes + session summary.
+	// Build system prompt with injected memory context.
 	cacheRepo := store.NewContextCacheRepo(db)
 	vecPath, _ := config.ProfileVectorPath(profileSlug)
-	settings, err := profile.ReadSettings(profileSlug)
-	if err != nil {
-		return nil, fmt.Errorf("session: read settings: %w", err)
-	}
 	embeddingModel := ""
 	if db != nil {
 		cfgRepo := store.NewProviderConfigRepo(db)
@@ -130,7 +127,7 @@ func NewSession(
 		memory.WithWarnFunc(func(err error) {
 			logger.Infof("vector index issue: %v", err)
 		}),
-		memory.WithTokenBudget(settings.MemoryTokenBudget),
+		memory.WithTimeline(store.NewTimelineSettingsRepo(db), store.NewMemorySummaryRepo(db)),
 		memory.WithVectorRetrieval(vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)), profileID, retrievalEmbedder, embeddingModel),
 	)
 	rc, err := ret.Assemble(ctx, profileID, baseSystemPrompt)
@@ -188,15 +185,14 @@ func NewSession(
 		onNotes:           onNotes,
 		onNotesSaving:     onNotesSaving,
 		onContextStatus:   onContextStatus,
+		onStats:           onStats,
 		onUsage:           onUsage,
 		backupStop:        make(chan struct{}),
 		pendingDone:       make(chan struct{}),
 		baseSystemPrompt:  baseSystemPrompt,
-		sessionSummary:    rc.SessionSummary,
 		db:                db,
 		vectorIndexPath:   vecPath,
 		vectorIndex:       vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)),
-		memoryTokenBudget: settings.MemoryTokenBudget,
 		extractorFallback: extractorAdapter == nil && adapter != nil,
 		embeddingModel:    embeddingModel,
 		missingEmbedding:  embeddingModel == "",
@@ -237,6 +233,15 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	injectedMsg := injectDateTime(userMsg)
 
 	// Build provider request from retrieval cache/context each turn.
+	if s.db != nil {
+		builder := memory.NewSummaryRollupBuilder(s.noteRepo, store.NewMemorySummaryRepo(s.db))
+		if _, err := builder.CatchUp(ctx, s.profileID, time.Now().UTC()); err != nil {
+			s.logger.Errorf("summary catch-up failed: %v", err)
+		}
+		if err := builder.RegenerateStale(ctx, s.profileID, time.Now().UTC()); err != nil {
+			s.logger.Errorf("summary regeneration failed: %v", err)
+		}
+	}
 	systemPrompt := s.systemPrompt
 	if s.retrieval != nil {
 		rc, err := s.retrieval.Assemble(ctx, s.profileID, s.baseSystemPrompt)
@@ -267,11 +272,43 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 		msgs = append(msgs, provider.Message{Role: string(m.Role), Content: content})
 	}
 
-	resp, err := s.adapter.Complete(ctx, provider.CompletionRequest{
+	req := provider.CompletionRequest{
 		Messages:    msgs,
 		Temperature: 0.7,
-	})
+	}
+	if s.toolsEnabled {
+		req.Tools = []provider.ToolDefinition{
+			{Type: "function", Name: "search_memory_keywords", Description: "Search memory notes by keyword query", Parameters: map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string", "description": "Keyword or short phrase to search for in memory notes"}, "limit": map[string]any{"type": "integer", "description": "Maximum number of results to return"}}, "required": []string{"query"}}},
+			{Type: "function", Name: "search_memory_time_range", Description: "Search memory notes and summaries within a time range", Parameters: map[string]any{"type": "object", "properties": map[string]any{"start_time": map[string]any{"type": "string", "description": "Start of the time range in RFC3339 format"}, "end_time": map[string]any{"type": "string", "description": "End of the time range in RFC3339 format"}, "limit": map[string]any{"type": "integer", "description": "Maximum number of results to return"}}, "required": []string{"start_time", "end_time"}}},
+		}
+		s.logger.Infof("tools: enabled for chat request with %d tool definitions", len(req.Tools))
+	} else {
+		s.logger.Infof("tools: disabled for chat request")
+	}
+
+	resp, err := s.adapter.Complete(ctx, req)
+	if err == nil {
+		s.logger.Infof("tools: provider returned %d tool call(s)", len(resp.ToolCalls))
+	}
+	if err == nil && len(resp.ToolCalls) > 0 && s.toolsEnabled {
+		followup := append([]provider.Message{}, req.Messages...)
+		pipeline := NewPipeline(s.convRepo, s.msgRepo, s.adapter, s.logger).WithMemorySearchTools(s.noteRepo, store.NewMemorySummaryRepo(s.db)).WithToolsEnabled(true)
+		for _, call := range resp.ToolCalls {
+			s.logger.Infof("tools: executing tool call name=%s call_id=%s args=%s", call.Name, call.CallID, call.Arguments)
+			followup = append(followup, provider.Message{Role: "assistant", Content: call.Name, ToolCallID: call.CallID, ToolCallName: call.Name, ToolCallArguments: call.Arguments, ToolID: call.ID})
+			result := pipeline.executeToolCall(ctx, s.profileID, call)
+			s.logger.Infof("tools: tool call completed name=%s call_id=%s result=%s", call.Name, call.CallID, result)
+			followup = append(followup, provider.Message{Role: "tool", Content: result, ToolCallID: call.CallID})
+		}
+		resp, err = s.adapter.Complete(ctx, provider.CompletionRequest{Model: req.Model, Messages: followup, Temperature: req.Temperature, Tools: req.Tools})
+		if err != nil {
+			s.logger.Errorf("provider follow-up call failed: %v", err)
+		} else {
+			s.logger.Infof("tools: follow-up provider call completed after tool execution")
+		}
+	}
 	if err != nil {
+		s.logger.Errorf("provider call failed: %v", err)
 		return nil, fmt.Errorf("session: provider call: %w", err)
 	}
 
@@ -291,8 +328,15 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	}
 	s.history = append(s.history, asstMsgRec)
 
+	if resp.ContextMax == 0 && s.modelContextMax > 0 {
+		resp.ContextMax = s.modelContextMax
+	}
+
 	// Accumulate token/cost stats.
 	s.stats.Add(resp)
+	if s.onStats != nil {
+		s.onStats(s.stats)
+	}
 	if s.onUsage != nil {
 		s.onUsage(resp.Usage)
 	}
@@ -445,6 +489,19 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 func (s *Session) SetModel(model string) {
 	if a, ok := s.adapter.(interface{ SetModel(string) }); ok {
 		a.SetModel(model)
+	}
+}
+
+// SetToolsEnabled updates whether tool definitions should be exposed for chat.
+func (s *Session) SetToolsEnabled(enabled bool) {
+	s.toolsEnabled = enabled
+}
+
+// SetModelContextMax updates the known context window size for the active model.
+func (s *Session) SetModelContextMax(contextMax int) {
+	s.modelContextMax = contextMax
+	if contextMax > 0 {
+		s.stats.ContextMax = contextMax
 	}
 }
 
@@ -711,7 +768,14 @@ func (h *sessionLogHook) NoteStorageFailed(candidate memory.NoteCandidate, err e
 }
 
 func (h *sessionLogHook) ExtractionPayloadRejected(reason string) {
-	h.logger.Errorf("memory: extraction rejected: %s", reason)
+	switch reason {
+	case "has_new_info=false":
+		h.logger.Infof("memory: extraction skipped: %s", reason)
+	case "invalid json":
+		h.logger.Infof("memory: extraction rejected: %s", reason)
+	default:
+		h.logger.Errorf("memory: extraction rejected: %s", reason)
+	}
 }
 
 // injectDateTime prepends the current date and time to the user message

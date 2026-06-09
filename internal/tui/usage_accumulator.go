@@ -23,6 +23,7 @@ type usageAccumulator struct {
 	cacheRead  int
 	cacheWrite int
 	cost       float64
+	contextMax int
 }
 
 func (a *usageAccumulator) addFromUsage(u provider.Usage) {
@@ -48,6 +49,15 @@ func (a usageAccumulator) formatTokenStatus() string {
 		parts = append(parts, "W"+formatCompactTokens(a.cacheWrite))
 	}
 	parts = append(parts, fmt.Sprintf("$%.3f", a.cost))
+	if a.contextMax > 0 {
+		pct := 0.0
+		if a.up > 0 {
+			pct = float64(a.up) / float64(a.contextMax) * 100
+		}
+		parts = append(parts, fmt.Sprintf("%.0f%%/%s", pct, formatCompactTokens(a.contextMax)))
+	} else {
+		parts = append(parts, "?/%?")
+	}
 	return strings.Join(parts, " ")
 }
 
