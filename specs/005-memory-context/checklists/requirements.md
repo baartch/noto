@@ -1,7 +1,7 @@
 # Specification Quality Checklist: Memory Context Indexing
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-05-18
+**Created**: 2026-06-09
 **Feature**: [Link to spec.md](../spec.md)
 
 ## Content Quality
@@ -31,5 +31,6 @@
 
 ## Notes
 
-- Re-validated after cache behavior updates on 2026-05-18.
-- All checklist items passed.
+- Revalidated on 2026-06-09 after updating the spec to replace session-summary context with a time-layered memory model.
+- Added requirements for weekly and monthly rollups, removal of conversation summaries, and LLM-accessible keyword and time-range search tools.
+- Validation passed after ensuring the updated requirements remain user-focused and technology-agnostic.
