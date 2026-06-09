@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -68,13 +69,7 @@ func ListModels(ctx context.Context, cfg Config) ([]ModelInfo, error) {
 
 	models := make([]ModelInfo, 0, len(result.Data))
 	for _, m := range result.Data {
-		supportsTools := false
-		for _, p := range m.SupportedParameters {
-			if p == "tools" {
-				supportsTools = true
-				break
-			}
-		}
+		supportsTools := slices.Contains(m.SupportedParameters, "tools")
 		models = append(models, ModelInfo{ID: m.ID, OwnedBy: m.OwnedBy, ContextLength: m.ContextLength, ToolSupport: ToolSupport{SupportsTools: supportsTools}})
 	}
 	sort.Slice(models, func(i, j int) bool {

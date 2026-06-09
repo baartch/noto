@@ -165,12 +165,7 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 		Temperature:     req.Temperature,
 	}
 	for _, tool := range req.Tools {
-		payload.Tools = append(payload.Tools, openAIResponsesToolDefinition{
-			Type:        tool.Type,
-			Name:        tool.Name,
-			Description: tool.Description,
-			Parameters:  tool.Parameters,
-		})
+		payload.Tools = append(payload.Tools, openAIResponsesToolDefinition(tool))
 	}
 	for _, m := range req.Messages {
 		msg := openAIResponsesMessage{Role: m.Role}

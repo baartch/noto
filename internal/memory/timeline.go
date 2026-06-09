@@ -3,11 +3,14 @@ package memory
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"noto/internal/store"
 )
 
+// TimelineWindow describes the computed raw, weekly, and monthly time ranges
+// used for assembled memory context.
 type TimelineWindow struct {
 	RawStart      time.Time
 	RawEnd        time.Time
@@ -17,6 +20,8 @@ type TimelineWindow struct {
 	MonthlyCutoff *time.Time
 }
 
+// ComputeTimelineWindow derives the effective timeline ranges from the current
+// time and persisted profile timeline settings.
 func ComputeTimelineWindow(now time.Time, settings *store.TimelineSettings) (TimelineWindow, error) {
 	if settings == nil {
 		return TimelineWindow{}, errors.New("memory: timeline settings are nil")
@@ -74,13 +79,15 @@ func startOfDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }
 
+// MonthlySummaryMonthsString serializes a monthly summary window value.
 func MonthlySummaryMonthsString(v int) string {
 	if v == store.MonthlySummaryAllRemaining {
 		return "all_remaining"
 	}
-	return fmt.Sprintf("%d", v)
+	return strconv.Itoa(v)
 }
 
+// ParseMonthlySummaryMonths parses a serialized monthly summary window value.
 func ParseMonthlySummaryMonths(v string) (int, error) {
 	if v == "all_remaining" {
 		return store.MonthlySummaryAllRemaining, nil

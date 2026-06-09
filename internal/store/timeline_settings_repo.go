@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 )
 
+// MonthlySummaryAllRemaining is the sentinel value representing unbounded
+// monthly summary coverage for older history.
 const MonthlySummaryAllRemaining = -1
 
 // ErrTimelineSettingsNotFound is returned when a profile has no stored timeline settings row.
@@ -21,6 +24,7 @@ type TimelineSettings struct {
 	UpdatedAt            time.Time
 }
 
+// Validate checks that timeline settings satisfy persisted input rules.
 func (s *TimelineSettings) Validate() error {
 	if s == nil {
 		return errors.New("store: timeline settings is nil")
@@ -37,6 +41,7 @@ func (s *TimelineSettings) Validate() error {
 	return nil
 }
 
+// Normalize returns the settings value or defaults when nil.
 func (s *TimelineSettings) Normalize() *TimelineSettings {
 	if s == nil {
 		return DefaultTimelineSettings("")
@@ -44,6 +49,7 @@ func (s *TimelineSettings) Normalize() *TimelineSettings {
 	return s
 }
 
+// DefaultTimelineSettings returns the default timeline settings for a profile.
 func DefaultTimelineSettings(profileID string) *TimelineSettings {
 	return &TimelineSettings{
 		ProfileID:            profileID,
@@ -58,10 +64,12 @@ type TimelineSettingsRepo struct {
 	db *DB
 }
 
+// NewTimelineSettingsRepo creates a repository for profile timeline settings.
 func NewTimelineSettingsRepo(db *DB) *TimelineSettingsRepo {
 	return &TimelineSettingsRepo{db: db}
 }
 
+// Get loads persisted timeline settings for a profile.
 func (r *TimelineSettingsRepo) Get(ctx context.Context, profileID string) (*TimelineSettings, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT key, value, updated_at
@@ -109,6 +117,7 @@ func (r *TimelineSettingsRepo) Get(ctx context.Context, profileID string) (*Time
 	return s.Normalize(), nil
 }
 
+// GetOrDefault loads timeline settings or returns defaults when none exist.
 func (r *TimelineSettingsRepo) GetOrDefault(ctx context.Context, profileID string) (*TimelineSettings, error) {
 	s, err := r.Get(ctx, profileID)
 	if err == nil {
@@ -120,6 +129,7 @@ func (r *TimelineSettingsRepo) GetOrDefault(ctx context.Context, profileID strin
 	return DefaultTimelineSettings(profileID), nil
 }
 
+// Upsert persists timeline settings for a profile.
 func (r *TimelineSettingsRepo) Upsert(ctx context.Context, s *TimelineSettings) error {
 	if s == nil {
 		return errors.New("store: timeline settings is nil")
@@ -128,7 +138,7 @@ func (r *TimelineSettingsRepo) Upsert(ctx context.Context, s *TimelineSettings) 
 	if err := s.Validate(); err != nil {
 		return err
 	}
-	monthlyValue := fmt.Sprintf("%d", s.MonthlySummaryMonths)
+	monthlyValue := strconv.Itoa(s.MonthlySummaryMonths)
 	if s.MonthlySummaryMonths == MonthlySummaryAllRemaining {
 		monthlyValue = "all_remaining"
 	}
@@ -136,8 +146,8 @@ func (r *TimelineSettingsRepo) Upsert(ctx context.Context, s *TimelineSettings) 
 		key   string
 		value string
 	}{
-		{key: "raw_note_days", value: fmt.Sprintf("%d", s.RawNoteDays)},
-		{key: "weekly_summary_weeks", value: fmt.Sprintf("%d", s.WeeklySummaryWeeks)},
+		{key: "raw_note_days", value: strconv.Itoa(s.RawNoteDays)},
+		{key: "weekly_summary_weeks", value: strconv.Itoa(s.WeeklySummaryWeeks)},
 		{key: "monthly_summary_months", value: monthlyValue},
 	}
 	for _, entry := range entries {

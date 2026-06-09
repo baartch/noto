@@ -8,8 +8,10 @@ import (
 	"time"
 )
 
+// ErrMemorySummaryNotFound is returned when a summary artifact cannot be found.
 var ErrMemorySummaryNotFound = errors.New("store: memory summary not found")
 
+// Summary artifact and freshness constants.
 const (
 	SummaryTypeWeekly  = "weekly"
 	SummaryTypeMonthly = "monthly"
@@ -39,10 +41,12 @@ type MemorySummaryRepo struct {
 	db *DB
 }
 
+// NewMemorySummaryRepo creates a repository for weekly and monthly summaries.
 func NewMemorySummaryRepo(db *DB) *MemorySummaryRepo {
 	return &MemorySummaryRepo{db: db}
 }
 
+// Upsert creates or replaces a weekly/monthly summary artifact for its period.
 func (r *MemorySummaryRepo) Upsert(ctx context.Context, s *MemorySummary) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO memory_summaries
@@ -62,6 +66,7 @@ func (r *MemorySummaryRepo) Upsert(ctx context.Context, s *MemorySummary) error 
 	return nil
 }
 
+// GetByPeriod loads a summary artifact by profile, type, and period key.
 func (r *MemorySummaryRepo) GetByPeriod(ctx context.Context, profileID, summaryType, periodKey string) (*MemorySummary, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, profile_id, summary_type, period_key, period_start, period_end, content, source_state_version, freshness_state, created_at, updated_at
@@ -78,6 +83,7 @@ func (r *MemorySummaryRepo) GetByPeriod(ctx context.Context, profileID, summaryT
 	return &s, nil
 }
 
+// ListByProfileAndType lists summary artifacts for a profile and summary type.
 func (r *MemorySummaryRepo) ListByProfileAndType(ctx context.Context, profileID, summaryType string) ([]*MemorySummary, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, profile_id, summary_type, period_key, period_start, period_end, content, source_state_version, freshness_state, created_at, updated_at
@@ -100,6 +106,7 @@ func (r *MemorySummaryRepo) ListByProfileAndType(ctx context.Context, profileID,
 	return out, rows.Err()
 }
 
+// MarkFreshness updates the freshness state for a stored summary artifact.
 func (r *MemorySummaryRepo) MarkFreshness(ctx context.Context, profileID, summaryType, periodKey, freshness string) error {
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE memory_summaries
