@@ -31,15 +31,15 @@
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
 - [X] T005 Add timeline settings persistence model and accessors for raw-note days, weekly-summary weeks, and monthly-summary months in /home/andy/gitrepos/noto/internal/store/timeline_settings_repo.go
-- [ ] T006 [P] Add weekly/monthly summary persistence models and repositories in /home/andy/gitrepos/noto/internal/store/memory_summary_repo.go
+- [X] T006 [P] Add weekly/monthly summary persistence models and repositories in /home/andy/gitrepos/noto/internal/store/memory_summary_repo.go
 - [X] T007 [P] Add profile DB migration for timeline settings and summary artifacts in /home/andy/gitrepos/noto/internal/store/migrations/profile/0003_memory_timeline.sql
 - [X] T008 Define timeline window selection primitives and period helpers in /home/andy/gitrepos/noto/internal/memory/timeline.go
 - [X] T009 [P] Extend provider model metadata types to include context length and tool support in /home/andy/gitrepos/noto/internal/provider/models.go and /home/andy/gitrepos/noto/internal/provider/adapter.go
-- [ ] T010 [P] Extend OpenAI-compatible provider request/response types for tool definitions and tool call turns in /home/andy/gitrepos/noto/internal/provider/openai_compatible.go
-- [ ] T011 Add summary freshness/versioning helpers in /home/andy/gitrepos/noto/internal/memory/summary_rollups.go
+- [X] T010 [P] Extend OpenAI-compatible provider request/response types for tool definitions and tool call turns in /home/andy/gitrepos/noto/internal/provider/openai_compatible.go
+- [X] T011 Add summary freshness/versioning helpers in /home/andy/gitrepos/noto/internal/memory/summary_rollups.go
 - [X] T012 [P] Add unit tests for timeline period calculation and zero-window behavior in /home/andy/gitrepos/noto/tests/unit/memory/timeline_test.go
 - [X] T013 [P] Add unit tests for provider model metadata parsing (`context_length`, tool support) in /home/andy/gitrepos/noto/tests/unit/provider/models_test.go
-- [ ] T014 [P] Add unit tests for provider tool-calling request/response normalization and invalid tool payload handling in /home/andy/gitrepos/noto/tests/unit/provider/tool_calling_test.go
+- [X] T014 [P] Add unit tests for provider tool-calling request/response normalization and invalid tool payload handling in /home/andy/gitrepos/noto/tests/unit/provider/tool_calling_test.go
 - [X] T015 [P] Add unit tests for timeline settings serialization and validation covering arbitrary raw-note day values greater than 0, weekly-summary week values greater than 0, rejection of zero weekly/monthly summary values, bounded monthly windows greater than 0, and `all_remaining` sentinel values in /home/andy/gitrepos/noto/tests/unit/memory/timeline_settings_test.go
 
 **Checkpoint**: Foundation ready — user story implementation can begin.

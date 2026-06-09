@@ -164,11 +164,23 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 		MaxOutputTokens: req.MaxTokens,
 		Temperature:     req.Temperature,
 	}
-	for _, m := range req.Messages {
-		payload.Input = append(payload.Input, openAIResponsesMessage{
-			Role:    m.Role,
-			Content: []openAIResponsesContent{{Type: "input_text", Text: m.Content}},
+	for _, tool := range req.Tools {
+		payload.Tools = append(payload.Tools, openAIResponsesToolDefinition{
+			Type:        tool.Type,
+			Name:        tool.Name,
+			Description: tool.Description,
+			Parameters:  tool.Parameters,
 		})
+	}
+	for _, m := range req.Messages {
+		msg := openAIResponsesMessage{Role: m.Role}
+		if m.ToolCallID != "" {
+			msg.CallID = m.ToolCallID
+			msg.Content = []openAIResponsesContent{{Type: "function_call_output", Text: m.Content}}
+		} else {
+			msg.Content = []openAIResponsesContent{{Type: "input_text", Text: m.Content}}
+		}
+		payload.Input = append(payload.Input, msg)
 	}
 
 	body, err := json.Marshal(payload)
@@ -214,7 +226,8 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 		return nil, fmt.Errorf("provider: responses error %s: %s", apiResp.Error.Code, apiResp.Error.Message)
 	}
 	content := extractResponseText(apiResp.Output)
-	if content == "" {
+	toolCalls := extractToolCalls(apiResp.Output)
+	if content == "" && len(toolCalls) == 0 {
 		return nil, errors.New("provider: no content in response")
 	}
 
@@ -261,6 +274,7 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 		PromptTokens:     promptTokens,
 		CompletionTokens: completionTokens,
 		TotalTokens:      totalTokens,
+		ToolCalls:        toolCalls,
 		EstimatedCostUSD: estimateCost(modelName, promptTokens, completionTokens),
 		Usage:            usage,
 		ContextMax:       info.contextWindow,
@@ -275,18 +289,28 @@ type openAIResponsesContent struct {
 }
 
 type openAIResponsesMessage struct {
-	Role    string                   `json:"role"`
-	Content []openAIResponsesContent `json:"content"`
+	Role    string                   `json:"role,omitempty"`
+	CallID  string                   `json:"call_id,omitempty"`
+	Type    string                   `json:"type,omitempty"`
+	Content []openAIResponsesContent `json:"content,omitempty"`
+}
+
+type openAIResponsesToolDefinition struct {
+	Type        string         `json:"type,omitempty"`
+	Name        string         `json:"name,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Parameters  map[string]any `json:"parameters,omitempty"`
 }
 
 type openAIResponsesRequest struct {
-	Model            string                   `json:"model"`
-	Input            []openAIResponsesMessage `json:"input"`
-	MaxOutputTokens  int                      `json:"max_output_tokens,omitempty"`
-	Temperature      float64                  `json:"temperature,omitempty"`
-	TopP             float64                  `json:"top_p,omitempty"`
-	FrequencyPenalty float64                  `json:"frequency_penalty,omitempty"`
-	PresencePenalty  float64                  `json:"presence_penalty,omitempty"`
+	Model            string                         `json:"model"`
+	Input            []openAIResponsesMessage       `json:"input"`
+	Tools            []openAIResponsesToolDefinition `json:"tools,omitempty"`
+	MaxOutputTokens  int                            `json:"max_output_tokens,omitempty"`
+	Temperature      float64                        `json:"temperature,omitempty"`
+	TopP             float64                        `json:"top_p,omitempty"`
+	FrequencyPenalty float64                        `json:"frequency_penalty,omitempty"`
+	PresencePenalty  float64                        `json:"presence_penalty,omitempty"`
 }
 
 type openAIResponsesPromptTokensDetails struct {
@@ -312,7 +336,12 @@ type openAIResponsesResponse struct {
 		Message string `json:"message"`
 	} `json:"error"`
 	Output []struct {
-		Content []openAIResponsesContent `json:"content"`
+		ID        string                   `json:"id,omitempty"`
+		CallID    string                   `json:"call_id,omitempty"`
+		Name      string                   `json:"name,omitempty"`
+		Type      string                   `json:"type,omitempty"`
+		Arguments string                   `json:"arguments,omitempty"`
+		Content   []openAIResponsesContent `json:"content"`
 	} `json:"output"`
 	Usage openAIResponsesUsage `json:"usage"`
 }
@@ -331,7 +360,12 @@ type openAIEmbeddingResponse struct {
 }
 
 func extractResponseText(outputs []struct {
-	Content []openAIResponsesContent `json:"content"`
+	ID        string                   `json:"id,omitempty"`
+	CallID    string                   `json:"call_id,omitempty"`
+	Name      string                   `json:"name,omitempty"`
+	Type      string                   `json:"type,omitempty"`
+	Arguments string                   `json:"arguments,omitempty"`
+	Content   []openAIResponsesContent `json:"content"`
 }) string {
 	for _, output := range outputs {
 		for _, content := range output.Content {
@@ -343,4 +377,21 @@ func extractResponseText(outputs []struct {
 		}
 	}
 	return ""
+}
+
+func extractToolCalls(outputs []struct {
+	ID        string                   `json:"id,omitempty"`
+	CallID    string                   `json:"call_id,omitempty"`
+	Name      string                   `json:"name,omitempty"`
+	Type      string                   `json:"type,omitempty"`
+	Arguments string                   `json:"arguments,omitempty"`
+	Content   []openAIResponsesContent `json:"content"`
+}) []ToolCall {
+	calls := make([]ToolCall, 0)
+	for _, output := range outputs {
+		if output.Type == "function_call" && output.Name != "" {
+			calls = append(calls, ToolCall{ID: output.ID, CallID: output.CallID, Name: output.Name, Arguments: output.Arguments})
+		}
+	}
+	return calls
 }
