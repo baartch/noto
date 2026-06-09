@@ -18,6 +18,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"noto/internal/cache"
 	"noto/internal/chat"
 	"noto/internal/commands"
 	"noto/internal/profile"
@@ -1819,6 +1820,9 @@ func (m Model) handleSettingsSave() (tea.Model, tea.Cmd) {
 				m.settingsErr = err.Error()
 				return m, nil
 			}
+			if m.execCtx != nil && m.execCtx.DB != nil {
+				_ = cache.NewInvalidationTriggers(store.NewContextCacheRepo(m.execCtx.DB)).OnTimelineSettingsChange(context.Background(), m.execCtx.ProfileID)
+			}
 			entry.Value = strconv.Itoa(parsed)
 		default:
 			entry.Value = strconv.Itoa(parsed)
@@ -1875,6 +1879,9 @@ func (m Model) handleSettingsSave() (tea.Model, tea.Cmd) {
 			if err := repo.Upsert(context.Background(), current); err != nil {
 				m.settingsErr = err.Error()
 				return m, nil
+			}
+			if m.execCtx != nil && m.execCtx.DB != nil {
+				_ = cache.NewInvalidationTriggers(store.NewContextCacheRepo(m.execCtx.DB)).OnTimelineSettingsChange(context.Background(), m.execCtx.ProfileID)
 			}
 		default:
 			entry.Value = val

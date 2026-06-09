@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"noto/internal/cache"
 	"noto/internal/store"
 )
 
@@ -52,13 +53,18 @@ type RollupCreationCounts struct {
 
 // SummaryRollupBuilder creates, marks, and regenerates weekly/monthly summary artifacts.
 type SummaryRollupBuilder struct {
-	noteRepo    *store.MemoryNoteRepo
-	summaryRepo *store.MemorySummaryRepo
+	noteRepo          *store.MemoryNoteRepo
+	summaryRepo       *store.MemorySummaryRepo
+	cacheInvalidator  interface{ OnSummaryChange(context.Context, string) error }
 }
 
 // NewSummaryRollupBuilder creates a rollup builder.
 func NewSummaryRollupBuilder(noteRepo *store.MemoryNoteRepo, summaryRepo *store.MemorySummaryRepo) *SummaryRollupBuilder {
-	return &SummaryRollupBuilder{noteRepo: noteRepo, summaryRepo: summaryRepo}
+	builder := &SummaryRollupBuilder{noteRepo: noteRepo, summaryRepo: summaryRepo}
+	if noteRepo != nil && noteRepo.DB() != nil {
+		builder.cacheInvalidator = cache.NewInvalidationTriggers(store.NewContextCacheRepo(noteRepo.DB()))
+	}
+	return builder
 }
 
 // CatchUp creates any missing completed weekly/monthly summaries for a profile.
@@ -79,6 +85,9 @@ func (b *SummaryRollupBuilder) CatchUp(ctx context.Context, profileID string, no
 		if err := b.summaryRepo.Upsert(ctx, buildWeeklySummary(profileID, key, grouped)); err != nil {
 			return counts, err
 		}
+		if b.cacheInvalidator != nil {
+			_ = b.cacheInvalidator.OnSummaryChange(ctx, profileID)
+		}
 		counts.Weekly++
 	}
 
@@ -91,6 +100,9 @@ func (b *SummaryRollupBuilder) CatchUp(ctx context.Context, profileID string, no
 		}
 		if err := b.summaryRepo.Upsert(ctx, buildMonthlySummary(profileID, key, grouped)); err != nil {
 			return counts, err
+		}
+		if b.cacheInvalidator != nil {
+			_ = b.cacheInvalidator.OnSummaryChange(ctx, profileID)
 		}
 		counts.Monthly++
 	}
@@ -105,6 +117,9 @@ func (b *SummaryRollupBuilder) MarkCoveredSummariesStale(ctx context.Context, pr
 	}
 	if err := b.summaryRepo.MarkFreshness(ctx, profileID, store.SummaryTypeMonthly, MonthlyPeriodKey(noteTime), store.SummaryStale); err != nil {
 		return err
+	}
+	if b.cacheInvalidator != nil {
+		_ = b.cacheInvalidator.OnSummaryChange(ctx, profileID)
 	}
 	return nil
 }
@@ -133,6 +148,9 @@ func (b *SummaryRollupBuilder) RegenerateStale(ctx context.Context, profileID st
 		if err := b.summaryRepo.Upsert(ctx, rebuilt); err != nil {
 			return err
 		}
+		if b.cacheInvalidator != nil {
+			_ = b.cacheInvalidator.OnSummaryChange(ctx, profileID)
+		}
 	}
 	monthlyGroups := groupNotesByCompletedMonth(notes, now)
 	monthly, err := b.summaryRepo.ListByProfileAndType(ctx, profileID, store.SummaryTypeMonthly)
@@ -151,6 +169,9 @@ func (b *SummaryRollupBuilder) RegenerateStale(ctx context.Context, profileID st
 		rebuilt.ID = s.ID
 		if err := b.summaryRepo.Upsert(ctx, rebuilt); err != nil {
 			return err
+		}
+		if b.cacheInvalidator != nil {
+			_ = b.cacheInvalidator.OnSummaryChange(ctx, profileID)
 		}
 	}
 	return nil

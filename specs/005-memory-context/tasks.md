@@ -136,11 +136,11 @@
 
 ### Implementation for User Story 4
 
-- [ ] T047 [US4] Extend cache key construction with raw-note day settings, weekly-summary week settings, monthly-summary month settings, and assembled summary state in /home/andy/gitrepos/noto/internal/memory/retrieval.go
-- [ ] T048 [US4] Remove user-facing token-budget configuration paths while preserving internal token fitting safeguards, including dropping the oldest monthly-summary coverage first when assembled context must be reduced before touching newer timeline layers, in /home/andy/gitrepos/noto/internal/app/chat_cmd.go and /home/andy/gitrepos/noto/internal/memory/retrieval.go
-- [ ] T049 [US4] Invalidate or stale cache entries on timeline-setting changes, including live in-session updates, in /home/andy/gitrepos/noto/internal/cache/invalidation.go and /home/andy/gitrepos/noto/internal/app/chat_cmd.go
-- [ ] T050 [US4] Invalidate or stale cache entries on summary artifact changes and classify corresponding miss reasons in /home/andy/gitrepos/noto/internal/cache/invalidation.go and /home/andy/gitrepos/noto/internal/memory/summary_rollups.go
-- [ ] T051 [US4] Preserve L1→L2 and stale-while-revalidate behavior under timeline retrieval in /home/andy/gitrepos/noto/internal/memory/retrieval.go and /home/andy/gitrepos/noto/internal/cache/service.go
+- [X] T047 [US4] Extend cache key construction with raw-note day settings, weekly-summary week settings, monthly-summary month settings, and assembled summary state in /home/andy/gitrepos/noto/internal/memory/retrieval.go
+- [X] T048 [US4] Remove user-facing token-budget configuration paths while preserving internal token fitting safeguards, including dropping the oldest monthly-summary coverage first when assembled context must be reduced before touching newer timeline layers, in /home/andy/gitrepos/noto/internal/app/chat_cmd.go and /home/andy/gitrepos/noto/internal/memory/retrieval.go
+- [X] T049 [US4] Invalidate or stale cache entries on timeline-setting changes, including live in-session updates, in /home/andy/gitrepos/noto/internal/cache/invalidation.go and /home/andy/gitrepos/noto/internal/app/chat_cmd.go
+- [X] T050 [US4] Invalidate or stale cache entries on summary artifact changes and classify corresponding miss reasons in /home/andy/gitrepos/noto/internal/cache/invalidation.go and /home/andy/gitrepos/noto/internal/memory/summary_rollups.go
+- [X] T051 [US4] Preserve L1→L2 and stale-while-revalidate behavior under timeline retrieval in /home/andy/gitrepos/noto/internal/memory/retrieval.go and /home/andy/gitrepos/noto/internal/cache/service.go
 
 **Checkpoint**: User Story 4 should maintain fast reuse without incorrect hits.
 

@@ -117,9 +117,6 @@ func NewRetrieval(noteRepo *store.MemoryNoteRepo, summaryRepo *store.SessionSumm
 	for _, opt := range opts {
 		opt(r)
 	}
-	if r.tokenBudget <= 0 {
-		r.tokenBudget = 1500
-	}
 	return r
 }
 
