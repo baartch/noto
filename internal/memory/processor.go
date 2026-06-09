@@ -9,9 +9,10 @@ import (
 
 // Processor orchestrates scoring, deduplication, and storage for extracted notes.
 type Processor struct {
-	noteRepo *store.MemoryNoteRepo
-	deduper  vector.Deduper
-	logHook  CaptureLogHook
+	noteRepo       *store.MemoryNoteRepo
+	summaryBuilder *SummaryRollupBuilder
+	deduper        vector.Deduper
+	logHook        CaptureLogHook
 }
 
 // NewProcessor creates a Processor.
@@ -20,6 +21,12 @@ func NewProcessor(noteRepo *store.MemoryNoteRepo, deduper vector.Deduper, logHoo
 		logHook = NoopCaptureLogHook{}
 	}
 	return &Processor{noteRepo: noteRepo, deduper: deduper, logHook: logHook}
+}
+
+// WithSummaryRollups configures summary stale-marking support for changed notes.
+func (p *Processor) WithSummaryRollups(builder *SummaryRollupBuilder) *Processor {
+	p.summaryBuilder = builder
+	return p
 }
 
 // Process runs scoring, deduplication, and storage for extracted items.
@@ -65,6 +72,9 @@ func (p *Processor) Process(
 		if err != nil {
 			p.logHook.NoteStorageFailed(candidate, err)
 			return notes, updated, err
+		}
+		if p.summaryBuilder != nil {
+			_ = p.summaryBuilder.MarkCoveredSummariesStale(ctx, profileID, note.CreatedAt)
 		}
 		p.logHook.NoteStored(candidate, note.ID)
 		notes = append(notes, note)

@@ -228,6 +228,15 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	injectedMsg := injectDateTime(userMsg)
 
 	// Build provider request from retrieval cache/context each turn.
+	if s.db != nil {
+		builder := memory.NewSummaryRollupBuilder(s.noteRepo, store.NewMemorySummaryRepo(s.db))
+		if _, err := builder.CatchUp(ctx, s.profileID, time.Now().UTC()); err != nil {
+			s.logger.Errorf("summary catch-up failed: %v", err)
+		}
+		if err := builder.RegenerateStale(ctx, s.profileID, time.Now().UTC()); err != nil {
+			s.logger.Errorf("summary regeneration failed: %v", err)
+		}
+	}
 	systemPrompt := s.systemPrompt
 	if s.retrieval != nil {
 		rc, err := s.retrieval.Assemble(ctx, s.profileID, s.baseSystemPrompt)

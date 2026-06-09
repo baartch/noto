@@ -87,10 +87,10 @@
 ### Implementation for User Story 2
 
 - [X] T029 [US2] Implement weekly and monthly summary creation logic in /home/andy/gitrepos/noto/internal/memory/summary_rollups.go
-- [ ] T030 [US2] Trigger opportunistic rollup generation during profile processing/chat turns in /home/andy/gitrepos/noto/internal/chat/session.go
-- [ ] T031 [US2] Persist and query summary artifacts through repositories in /home/andy/gitrepos/noto/internal/store/memory_summary_repo.go
-- [ ] T032 [US2] Enforce unique weekly/monthly summary periods at repository and migration level in /home/andy/gitrepos/noto/internal/store/memory_summary_repo.go and /home/andy/gitrepos/noto/internal/store/migrations/profile/0003_memory_timeline.sql
-- [ ] T033 [US2] Mark summaries stale when covered notes are added or updated in /home/andy/gitrepos/noto/internal/memory/processor.go and /home/andy/gitrepos/noto/internal/memory/extractor.go
+- [X] T030 [US2] Trigger opportunistic rollup generation during profile processing/chat turns in /home/andy/gitrepos/noto/internal/chat/session.go
+- [X] T031 [US2] Persist and query summary artifacts through repositories in /home/andy/gitrepos/noto/internal/store/memory_summary_repo.go
+- [X] T032 [US2] Enforce unique weekly/monthly summary periods at repository and migration level in /home/andy/gitrepos/noto/internal/store/memory_summary_repo.go and /home/andy/gitrepos/noto/internal/store/migrations/profile/0003_memory_timeline.sql
+- [X] T033 [US2] Mark summaries stale when covered notes are added or updated in /home/andy/gitrepos/noto/internal/memory/processor.go and /home/andy/gitrepos/noto/internal/memory/extractor.go
 - [X] T034 [US2] Add regeneration path for stale summaries, failure handling, and safe replacement semantics in /home/andy/gitrepos/noto/internal/memory/summary_rollups.go
 
 **Checkpoint**: User Stories 1 and 2 should work independently and together.
