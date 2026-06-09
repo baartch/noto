@@ -291,8 +291,12 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 			followup = append(followup, provider.Message{Role: "tool", Content: pipeline.executeToolCall(ctx, s.profileID, call), ToolCallID: call.CallID})
 		}
 		resp, err = s.adapter.Complete(ctx, provider.CompletionRequest{Model: req.Model, Messages: followup, Temperature: req.Temperature, Tools: req.Tools})
+		if err != nil {
+			s.logger.Errorf("provider follow-up call failed: %v", err)
+		}
 	}
 	if err != nil {
+		s.logger.Errorf("provider call failed: %v", err)
 		return nil, fmt.Errorf("session: provider call: %w", err)
 	}
 
