@@ -190,9 +190,10 @@ func TestTUISettingsEditor_SaveAndCancel(t *testing.T) {
 	m = updated.(tui.Model)
 
 	// Navigate down until we land on a value entry and enter it
-	// Sorted order: Memory Token Budget, Model, Model Extractor, Model Embeddings, Provider, System Prompt, Themes
-	// System Prompt is index 5 (0-based) — navigate down 5 times from top
-	for range 5 {
+	// Sorted order: Model, Model Embeddings, Model Extractor, Monthly Summary Months,
+	// Profiles, Provider, Raw Note Days, System Prompt, Themes, Weekly Summary Weeks
+	// System Prompt is index 7 (0-based) — navigate down 7 times from top
+	for range 7 {
 		updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 		m = updated.(tui.Model)
 	}
@@ -214,7 +215,12 @@ func TestTUISettingsEditor_InvalidNumber(t *testing.T) {
 	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	m = updated.(tui.Model)
 
-	// Memory Token Budget is the first entry alphabetically
+	// Move to the first numeric timeline setting.
+	// Raw Note Days is index 6 in the sorted root settings list.
+	for range 6 {
+		updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+		m = updated.(tui.Model)
+	}
 	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(tui.Model)
 
@@ -275,7 +281,8 @@ func TestSettingsSubmenuNavigation_EscBehavior(t *testing.T) {
 	updated, _ = m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	m = updated.(tui.Model)
 
-	// Sorted: Memory Token Budget(0), Model(1), Model Extractor(2), Model Embeddings(3), Profiles(4), Provider(5), System Prompt(6), Themes(7)
+	// Sorted: Model(0), Model Embeddings(1), Model Extractor(2), Monthly Summary Months(3),
+	// Profiles(4), Provider(5), Raw Note Days(6), System Prompt(7), Themes(8), Weekly Summary Weeks(9)
 	// Navigate to Provider (index 5)
 	for range 5 {
 		updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})

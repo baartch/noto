@@ -18,11 +18,11 @@ type TimelineFixtureNote struct {
 
 // TimelineFixtureSummary is a lightweight fixture row used by rollup and time-range tests.
 type TimelineFixtureSummary struct {
-	ID         string
-	ProfileID  string
-	Type       string
-	PeriodKey  string
-	Content    string
+	ID          string
+	ProfileID   string
+	Type        string
+	PeriodKey   string
+	Content     string
 	PeriodStart time.Time
 	PeriodEnd   time.Time
 }

@@ -14,11 +14,11 @@ var ErrTimelineSettingsNotFound = errors.New("store: timeline settings not found
 
 // TimelineSettings persists profile-local context assembly settings.
 type TimelineSettings struct {
-	ProfileID             string
-	RawNoteDays           int
-	WeeklySummaryWeeks    int
-	MonthlySummaryMonths  int // -1 means all remaining
-	UpdatedAt             time.Time
+	ProfileID            string
+	RawNoteDays          int
+	WeeklySummaryWeeks   int
+	MonthlySummaryMonths int // -1 means all remaining
+	UpdatedAt            time.Time
 }
 
 func (s *TimelineSettings) Validate() error {

@@ -12,7 +12,6 @@ import (
 	"noto/internal/config"
 	"noto/internal/memory"
 	"noto/internal/observe"
-	"noto/internal/profile"
 	"noto/internal/provider"
 	"noto/internal/store"
 	"noto/internal/vector"
@@ -58,11 +57,9 @@ type Session struct {
 	extractorAdapter  provider.Adapter
 	logger            observe.Logger
 	baseSystemPrompt  string
-	sessionSummary    string
 	db                *store.DB
 	vectorIndexPath   string
 	vectorIndex       vector.Index
-	memoryTokenBudget int
 	extractorFallback bool
 	embeddingModel    string
 	missingEmbedding  bool
@@ -104,13 +101,9 @@ func NewSession(
 	onContextStatus ContextStatusCallback,
 	onUsage func(provider.Usage),
 ) (*Session, error) {
-	// Build system prompt with injected memory notes + session summary.
+	// Build system prompt with injected memory context.
 	cacheRepo := store.NewContextCacheRepo(db)
 	vecPath, _ := config.ProfileVectorPath(profileSlug)
-	settings, err := profile.ReadSettings(profileSlug)
-	if err != nil {
-		return nil, fmt.Errorf("session: read settings: %w", err)
-	}
 	embeddingModel := ""
 	if db != nil {
 		cfgRepo := store.NewProviderConfigRepo(db)
@@ -130,7 +123,6 @@ func NewSession(
 		memory.WithWarnFunc(func(err error) {
 			logger.Infof("vector index issue: %v", err)
 		}),
-		memory.WithTokenBudget(settings.MemoryTokenBudget),
 		memory.WithVectorRetrieval(vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)), profileID, retrievalEmbedder, embeddingModel),
 	)
 	rc, err := ret.Assemble(ctx, profileID, baseSystemPrompt)
@@ -192,11 +184,9 @@ func NewSession(
 		backupStop:        make(chan struct{}),
 		pendingDone:       make(chan struct{}),
 		baseSystemPrompt:  baseSystemPrompt,
-		sessionSummary:    rc.SessionSummary,
 		db:                db,
 		vectorIndexPath:   vecPath,
 		vectorIndex:       vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)),
-		memoryTokenBudget: settings.MemoryTokenBudget,
 		extractorFallback: extractorAdapter == nil && adapter != nil,
 		embeddingModel:    embeddingModel,
 		missingEmbedding:  embeddingModel == "",

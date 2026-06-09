@@ -9,12 +9,12 @@ import (
 )
 
 type TimelineWindow struct {
-	RawStart        time.Time
-	RawEnd          time.Time
-	WeeklyStart     time.Time
-	WeeklyEnd       time.Time
-	MonthlyStart    time.Time
-	MonthlyCutoff   *time.Time
+	RawStart      time.Time
+	RawEnd        time.Time
+	WeeklyStart   time.Time
+	WeeklyEnd     time.Time
+	MonthlyStart  time.Time
+	MonthlyCutoff *time.Time
 }
 
 func ComputeTimelineWindow(now time.Time, settings *store.TimelineSettings) (TimelineWindow, error) {

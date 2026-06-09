@@ -1,12 +1,12 @@
 package testdata
 
 type FooterTelemetryFixture struct {
-	TokenStatus      string
-	CacheStatus      string
-	ContextUsed      int
-	ContextMax       int
-	ContextPercent   int
-	UnknownCapacity  bool
+	TokenStatus     string
+	CacheStatus     string
+	ContextUsed     int
+	ContextMax      int
+	ContextPercent  int
+	UnknownCapacity bool
 }
 
 var KnownCapacityFooter = FooterTelemetryFixture{

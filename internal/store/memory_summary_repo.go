@@ -14,8 +14,8 @@ const (
 	SummaryTypeWeekly  = "weekly"
 	SummaryTypeMonthly = "monthly"
 
-	SummaryFresh       = "fresh"
-	SummaryStale       = "stale"
+	SummaryFresh        = "fresh"
+	SummaryStale        = "stale"
 	SummaryRegenerating = "regenerating"
 )
 

@@ -303,14 +303,14 @@ type openAIResponsesToolDefinition struct {
 }
 
 type openAIResponsesRequest struct {
-	Model            string                         `json:"model"`
-	Input            []openAIResponsesMessage       `json:"input"`
+	Model            string                          `json:"model"`
+	Input            []openAIResponsesMessage        `json:"input"`
 	Tools            []openAIResponsesToolDefinition `json:"tools,omitempty"`
-	MaxOutputTokens  int                            `json:"max_output_tokens,omitempty"`
-	Temperature      float64                        `json:"temperature,omitempty"`
-	TopP             float64                        `json:"top_p,omitempty"`
-	FrequencyPenalty float64                        `json:"frequency_penalty,omitempty"`
-	PresencePenalty  float64                        `json:"presence_penalty,omitempty"`
+	MaxOutputTokens  int                             `json:"max_output_tokens,omitempty"`
+	Temperature      float64                         `json:"temperature,omitempty"`
+	TopP             float64                         `json:"top_p,omitempty"`
+	FrequencyPenalty float64                         `json:"frequency_penalty,omitempty"`
+	PresencePenalty  float64                         `json:"presence_penalty,omitempty"`
 }
 
 type openAIResponsesPromptTokensDetails struct {
