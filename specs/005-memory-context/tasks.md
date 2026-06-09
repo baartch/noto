@@ -17,10 +17,10 @@
 
 **Purpose**: Prepare the codebase and specs for the broadened timeline-memory scope.
 
-- [ ] T001 Align implementation scope notes and validation targets in /home/andy/gitrepos/noto/specs/005-memory-context/plan.md
-- [ ] T002 Create integration test fixtures for day-based raw windows, monthly summary windows, rollups, and tool calling in /home/andy/gitrepos/noto/tests/integration/memory/timeline_fixtures_test.go
-- [ ] T003 [P] Add shared test helpers/constants for OpenRouter tool-calling payloads in /home/andy/gitrepos/noto/tests/unit/provider/testdata/tool_calling.go
-- [ ] T004 [P] Add shared footer telemetry formatting fixtures in /home/andy/gitrepos/noto/tests/unit/tui/testdata/footer_telemetry.go
+- [X] T001 Align implementation scope notes and validation targets in /home/andy/gitrepos/noto/specs/005-memory-context/plan.md
+- [X] T002 Create integration test fixtures for day-based raw windows, monthly summary windows, rollups, and tool calling in /home/andy/gitrepos/noto/tests/integration/memory/timeline_fixtures_test.go
+- [X] T003 [P] Add shared test helpers/constants for OpenRouter tool-calling payloads in /home/andy/gitrepos/noto/tests/unit/provider/testdata/tool_calling.go
+- [X] T004 [P] Add shared footer telemetry formatting fixtures in /home/andy/gitrepos/noto/tests/unit/tui/testdata/footer_telemetry.go
 
 ---
 

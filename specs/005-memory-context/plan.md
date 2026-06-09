@@ -90,7 +90,7 @@ tests/
 
 ## Phase 0: Research Plan
 
-1. Confirm timeline-window semantics for raw-note days, weekly-summary weeks, and monthly-summary months, including zero-value behavior and bounded monthly-history behavior.
+1. Confirm timeline-window semantics for raw-note days, weekly-summary weeks, and monthly-summary months, including rejection of invalid zero weekly/monthly values and bounded monthly-history behavior.
 2. Determine rollup generation and regeneration rules for week/month boundary transitions, missed-runtime catch-up, and stale-summary replacement.
 3. Determine how to represent and expose keyword/vector search and time-range DB search through OpenRouter tool-calling request/response loops while staying compatible with current provider abstractions.
 4. Confirm how to fetch and store model `context_length` metadata from the OpenRouter models API and how to use it as footer telemetry for the active model.
@@ -109,12 +109,12 @@ tests/
 
 ## Phase 2: Implementation Planning (for `/speckit.tasks`)
 
-- Add profile settings for configurable raw-note day windows (any integer greater than 0) plus weekly-summary week and monthly-summary month windows, with raw-note windows always filled backward to the preceding Monday so there is no gap before weekly summaries and weekly-summary coverage extended as needed to reach at least the first day of the following monthly-summary month.
+- Add profile settings for configurable raw-note day windows (any integer greater than 0) plus weekly-summary week and monthly-summary month windows, with weekly-summary values restricted to integers greater than 0 and monthly-summary values restricted to integers greater than 0 or `all_remaining`, while raw-note windows always fill backward to the preceding Monday so there is no gap before weekly summaries and weekly-summary coverage extends as needed to reach at least the first day of the following monthly-summary month.
 - Replace session-summary-based context assembly with a timeline-window selector that uses raw notes, weekly summaries, and monthly summaries.
 - Implement weekly/monthly rollup creation, deduplication, and regeneration triggers when notes or periods change.
 - Extend storage models and migrations for summary artifacts and summary freshness/versioning.
 - Expose keyword/vector and time-range memory search as OpenRouter-compatible tools in the provider completion loop, with orchestration kept in `internal/chat/` and provider transport/schema support kept in `internal/provider/`.
-- Extend provider model metadata loading to capture `context_length` from OpenRouter model objects, cache/fetch it for the active model during startup/profile switch/model change flows, and propagate it into session stats.
+- Extend provider model metadata loading to capture `context_length` and tool-support capability from OpenRouter model objects, cache/fetch it for the active model during startup/profile switch/model change flows, and propagate it into session stats.
 - Update footer telemetry to show tokens plus max-context usage percentage and context maximum on the left side next to existing token information.
 - Extend cache identity and invalidation to include timeline window settings and summary-state changes while keeping token fitting as an internal implementation concern rather than a user-facing setting.
 - Define internal token fitting so that when assembled context must be reduced to fit the prompt, the oldest monthly-summary coverage is dropped first before reducing newer timeline layers, and any additional reduction continues from older timeline coverage toward newer coverage.
