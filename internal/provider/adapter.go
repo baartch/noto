@@ -26,6 +26,7 @@ type ToolSupport struct {
 	SupportsTools bool
 }
 
+// ModelPricing captures OpenRouter /models pricing metadata for a model.
 type ModelPricing struct {
 	Prompt            string
 	Completion        string

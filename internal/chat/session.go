@@ -498,10 +498,10 @@ func (s *Session) SetToolsEnabled(enabled bool) {
 }
 
 // SetModelContextMax updates the known context window size for the active model.
-func (s *Session) SetModelContextMax(max int) {
-	s.modelContextMax = max
-	if max > 0 {
-		s.stats.ContextMax = max
+func (s *Session) SetModelContextMax(contextMax int) {
+	s.modelContextMax = contextMax
+	if contextMax > 0 {
+		s.stats.ContextMax = contextMax
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -74,12 +75,19 @@ func (fl *FileLogger) Emit(e Event) {
 		fl.rotateLog()
 	}
 
-	msg := fmt.Sprintf("[%s] [%s] %s", time.Now().Format("15:04:05"), e.EventType, e.Status)
+	var b strings.Builder
+	b.WriteString("[")
+	b.WriteString(time.Now().Format("15:04:05"))
+	b.WriteString("] [")
+	b.WriteString(string(e.EventType))
+	b.WriteString("] ")
+	b.WriteString(string(e.Status))
 	if e.ProfileID != "" {
-		msg += fmt.Sprintf(" profile=%s", e.ProfileID)
+		b.WriteString(" profile=")
+		b.WriteString(e.ProfileID)
 	}
 	if e.LatencyMs != nil {
-		msg += fmt.Sprintf(" latency_ms=%d", *e.LatencyMs)
+		_, _ = fmt.Fprintf(&b, " latency_ms=%d", *e.LatencyMs)
 	}
 	if len(e.Metadata) > 0 {
 		keys := make([]string, 0, len(e.Metadata))
@@ -88,11 +96,14 @@ func (fl *FileLogger) Emit(e Event) {
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			msg += fmt.Sprintf(" %s=%v", k, e.Metadata[k])
+			b.WriteString(" ")
+			b.WriteString(k)
+			b.WriteString("=")
+			_, _ = fmt.Fprint(&b, e.Metadata[k])
 		}
 	}
-	msg += "\n"
-	n, _ := fl.file.WriteString(msg)
+	b.WriteString("\n")
+	n, _ := fl.file.WriteString(b.String())
 	fl.currentSize += int64(n)
 }
 
