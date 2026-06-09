@@ -291,8 +291,8 @@ type Model struct {
 	// notes badge
 	notesIndicator string
 
-	updateNotice      string
-	usage             usageAccumulator
+	updateNotice          string
+	usage                 usageAccumulator
 	hasAuthoritativeStats bool
 
 	// pending assistant state

@@ -64,6 +64,7 @@ type Session struct {
 	embeddingModel    string
 	missingEmbedding  bool
 	toolsEnabled      bool
+	modelContextMax   int
 
 	backupStop   chan struct{}
 	pendingNotes int
@@ -327,6 +328,10 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	}
 	s.history = append(s.history, asstMsgRec)
 
+	if resp.ContextMax == 0 && s.modelContextMax > 0 {
+		resp.ContextMax = s.modelContextMax
+	}
+
 	// Accumulate token/cost stats.
 	s.stats.Add(resp)
 	if s.onStats != nil {
@@ -490,6 +495,14 @@ func (s *Session) SetModel(model string) {
 // SetToolsEnabled updates whether tool definitions should be exposed for chat.
 func (s *Session) SetToolsEnabled(enabled bool) {
 	s.toolsEnabled = enabled
+}
+
+// SetModelContextMax updates the known context window size for the active model.
+func (s *Session) SetModelContextMax(max int) {
+	s.modelContextMax = max
+	if max > 0 {
+		s.stats.ContextMax = max
+	}
 }
 
 // SetEmbeddingModel updates the embeddings model used for vector operations.

@@ -297,7 +297,7 @@ type openAIChatCompletionsFunctionDefinition struct {
 }
 
 type openAIChatCompletionsToolDefinition struct {
-	Type     string                                 `json:"type"`
+	Type     string                                  `json:"type"`
 	Function openAIChatCompletionsFunctionDefinition `json:"function"`
 }
 
@@ -320,11 +320,11 @@ type openAIChatCompletionsMessage struct {
 }
 
 type openAIChatCompletionsRequest struct {
-	Model       string                               `json:"model"`
-	Messages    []openAIChatCompletionsMessage       `json:"messages"`
+	Model       string                                `json:"model"`
+	Messages    []openAIChatCompletionsMessage        `json:"messages"`
 	Tools       []openAIChatCompletionsToolDefinition `json:"tools,omitempty"`
-	MaxTokens   int                                  `json:"max_tokens,omitempty"`
-	Temperature float64                              `json:"temperature,omitempty"`
+	MaxTokens   int                                   `json:"max_tokens,omitempty"`
+	Temperature float64                               `json:"temperature,omitempty"`
 }
 
 type openAIResponsesPromptTokensDetails struct {
@@ -366,4 +366,3 @@ type openAIEmbeddingResponse struct {
 	} `json:"data"`
 	Usage openAIResponsesUsage `json:"usage"`
 }
-

@@ -230,6 +230,14 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			for _, mi := range models {
 				if mi.ID == activeModel && sess != nil {
 					sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
+					ctxMax := mi.ContextLength
+					if ctxMax == 0 {
+						ctxMax = mi.TopProviderContext
+					}
+					sess.SetModelContextMax(ctxMax)
+					if prog != nil {
+						prog.Send(tui.StatsUpdated(sess.Stats().Format()))
+					}
 					break
 				}
 			}
@@ -248,6 +256,11 @@ func runChat(cmd *cobra.Command, _ []string) error {
 				for _, mi := range models {
 					if mi.ID == modelID && sess != nil {
 						sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
+						ctxMax := mi.ContextLength
+						if ctxMax == 0 {
+							ctxMax = mi.TopProviderContext
+						}
+						sess.SetModelContextMax(ctxMax)
 						break
 					}
 				}
@@ -406,6 +419,14 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					for _, mi := range models {
 						if mi.ID == activeModel && sess != nil {
 							sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
+							ctxMax := mi.ContextLength
+							if ctxMax == 0 {
+								ctxMax = mi.TopProviderContext
+							}
+							sess.SetModelContextMax(ctxMax)
+							if prog != nil {
+								prog.Send(tui.StatsUpdated(sess.Stats().Format()))
+							}
 							break
 						}
 					}
@@ -424,6 +445,11 @@ func runChat(cmd *cobra.Command, _ []string) error {
 						for _, mi := range models {
 							if mi.ID == modelID && sess != nil {
 								sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
+								ctxMax := mi.ContextLength
+								if ctxMax == 0 {
+									ctxMax = mi.TopProviderContext
+								}
+								sess.SetModelContextMax(ctxMax)
 								break
 							}
 						}

@@ -26,6 +26,17 @@ type ToolSupport struct {
 	SupportsTools bool
 }
 
+type ModelPricing struct {
+	Prompt            string
+	Completion        string
+	Request           string
+	Image             string
+	WebSearch         string
+	InternalReasoning string
+	InputCacheRead    string
+	InputCacheWrite   string
+}
+
 // ToolDefinition represents a tool/function exposed to the model.
 type ToolDefinition struct {
 	Type        string
