@@ -88,6 +88,12 @@ This quickstart validates the broadened memory feature, including timeline-based
 
 ## Validation Commands
 
+Latest implementation verification snapshot:
+- `make fmt` ✅
+- `make lint` ✅
+- `make test` ✅
+
+Standard validation commands:
 - `make fmt`
 - `make lint`
 - `make test`

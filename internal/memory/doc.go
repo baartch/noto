@@ -1,2 +1,2 @@
-// Package memory implements note extraction, context retrieval, and session summary generation.
+// Package memory implements note extraction, time-layered context retrieval, rollup generation, and memory search tools.
 package memory

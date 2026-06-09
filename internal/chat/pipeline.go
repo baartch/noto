@@ -15,15 +15,13 @@ import (
 // Pipeline executes a single chat turn: persists the user message, calls the provider,
 // persists the assistant response, and returns the response text.
 type Pipeline struct {
-	convRepo         *store.ConversationRepo
-	msgRepo          *store.MessageRepo
-	noteRepo         *store.MemoryNoteRepo
-	summaryRepo      *store.MemorySummaryRepo
-	adapter          provider.Adapter
-	logger           observe.Logger
-	toolsEnabled     bool
-	keywordTool      *memory.KeywordSearchTool
-	timeRangeTool    *memory.TimeRangeSearchTool
+	convRepo     *store.ConversationRepo
+	msgRepo      *store.MessageRepo
+	noteRepo     *store.MemoryNoteRepo
+	summaryRepo  *store.MemorySummaryRepo
+	adapter      provider.Adapter
+	logger       observe.Logger
+	toolsEnabled bool
 }
 
 // NewPipeline creates a chat Pipeline.

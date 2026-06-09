@@ -175,9 +175,9 @@
 
 **Purpose**: Final cleanup, docs alignment, and full validation across all stories.
 
-- [ ] T061 [P] Update implementation-aligned notes in /home/andy/gitrepos/noto/specs/005-memory-context/data-model.md and /home/andy/gitrepos/noto/specs/005-memory-context/contracts/context-retrieval.md
-- [ ] T062 [P] Remove obsolete session-summary-specific comments or dead paths in /home/andy/gitrepos/noto/internal/memory/doc.go, /home/andy/gitrepos/noto/internal/chat/session.go, and /home/andy/gitrepos/noto/docs/CONTEXT_AT_A_GLANCE.txt
-- [ ] T063 Run full verification suite (`make fmt`, `make lint`, `make test`) and capture outcomes in /home/andy/gitrepos/noto/specs/005-memory-context/quickstart.md
+- [X] T061 [P] Update implementation-aligned notes in /home/andy/gitrepos/noto/specs/005-memory-context/data-model.md and /home/andy/gitrepos/noto/specs/005-memory-context/contracts/context-retrieval.md
+- [X] T062 [P] Remove obsolete session-summary-specific comments or dead paths in /home/andy/gitrepos/noto/internal/memory/doc.go, /home/andy/gitrepos/noto/internal/chat/session.go, and /home/andy/gitrepos/noto/docs/CONTEXT_AT_A_GLANCE.txt
+- [X] T063 Run full verification suite (`make fmt`, `make lint`, `make test`) and capture outcomes in /home/andy/gitrepos/noto/specs/005-memory-context/quickstart.md
 
 ---
 

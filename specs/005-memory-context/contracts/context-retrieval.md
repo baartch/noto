@@ -30,7 +30,7 @@
 9. Conversation summaries MUST NOT be required or included in the default assembled context.
 10. The assembled context MUST distinguish raw notes, weekly summaries, and monthly summaries in its formatted output.
 11. If assembled context must be reduced to fit the internal prompt budget, the system MUST drop the oldest monthly-summary coverage first before reducing newer timeline layers.
-12. If additional reduction is still required after monthly-summary coverage has been exhausted, the system SHOULD continue reducing older timeline coverage before newer timeline coverage.
+12. If additional reduction is still required after monthly-summary coverage has been exhausted, the system MUST continue reducing older timeline coverage before newer timeline coverage.
 
 ## Rollup Generation Contract
 

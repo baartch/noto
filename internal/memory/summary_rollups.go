@@ -53,9 +53,11 @@ type RollupCreationCounts struct {
 
 // SummaryRollupBuilder creates, marks, and regenerates weekly/monthly summary artifacts.
 type SummaryRollupBuilder struct {
-	noteRepo          *store.MemoryNoteRepo
-	summaryRepo       *store.MemorySummaryRepo
-	cacheInvalidator  interface{ OnSummaryChange(context.Context, string) error }
+	noteRepo         *store.MemoryNoteRepo
+	summaryRepo      *store.MemorySummaryRepo
+	cacheInvalidator interface {
+		OnSummaryChange(context.Context, string) error
+	}
 }
 
 // NewSummaryRollupBuilder creates a rollup builder.

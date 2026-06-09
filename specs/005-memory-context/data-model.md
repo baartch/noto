@@ -189,11 +189,11 @@ Represents the retrieval-shaping inputs required for safe context-cache reuse.
 - **system_prompt_fingerprint**: string
 - **assembled_memory_state**: string
 - **embedding_model**: string
-- **timeline_settings_fingerprint**: string
 - **cache_key**: string
 
 Validation:
 - Any change to prompt, assembled memory state, embedding model, or timeline settings yields a new cache identity.
+- `assembled_memory_state` includes the effective timeline settings plus included note/summary IDs and summary freshness state.
 
 ## Relationships
 
