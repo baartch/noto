@@ -105,15 +105,15 @@
 
 ### Tests for User Story 3
 
-- [ ] T035 [P] [US3] Add unit tests for keyword search tool schema, execution, and deterministic fallback behavior in /home/andy/gitrepos/noto/tests/unit/memory/keyword_search_tool_test.go
-- [ ] T036 [P] [US3] Add unit tests for time-range search tool schema, mixed raw+summary results, and execution in /home/andy/gitrepos/noto/tests/unit/memory/time_range_search_tool_test.go
-- [ ] T037 [P] [US3] Add integration test for OpenRouter tool-calling round-trip in /home/andy/gitrepos/noto/tests/integration/provider/tool_calling_roundtrip_test.go
-- [ ] T038 [P] [US3] Add integration test for no-tool-support graceful degradation and invalid tool-call payload handling in /home/andy/gitrepos/noto/tests/integration/provider/tool_support_fallback_test.go
+- [X] T035 [P] [US3] Add unit tests for keyword search tool schema, execution, and deterministic fallback behavior in /home/andy/gitrepos/noto/tests/unit/memory/keyword_search_tool_test.go
+- [X] T036 [P] [US3] Add unit tests for time-range search tool schema, mixed raw+summary results, and execution in /home/andy/gitrepos/noto/tests/unit/memory/time_range_search_tool_test.go
+- [X] T037 [P] [US3] Add integration test for OpenRouter tool-calling round-trip in /home/andy/gitrepos/noto/tests/integration/provider/tool_calling_roundtrip_test.go
+- [X] T038 [P] [US3] Add integration test for no-tool-support graceful degradation and invalid tool-call payload handling in /home/andy/gitrepos/noto/tests/integration/provider/tool_support_fallback_test.go
 
 ### Implementation for User Story 3
 
-- [ ] T039 [US3] Implement keyword/vector memory search executor with deterministic fallback in /home/andy/gitrepos/noto/internal/memory/search_tools.go
-- [ ] T040 [US3] Implement time-range SQLite memory search executor with mixed raw+summary result support in /home/andy/gitrepos/noto/internal/memory/search_tools.go
+- [X] T039 [US3] Implement keyword/vector memory search executor with deterministic fallback in /home/andy/gitrepos/noto/internal/memory/search_tools.go
+- [X] T040 [US3] Implement time-range SQLite memory search executor with mixed raw+summary result support in /home/andy/gitrepos/noto/internal/memory/search_tools.go
 - [ ] T041 [US3] Add OpenRouter-compatible tool definitions and follow-up request handling in /home/andy/gitrepos/noto/internal/provider/openai_compatible.go
 - [ ] T042 [US3] Integrate and keep canonical tool-call orchestration in /home/andy/gitrepos/noto/internal/chat/pipeline.go and /home/andy/gitrepos/noto/internal/chat/session.go
 - [ ] T043 [US3] Gate tool exposure on model/provider capability metadata in /home/andy/gitrepos/noto/internal/provider/models.go and /home/andy/gitrepos/noto/internal/chat/session.go
