@@ -1345,7 +1345,7 @@ func (m *Model) loadOlderInputHistoryBatch() {
 // View implements tea.Model.
 func (m Model) View() tea.View {
 	if !m.ready {
-		return tea.NewView("\n  Initializing…")
+		return tea.NewView("")
 	}
 
 	// ---- middle: picker or suggestions ----
