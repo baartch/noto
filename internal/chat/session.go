@@ -123,6 +123,7 @@ func NewSession(
 		memory.WithWarnFunc(func(err error) {
 			logger.Infof("vector index issue: %v", err)
 		}),
+		memory.WithTimeline(store.NewTimelineSettingsRepo(db), store.NewMemorySummaryRepo(db)),
 		memory.WithVectorRetrieval(vector.NewFileIndex(vecPath, vecfile.NewBinaryCodec(), hnsw.NewSimpleGraph(0)), profileID, retrievalEmbedder, embeddingModel),
 	)
 	rc, err := ret.Assemble(ctx, profileID, baseSystemPrompt)

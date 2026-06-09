@@ -63,10 +63,10 @@
 
 - [X] T020 [US1] Add raw-note day settings (any integer greater than 0), weekly-summary week settings, and monthly-summary month settings to chat settings state and menu wiring in /home/andy/gitrepos/noto/internal/tui/model.go
 - [X] T021 [US1] Load, persist, and apply raw-note day settings (any integer greater than 0), weekly-summary week settings, and monthly-summary month settings in chat bootstrap, live settings updates, and profile switching flows in /home/andy/gitrepos/noto/internal/app/chat_cmd.go
-- [ ] T022 [US1] Replace session-summary-based memory selection with timeline-window context assembly that fills the raw-note day window backward to the preceding Monday and extends weekly coverage to at least the first day of the following monthly-summary month in /home/andy/gitrepos/noto/internal/memory/retrieval.go
-- [ ] T023 [US1] Add formatted memory-block sections for raw notes, weekly summaries, and monthly summaries in /home/andy/gitrepos/noto/internal/memory/retrieval.go
-- [ ] T024 [US1] Remove reliance on conversation summaries during chat context assembly in /home/andy/gitrepos/noto/internal/chat/session.go and /home/andy/gitrepos/noto/internal/memory/retrieval.go
-- [ ] T025 [US1] Add fallback behavior for missing summary layers using best available memory in /home/andy/gitrepos/noto/internal/memory/retrieval.go
+- [X] T022 [US1] Replace session-summary-based memory selection with timeline-window context assembly that fills the raw-note day window backward to the preceding Monday and extends weekly coverage to at least the first day of the following monthly-summary month in /home/andy/gitrepos/noto/internal/memory/retrieval.go
+- [X] T023 [US1] Add formatted memory-block sections for raw notes, weekly summaries, and monthly summaries in /home/andy/gitrepos/noto/internal/memory/retrieval.go
+- [X] T024 [US1] Remove reliance on conversation summaries during chat context assembly in /home/andy/gitrepos/noto/internal/chat/session.go and /home/andy/gitrepos/noto/internal/memory/retrieval.go
+- [X] T025 [US1] Add fallback behavior for missing summary layers using best available memory in /home/andy/gitrepos/noto/internal/memory/retrieval.go
 
 **Checkpoint**: User Story 1 should be fully functional and testable independently.
 
