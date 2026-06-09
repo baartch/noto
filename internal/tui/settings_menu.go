@@ -7,6 +7,7 @@ const (
 	settingsIDExtractorModel       = "extractor_model"
 	settingsIDEmbeddingsModel      = "embeddings_model"
 	settingsIDSystemPrompt         = "system_prompt"
+	settingsIDTimeline             = "timeline"
 	settingsIDRawNoteDays          = "raw_note_days"
 	settingsIDWeeklySummaryWeeks   = "weekly_summary_weeks"
 	settingsIDMonthlySummaryMonths = "monthly_summary_months"
@@ -110,6 +111,34 @@ func DefaultSettingsMenu() *SettingsMenu {
 		},
 	}
 
+	timelineMenu := &SettingsMenu{
+		ID:    settingsIDTimeline,
+		Title: "Timeline",
+		Entries: []SettingsEntry{
+			{
+				ID:        settingsIDRawNoteDays,
+				Label:     "Raw Note Days",
+				Kind:      SettingsEntryValue,
+				ValueType: SettingsValueNumber,
+				Source:    string(SettingsSourceDB),
+			},
+			{
+				ID:        settingsIDWeeklySummaryWeeks,
+				Label:     "Weekly Summary Weeks",
+				Kind:      SettingsEntryValue,
+				ValueType: SettingsValueNumber,
+				Source:    string(SettingsSourceDB),
+			},
+			{
+				ID:        settingsIDMonthlySummaryMonths,
+				Label:     "Monthly Summary Months",
+				Kind:      SettingsEntryValue,
+				ValueType: SettingsValueText,
+				Source:    string(SettingsSourceDB),
+			},
+		},
+	}
+
 	menu := &SettingsMenu{
 		ID:    "settings",
 		Title: "Settings",
@@ -140,25 +169,11 @@ func DefaultSettingsMenu() *SettingsMenu {
 				Source:    string(SettingsSourceDB),
 			},
 			{
-				ID:        settingsIDRawNoteDays,
-				Label:     "Raw Note Days",
-				Kind:      SettingsEntryValue,
-				ValueType: SettingsValueNumber,
-				Source:    string(SettingsSourceDB),
-			},
-			{
-				ID:        settingsIDWeeklySummaryWeeks,
-				Label:     "Weekly Summary Weeks",
-				Kind:      SettingsEntryValue,
-				ValueType: SettingsValueNumber,
-				Source:    string(SettingsSourceDB),
-			},
-			{
-				ID:        settingsIDMonthlySummaryMonths,
-				Label:     "Monthly Summary Months",
-				Kind:      SettingsEntryValue,
-				ValueType: SettingsValueText,
-				Source:    string(SettingsSourceDB),
+				ID:        settingsIDTimeline,
+				Label:     "Timeline",
+				Kind:      SettingsEntrySubmenu,
+				ValueType: SettingsValueAction,
+				Submenu:   timelineMenu,
 			},
 			{
 				ID:        settingsIDProviders,

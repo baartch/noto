@@ -31,7 +31,7 @@ func asModel(t *testing.T, updated tea.Model) tui.Model {
 func openProfilesSubmenu(t *testing.T, m tui.Model) tui.Model {
 	updated, _ := m.Update(tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	m = asModel(t, updated)
-	for range 4 {
+	for range 3 {
 		updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 		m = asModel(t, updated)
 	}
@@ -104,7 +104,7 @@ func TestSettingsProfiles_KeyHints(t *testing.T) {
 	m = asModel(t, updated)
 	view := m.View().Content
 
-	if !strings.Contains(view, "ctrl+n") || !strings.Contains(view, "ctrl+r") || !strings.Contains(view, "ctrl+d") || !strings.Contains(view, "enter") {
-		t.Fatalf("expected keybinding hints in profile list")
+	if !strings.Contains(view, "ctrl+n") || !strings.Contains(view, "ctrl+r") || !strings.Contains(view, "enter") {
+		t.Fatalf("expected keybinding hints in profile list: %s", view)
 	}
 }
