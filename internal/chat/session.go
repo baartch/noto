@@ -744,7 +744,14 @@ func (h *sessionLogHook) NoteStorageFailed(candidate memory.NoteCandidate, err e
 }
 
 func (h *sessionLogHook) ExtractionPayloadRejected(reason string) {
-	h.logger.Errorf("memory: extraction rejected: %s", reason)
+	switch reason {
+	case "has_new_info=false":
+		h.logger.Infof("memory: extraction skipped: %s", reason)
+	case "invalid json":
+		h.logger.Infof("memory: extraction rejected: %s", reason)
+	default:
+		h.logger.Errorf("memory: extraction rejected: %s", reason)
+	}
 }
 
 // injectDateTime prepends the current date and time to the user message
