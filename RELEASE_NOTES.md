@@ -1,5 +1,12 @@
 # Release notes
 
+## 0.5.0
+
+June 9, 2026
+
+- Improve context handling with much larger context
+- Add vector and DB search tools
+
 ## 0.4.0
 
 May 18, 2026
