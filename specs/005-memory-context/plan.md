@@ -1,33 +1,33 @@
-# Implementation Plan: Memory Context Cache Hardening
+# Implementation Plan: Memory Context Timeline & Tooling
 
-**Branch**: `005-memory-context` | **Date**: 2026-05-18 | **Spec**: [specs/005-memory-context/spec.md](./spec.md)
+**Branch**: `005-memory-context` | **Date**: 2026-06-09 | **Spec**: [specs/005-memory-context/spec.md](./spec.md)
 **Input**: Feature specification from `/specs/005-memory-context/spec.md`
 
 ## Summary
 
-Implement only the newly added cache requirements (FR-026 to FR-037): extend cache identity to include embedding model and other retrieval-shaping inputs, add stale-while-revalidate behavior, add event-driven invalidation triggers, introduce a two-level cache strategy (in-session + persistent), and expose actionable cache diagnostics.
+Enhance the existing memory implementation without redesigning the product shape: replace previous-session-summary-driven context with a configurable time-layered context window, add automatic weekly/monthly rollups, expose LLM-accessible memory search through OpenRouter tool calling, preserve fast cache reuse under the broader context model, and surface model context-window capacity and current usage percentage in the chat footer next to token telemetry.
 
 ## Technical Context
 
 **Language/Version**: Go 1.26+  
-**Primary Dependencies**: Cobra CLI, Bubble Tea/Bubbles/Lip Gloss, modernc.org/sqlite, internal memory/vector packages  
-**Storage**: Profile-local SQLite (`~/.noto/profiles/<profile>/memory.db`) plus in-process memory cache  
+**Primary Dependencies**: Cobra CLI, Bubble Tea v2 + Bubbles v2 + Lip Gloss v2, modernc.org/sqlite, existing provider adapter, internal vector packages, OpenRouter-compatible tool-calling payloads  
+**Storage**: Profile-local SQLite (`~/.noto/profiles/<profile>/memory.db`) for notes, summaries, cache, provider config, and message history; profile-local vector index file (`memory.vec`); profile-local prompt files under `prompts/`  
 **Testing**: `go test ./...`, plus `make test`, `make lint`, `make fmt`  
 **Target Platform**: Cross-platform CLI/TUI runtime (Linux/macOS/Windows terminals)  
-**Project Type**: CLI/TUI application  
-**Performance Goals**: Preserve responsive context assembly and improve repeated-request latency by preferring in-session cache hits; stale entries should return immediately while refresh happens asynchronously  
-**Constraints**: Cache correctness must reflect profile/prompt/notes hash/token budget/embedding model changes; invalidation events must be reflected before next retrieval; no blocking user chat flow for revalidation  
-**Scale/Scope**: Scoped only to FR-026..FR-037 in `spec.md`; no changes to extractor schema, prompt bootstrap, or vector ranking logic beyond cache identity/invalidation integration
+**Project Type**: Single-project CLI/TUI application  
+**Performance Goals**: Keep context assembly responsive during chat turns, preserve fast repeated retrieval through L1/L2 cache reuse, keep tool-calling round-trips bounded so memory search remains conversationally useful, and show footer telemetry without introducing visual jitter  
+**Constraints**: Must stay close to the current design principles and existing architecture; must remove reliance on conversation summaries for default context; must support user-adjustable timeline windows; must use OpenRouter tool-calling semantics for search tools; must derive model max context from provider model metadata (`context_length`) when available; must degrade gracefully when metadata or tool support is unavailable  
+**Scale/Scope**: Expand the current memory feature from cache hardening only to end-to-end timeline context assembly, rollup generation, LLM search tools, provider model metadata usage, and footer telemetry updates for active chat sessions
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Code Quality Is Enforced**: PASS — plan includes explicit updates to cache modules and deterministic miss-reason classification; validation commands include `make fmt`, `make lint`, `make test`.
-- **Testing Standards Are Non-Negotiable**: PASS — plan requires unit/integration coverage for cache key identity, SWR behavior, invalidation events, tier ordering, and diagnostics aggregation.
-- **User Experience Consistency First**: PASS — stale-while-revalidate returns immediate responses and avoids chat-flow blocking; diagnostics are maintainer-facing and do not alter core user interaction patterns.
+- **Code Quality Is Enforced**: PASS — the plan extends existing memory/provider/TUI modules instead of introducing a parallel subsystem, preserves focused module boundaries, and requires the standard validation commands `make fmt`, `make lint`, and `make test`.
+- **Testing Standards Are Non-Negotiable**: PASS — the plan requires unit and integration coverage for timeline window selection, rollup generation and regeneration, tool-call request/response handling, context-capacity metadata handling, footer telemetry formatting, and cache invalidation under settings/model changes.
+- **User Experience Consistency First**: PASS — the design keeps the existing chat/TUI interaction model, adds footer telemetry in the existing status area, and uses tool calling behind the scenes rather than introducing new end-user flows.
 
-Post-Design Re-check: PASS (no principle violations introduced by Phase 1 artifacts).
+Post-Design Re-check: PASS — Phase 1 artifacts keep the current UX model, preserve existing architecture patterns, and add measurable validation guidance without violating constitution gates.
 
 ## Project Structure
 
@@ -40,7 +40,9 @@ specs/005-memory-context/
 ├── data-model.md
 ├── quickstart.md
 ├── contracts/
-│   └── context-retrieval.md
+│   ├── context-retrieval.md
+│   ├── memory-search-tools.md
+│   └── footer-telemetry.md
 └── tasks.md
 ```
 
@@ -51,52 +53,71 @@ cmd/
 └── noto/
 
 internal/
+├── app/
+│   └── chat_cmd.go
 ├── cache/
-│   ├── service.go
-│   ├── invalidation.go
-│   └── doc.go
+├── chat/
+│   ├── pipeline.go
+│   └── session.go
+├── config/
 ├── memory/
-│   └── retrieval.go
-└── store/
+│   ├── retrieval.go
+│   ├── processor.go
+│   ├── extractor.go
+│   └── summary_rollups.go
+├── provider/
+│   ├── adapter.go
+│   ├── models.go
+│   └── openai_compatible.go
+├── store/
+├── tui/
+│   ├── footer_view.go
+│   └── model.go
+└── vector/
 
 tests/
-├── unit/
-│   ├── cache/
-│   └── memory/
-└── integration/
-    └── memory/
+├── integration/
+│   ├── memory/
+│   ├── provider/
+│   └── tui/
+└── unit/
+    ├── memory/
+    ├── provider/
+    └── tui/
 ```
 
-**Structure Decision**: Use the existing single-project Go CLI/TUI structure and limit implementation to cache/retrieval components plus focused tests.
+**Structure Decision**: Use the existing single-project Go CLI/TUI structure and extend current memory, provider, chat session, and footer telemetry paths rather than creating new top-level services.
 
 ## Phase 0: Research Plan
 
-1. Confirm cache identity dimensions and miss-reason taxonomy for FR-026/027/037.
-2. Select stale-while-revalidate policy boundaries and non-blocking refresh pattern for FR-028/029.
-3. Define event-driven invalidation semantics for FR-030..FR-033.
-4. Define two-level cache read/write ordering and coherence behavior for FR-034/035.
-5. Define diagnostics aggregation window and reporting shape for FR-036/037.
+1. Confirm timeline-window semantics for raw-note months, weekly-summary months, and monthly-summary months, including zero-value behavior and bounded monthly-history behavior.
+2. Determine rollup generation and regeneration rules for week/month boundary transitions, missed-runtime catch-up, and stale-summary replacement.
+3. Determine how to represent and expose keyword/vector search and time-range DB search through OpenRouter tool-calling request/response loops while staying compatible with current provider abstractions.
+4. Confirm how to fetch and store model `context_length` metadata from the OpenRouter models API and how to use it as footer telemetry for the active model.
+5. Define cache identity and invalidation changes needed for timeline-window settings, summary state changes, and tool-capable context assembly.
+6. Define footer telemetry behavior when model context metadata is missing, stale, or unavailable.
 
 ## Phase 1: Design Plan
 
-1. Update data model docs with cache identity, freshness state, and diagnostics entities.
-2. Update retrieval contract with:
-   - identity inputs including embedding model,
-   - SWR behavior,
-   - invalidation-triggered staleness,
-   - L1/L2 lookup order,
-   - diagnostics output fields.
-3. Update quickstart with scenarios verifying only FR-026..FR-037 behavior.
-4. Update agent context reference to this plan in `AGENTS.md`.
+1. Update `research.md` with resolved decisions for timeline windows, rollups, OpenRouter tool calling, model metadata, and footer telemetry.
+2. Update `data-model.md` with entities for weekly summaries, monthly summaries, timeline settings, tool-call descriptors/results, and provider model metadata.
+3. Replace the narrow cache contract with a broader `context-retrieval.md` covering timeline assembly, configurable windows, summary fallback behavior, and cache identity.
+4. Add `memory-search-tools.md` documenting tool schemas, tool-call lifecycle, and result-shape contracts for keyword and time-range search.
+5. Add `footer-telemetry.md` documenting how token usage, max context size, and usage percentage appear in the footer and what happens when max context is unknown.
+6. Rewrite `quickstart.md` with validation scenarios for context composition, rollup generation, OpenRouter tool calls, cache invalidation, and footer telemetry.
+7. Update `AGENTS.md` so the active plan reference points to `specs/005-memory-context/plan.md`.
 
 ## Phase 2: Implementation Planning (for `/speckit.tasks`)
 
-- Add/adjust cache key creation to include embedding model and all identity dimensions.
-- Implement in-session L1 cache in front of persistent L2 cache.
-- Implement stale-while-revalidate path with safe background refresh and race protection.
-- Wire event-driven invalidation hooks for note/prompt/token-budget/embedding-model changes.
-- Add diagnostics counters/timers and miss-reason aggregation surfaced through existing observability surfaces.
-- Add full automated tests for FR-026..FR-037 and regressions.
+- Add profile settings for configurable raw-note, weekly-summary, and monthly-summary month windows.
+- Replace session-summary-based context assembly with a timeline-window selector that uses raw notes, weekly summaries, and monthly summaries.
+- Implement weekly/monthly rollup creation, deduplication, and regeneration triggers when notes or periods change.
+- Extend storage models and migrations for summary artifacts and summary freshness/versioning.
+- Expose keyword/vector and time-range memory search as OpenRouter-compatible tools in the provider completion loop.
+- Extend provider model metadata loading to capture `context_length` from OpenRouter model objects and propagate it into session stats.
+- Update footer telemetry to show tokens plus max-context usage percentage and context maximum on the left side next to existing token information.
+- Extend cache identity and invalidation to include timeline window settings and summary-state changes.
+- Add automated tests covering timeline composition, rollup catch-up, tool calls, provider metadata parsing, and footer rendering.
 
 ## Complexity Tracking
 
