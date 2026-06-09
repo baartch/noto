@@ -15,8 +15,8 @@ func TestOpenAICompatible_ParsesToolCalls(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{
 			"model":"openrouter/test-model",
-			"output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"search_memory_keywords","arguments":"{\"query\":\"launch\"}"}],
-			"usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}
+			"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"search_memory_keywords","arguments":"{\"query\":\"launch\"}"}}]}}],
+			"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}
 		}`))
 	}))
 	defer ts.Close()
@@ -39,7 +39,7 @@ func TestOpenAICompatible_SendsToolsInRequest(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		data, _ := io.ReadAll(r.Body)
 		body = string(data)
-		_, _ = w.Write([]byte(`{"model":"openrouter/test-model","output":[{"content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12}}`))
+		_, _ = w.Write([]byte(`{"model":"openrouter/test-model","choices":[{"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12}}`))
 	}))
 	defer ts.Close()
 
@@ -51,7 +51,7 @@ func TestOpenAICompatible_SendsToolsInRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("complete: %v", err)
 	}
-	if !strings.Contains(body, `"tools"`) || !strings.Contains(body, `"search_memory_keywords"`) {
+	if !strings.Contains(body, `"messages"`) || !strings.Contains(body, `"tools"`) || !strings.Contains(body, `"function"`) || !strings.Contains(body, `"search_memory_keywords"`) {
 		t.Fatalf("expected tools payload in request body, got: %s", body)
 	}
 }

@@ -277,22 +277,33 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	}
 	if s.toolsEnabled {
 		req.Tools = []provider.ToolDefinition{
-			{Type: "function", Name: "search_memory_keywords", Description: "Search memory by keyword", Parameters: map[string]any{"type": "object"}},
-			{Type: "function", Name: "search_memory_time_range", Description: "Search memory by time range", Parameters: map[string]any{"type": "object"}},
+			{Type: "function", Name: "search_memory_keywords", Description: "Search memory notes by keyword query", Parameters: map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string", "description": "Keyword or short phrase to search for in memory notes"}, "limit": map[string]any{"type": "integer", "description": "Maximum number of results to return"}}, "required": []string{"query"}}},
+			{Type: "function", Name: "search_memory_time_range", Description: "Search memory notes and summaries within a time range", Parameters: map[string]any{"type": "object", "properties": map[string]any{"start_time": map[string]any{"type": "string", "description": "Start of the time range in RFC3339 format"}, "end_time": map[string]any{"type": "string", "description": "End of the time range in RFC3339 format"}, "limit": map[string]any{"type": "integer", "description": "Maximum number of results to return"}}, "required": []string{"start_time", "end_time"}}},
 		}
+		s.logger.Infof("tools: enabled for chat request with %d tool definitions", len(req.Tools))
+	} else {
+		s.logger.Infof("tools: disabled for chat request")
 	}
 
 	resp, err := s.adapter.Complete(ctx, req)
+	if err == nil {
+		s.logger.Infof("tools: provider returned %d tool call(s)", len(resp.ToolCalls))
+	}
 	if err == nil && len(resp.ToolCalls) > 0 && s.toolsEnabled {
 		followup := append([]provider.Message{}, req.Messages...)
 		pipeline := NewPipeline(s.convRepo, s.msgRepo, s.adapter, s.logger).WithMemorySearchTools(s.noteRepo, store.NewMemorySummaryRepo(s.db)).WithToolsEnabled(true)
 		for _, call := range resp.ToolCalls {
-			followup = append(followup, provider.Message{Role: "assistant", Content: call.Name, ToolCallID: call.CallID})
-			followup = append(followup, provider.Message{Role: "tool", Content: pipeline.executeToolCall(ctx, s.profileID, call), ToolCallID: call.CallID})
+			s.logger.Infof("tools: executing tool call name=%s call_id=%s args=%s", call.Name, call.CallID, call.Arguments)
+			followup = append(followup, provider.Message{Role: "assistant", Content: call.Name, ToolCallID: call.CallID, ToolCallName: call.Name, ToolCallArguments: call.Arguments, ToolID: call.ID})
+			result := pipeline.executeToolCall(ctx, s.profileID, call)
+			s.logger.Infof("tools: tool call completed name=%s call_id=%s result=%s", call.Name, call.CallID, result)
+			followup = append(followup, provider.Message{Role: "tool", Content: result, ToolCallID: call.CallID})
 		}
 		resp, err = s.adapter.Complete(ctx, provider.CompletionRequest{Model: req.Model, Messages: followup, Temperature: req.Temperature, Tools: req.Tools})
 		if err != nil {
 			s.logger.Errorf("provider follow-up call failed: %v", err)
+		} else {
+			s.logger.Infof("tools: follow-up provider call completed after tool execution")
 		}
 	}
 	if err != nil {

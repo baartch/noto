@@ -102,9 +102,12 @@ func (p *Pipeline) Execute(ctx context.Context, input TurnInput) (*TurnOutput, e
 	}
 	if p.toolsEnabled {
 		req.Tools = []provider.ToolDefinition{
-			{Type: "function", Name: "search_memory_keywords", Description: "Search memory by keyword", Parameters: map[string]any{"type": "object"}},
-			{Type: "function", Name: "search_memory_time_range", Description: "Search memory by time range", Parameters: map[string]any{"type": "object"}},
+			{Type: "function", Name: "search_memory_keywords", Description: "Search memory notes by keyword query", Parameters: map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string", "description": "Keyword or short phrase to search for in memory notes"}, "limit": map[string]any{"type": "integer", "description": "Maximum number of results to return"}}, "required": []string{"query"}}},
+			{Type: "function", Name: "search_memory_time_range", Description: "Search memory notes and summaries within a time range", Parameters: map[string]any{"type": "object", "properties": map[string]any{"start_time": map[string]any{"type": "string", "description": "Start of the time range in RFC3339 format"}, "end_time": map[string]any{"type": "string", "description": "End of the time range in RFC3339 format"}, "limit": map[string]any{"type": "integer", "description": "Maximum number of results to return"}}, "required": []string{"start_time", "end_time"}}},
 		}
+		p.logger.Infof("tools: enabled for pipeline request with %d tool definitions", len(req.Tools))
+	} else {
+		p.logger.Infof("tools: disabled for pipeline request")
 	}
 
 	resp, err := p.adapter.Complete(ctx, req)
@@ -118,17 +121,21 @@ func (p *Pipeline) Execute(ctx context.Context, input TurnInput) (*TurnOutput, e
 		return nil, fmt.Errorf("chat: provider call failed: %w", err)
 	}
 
+	p.logger.Infof("tools: provider returned %d tool call(s)", len(resp.ToolCalls))
 	if len(resp.ToolCalls) > 0 && p.toolsEnabled {
 		followup := append([]provider.Message{}, req.Messages...)
 		for _, call := range resp.ToolCalls {
-			followup = append(followup, provider.Message{Role: "assistant", Content: call.Name, ToolCallID: call.CallID})
+			p.logger.Infof("tools: executing tool call name=%s call_id=%s args=%s", call.Name, call.CallID, call.Arguments)
+			followup = append(followup, provider.Message{Role: "assistant", Content: call.Name, ToolCallID: call.CallID, ToolCallName: call.Name, ToolCallArguments: call.Arguments, ToolID: call.ID})
 			toolResult := p.executeToolCall(ctx, input.ProfileID, call)
+			p.logger.Infof("tools: tool call completed name=%s call_id=%s result=%s", call.Name, call.CallID, toolResult)
 			followup = append(followup, provider.Message{Role: "tool", Content: toolResult, ToolCallID: call.CallID})
 		}
 		resp, err = p.adapter.Complete(ctx, provider.CompletionRequest{Model: req.Model, Messages: followup, Temperature: req.Temperature, Tools: req.Tools})
 		if err != nil {
 			return nil, fmt.Errorf("chat: provider follow-up failed: %w", err)
 		}
+		p.logger.Infof("tools: follow-up provider call completed after tool execution")
 	}
 
 	// Persist assistant message.
@@ -170,12 +177,23 @@ func (p *Pipeline) executeToolCall(ctx context.Context, profileID string, call p
 			Query string `json:"query"`
 			Limit int    `json:"limit"`
 		}
-		_ = json.Unmarshal([]byte(call.Arguments), &args)
+		if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+			p.logger.Errorf("tools: keyword search args decode failed call_id=%s err=%v raw=%s", call.CallID, err, call.Arguments)
+			return "[]"
+		}
 		exec := memory.NewKeywordSearchTool(func(ctx context.Context) ([]*store.MemoryNote, error) {
 			return p.noteRepo.ListByProfile(ctx, profileID)
 		})
-		results, _ := exec.Execute(ctx, memory.KeywordSearchInput{Query: args.Query, Limit: args.Limit})
+		results, err := exec.Execute(ctx, memory.KeywordSearchInput{Query: args.Query, Limit: args.Limit})
+		if err != nil {
+			p.logger.Errorf("tools: keyword search failed call_id=%s err=%v query=%q limit=%d", call.CallID, err, args.Query, args.Limit)
+			return "[]"
+		}
+		if results == nil {
+			results = []memory.SearchResultItem{}
+		}
 		b, _ := json.Marshal(results)
+		p.logger.Infof("tools: keyword search returned %d result(s) call_id=%s query=%q limit=%d", len(results), call.CallID, args.Query, args.Limit)
 		return string(b)
 	case "search_memory_time_range":
 		var args struct {
@@ -183,7 +201,10 @@ func (p *Pipeline) executeToolCall(ctx context.Context, profileID string, call p
 			EndTime   time.Time `json:"end_time"`
 			Limit     int       `json:"limit"`
 		}
-		_ = json.Unmarshal([]byte(call.Arguments), &args)
+		if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+			p.logger.Errorf("tools: time-range search args decode failed call_id=%s err=%v raw=%s", call.CallID, err, call.Arguments)
+			return "[]"
+		}
 		exec := memory.NewTimeRangeSearchTool(
 			func(ctx context.Context) ([]*store.MemoryNote, error) {
 				if p.noteRepo == nil {
@@ -200,8 +221,16 @@ func (p *Pipeline) executeToolCall(ctx context.Context, profileID string, call p
 				return append(weekly, monthly...), nil
 			},
 		)
-		results, _ := exec.Execute(ctx, memory.TimeRangeSearchInput{StartTime: args.StartTime, EndTime: args.EndTime, Limit: args.Limit})
+		results, err := exec.Execute(ctx, memory.TimeRangeSearchInput{StartTime: args.StartTime, EndTime: args.EndTime, Limit: args.Limit})
+		if err != nil {
+			p.logger.Errorf("tools: time-range search failed call_id=%s err=%v start=%s end=%s limit=%d", call.CallID, err, args.StartTime.Format(time.RFC3339), args.EndTime.Format(time.RFC3339), args.Limit)
+			return "[]"
+		}
+		if results == nil {
+			results = []memory.SearchResultItem{}
+		}
 		b, _ := json.Marshal(results)
+		p.logger.Infof("tools: time-range search returned %d result(s) call_id=%s start=%s end=%s limit=%d", len(results), call.CallID, args.StartTime.Format(time.RFC3339), args.EndTime.Format(time.RFC3339), args.Limit)
 		return string(b)
 	default:
 		return "[]"

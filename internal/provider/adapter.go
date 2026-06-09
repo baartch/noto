@@ -13,9 +13,12 @@ var ErrInvalidCredentials = errors.New("provider: invalid credentials")
 
 // Message represents a single turn in a chat completion request.
 type Message struct {
-	Role       string
-	Content    string
-	ToolCallID string
+	Role              string
+	Content           string
+	ToolCallID        string
+	ToolCallName      string
+	ToolCallArguments string
+	ToolID            string
 }
 
 // ToolSupport describes normalized provider tool-calling capability metadata.
