@@ -2,9 +2,9 @@
 
 ## Decision 1: Use configurable timeline windows for default context composition
 
-**Decision**: Build default context from three ordered layers: recent raw notes, then weekly summaries, then monthly summaries. Make each layer window configurable in settings with defaults of 1 month raw, 2 months weekly, and all remaining months monthly.
+**Decision**: Build default context from three ordered layers: recent raw notes, then weekly summaries, then monthly summaries. Make each layer window configurable in settings with defaults of 1 month raw, 2 months weekly, and all remaining months monthly. Compute the raw-note layer as the last 30 rolling days extended backward to the Monday of that week; start the weekly layer at the first full week before that boundary; begin the monthly layer only on completed calendar periods after the weekly layer.
 
-**Rationale**: This preserves detailed recent memory while compacting older history in a predictable way. It also aligns with the clarified spec and keeps the design close to the current memory-first behavior instead of replacing it with a radically new retrieval model.
+**Rationale**: This preserves detailed recent memory while compacting older history in a predictable way, avoids gaps between layers, and keeps weekly/monthly summaries aligned to clean period boundaries. It also aligns with the clarified spec and keeps the design close to the current memory-first behavior instead of replacing it with a radically new retrieval model.
 
 **Alternatives considered**:
 - Fixed 1/2/all windows hard-coded in retrieval: rejected because the spec now requires settings-driven adjustment.

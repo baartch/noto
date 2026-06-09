@@ -7,13 +7,13 @@
 Represents the profile-local settings that shape default memory context composition.
 
 - **profile_id**: string
-- **raw_note_months**: integer
+- **raw_note_days**: integer
 - **weekly_summary_months**: integer
 - **monthly_summary_months**: integer or sentinel for `all_remaining`
 - **updated_at**: timestamp
 
 Validation:
-- `raw_note_months >= 0`
+- `raw_note_days > 0`
 - `weekly_summary_months >= 0`
 - `monthly_summary_months` is either `all_remaining` or an integer `>= 0`
 - Setting changes take effect on the next context assembly.
