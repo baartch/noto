@@ -291,8 +291,9 @@ type Model struct {
 	// notes badge
 	notesIndicator string
 
-	updateNotice string
-	usage        usageAccumulator
+	updateNotice      string
+	usage             usageAccumulator
+	hasAuthoritativeStats bool
 
 	// pending assistant state
 	pending      bool
@@ -830,6 +831,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// ---- stats update -------------------------------------------------------
 	case statsUpdatedMsg:
 		m.tokenStatus = msg.formatted
+		m.hasAuthoritativeStats = true
 
 	case cacheStatusUpdatedMsg:
 		m.cacheStatus = msg.formatted
@@ -839,7 +841,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case usageUpdatedMsg:
 		m.usage.addFromUsage(msg.usage)
-		m.tokenStatus = m.usage.formatTokenStatus()
+		if !m.hasAuthoritativeStats {
+			m.tokenStatus = m.usage.formatTokenStatus()
+		}
 
 	case profileSwitchedMsg:
 		m.profileName = msg.profileName
@@ -849,6 +853,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.embeddingModelMissing = msg.embeddingModelMissing
 		m.cacheStatus = msg.cacheStatus
 		m.tokenStatus = msg.tokenStatus
+		m.hasAuthoritativeStats = msg.tokenStatus != ""
 		m.provider = msg.provider
 		m.listModels = msg.listModels
 		m.listEmbeddings = msg.listEmbeddings

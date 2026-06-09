@@ -168,14 +168,23 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 		payload.Tools = append(payload.Tools, openAIResponsesToolDefinition(tool))
 	}
 	for _, m := range req.Messages {
-		msg := openAIResponsesMessage{Role: m.Role}
-		if m.ToolCallID != "" {
-			msg.CallID = m.ToolCallID
-			msg.Content = []openAIResponsesContent{{Type: "function_call_output", Text: m.Content}}
-		} else {
+		switch {
+		case m.Role == "tool" && m.ToolCallID != "":
+			payload.Input = append(payload.Input, openAIResponsesFunctionCallOutput{
+				Type:   "function_call_output",
+				CallID: m.ToolCallID,
+				Output: m.Content,
+			})
+		case m.Role == "assistant" && m.ToolCallID != "":
+			// Placeholder assistant entries used internally to track a prior tool call
+			// are not valid Responses API input items. Skip them and send only the
+			// corresponding function_call_output item.
+			continue
+		default:
+			msg := openAIResponsesMessage{Role: m.Role}
 			msg.Content = []openAIResponsesContent{{Type: "input_text", Text: m.Content}}
+			payload.Input = append(payload.Input, msg)
 		}
-		payload.Input = append(payload.Input, msg)
 	}
 
 	body, err := json.Marshal(payload)
@@ -297,9 +306,15 @@ type openAIResponsesToolDefinition struct {
 	Parameters  map[string]any `json:"parameters,omitempty"`
 }
 
+type openAIResponsesFunctionCallOutput struct {
+	Type   string `json:"type"`
+	CallID string `json:"call_id"`
+	Output string `json:"output"`
+}
+
 type openAIResponsesRequest struct {
 	Model            string                          `json:"model"`
-	Input            []openAIResponsesMessage        `json:"input"`
+	Input            []any                           `json:"input"`
 	Tools            []openAIResponsesToolDefinition `json:"tools,omitempty"`
 	MaxOutputTokens  int                             `json:"max_output_tokens,omitempty"`
 	Temperature      float64                         `json:"temperature,omitempty"`

@@ -39,7 +39,7 @@ func TestToolCallingRoundTrip_RequestIncludesToolsAndFollowupCarriesToolResult(t
 	if len(bodies) != 2 {
 		t.Fatalf("expected 2 provider calls, got %d", len(bodies))
 	}
-	if !strings.Contains(bodies[0], `"tools"`) || !strings.Contains(bodies[1], `"function_call_output"`) {
+	if !strings.Contains(bodies[0], `"tools"`) || !strings.Contains(bodies[1], `"function_call_output"`) || strings.Contains(bodies[1], `"role":"tool"`) {
 		t.Fatalf("unexpected request bodies: %#v", bodies)
 	}
 }
