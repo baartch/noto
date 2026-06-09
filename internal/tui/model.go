@@ -854,6 +854,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cacheStatus = msg.cacheStatus
 		m.tokenStatus = msg.tokenStatus
 		m.hasAuthoritativeStats = msg.tokenStatus != ""
+		m.usage = usageAccumulator{}
+		if !m.hasAuthoritativeStats {
+			m.tokenStatus = m.usage.formatTokenStatus()
+		}
 		m.provider = msg.provider
 		m.listModels = msg.listModels
 		m.listEmbeddings = msg.listEmbeddings
