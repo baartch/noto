@@ -63,6 +63,7 @@ type Session struct {
 	extractorFallback bool
 	embeddingModel    string
 	missingEmbedding  bool
+	toolsEnabled      bool
 
 	backupStop   chan struct{}
 	pendingNotes int
@@ -267,10 +268,27 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 		msgs = append(msgs, provider.Message{Role: string(m.Role), Content: content})
 	}
 
-	resp, err := s.adapter.Complete(ctx, provider.CompletionRequest{
+	req := provider.CompletionRequest{
 		Messages:    msgs,
 		Temperature: 0.7,
-	})
+	}
+	if s.toolsEnabled {
+		req.Tools = []provider.ToolDefinition{
+			{Type: "function", Name: "search_memory_keywords", Description: "Search memory by keyword", Parameters: map[string]any{"type": "object"}},
+			{Type: "function", Name: "search_memory_time_range", Description: "Search memory by time range", Parameters: map[string]any{"type": "object"}},
+		}
+	}
+
+	resp, err := s.adapter.Complete(ctx, req)
+	if err == nil && len(resp.ToolCalls) > 0 && s.toolsEnabled {
+		followup := append([]provider.Message{}, req.Messages...)
+		pipeline := NewPipeline(s.convRepo, s.msgRepo, s.adapter, s.logger).WithMemorySearchTools(s.noteRepo, store.NewMemorySummaryRepo(s.db)).WithToolsEnabled(true)
+		for _, call := range resp.ToolCalls {
+			followup = append(followup, provider.Message{Role: "assistant", Content: call.Name, ToolCallID: call.CallID})
+			followup = append(followup, provider.Message{Role: "tool", Content: pipeline.executeToolCall(ctx, s.profileID, call), ToolCallID: call.CallID})
+		}
+		resp, err = s.adapter.Complete(ctx, provider.CompletionRequest{Model: req.Model, Messages: followup, Temperature: req.Temperature, Tools: req.Tools})
+	}
 	if err != nil {
 		return nil, fmt.Errorf("session: provider call: %w", err)
 	}
@@ -446,6 +464,11 @@ func (s *Session) SetModel(model string) {
 	if a, ok := s.adapter.(interface{ SetModel(string) }); ok {
 		a.SetModel(model)
 	}
+}
+
+// SetToolsEnabled updates whether tool definitions should be exposed for chat.
+func (s *Session) SetToolsEnabled(enabled bool) {
+	s.toolsEnabled = enabled
 }
 
 // SetEmbeddingModel updates the embeddings model used for vector operations.

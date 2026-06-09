@@ -219,6 +219,14 @@ func runChat(cmd *cobra.Command, _ []string) error {
 		listModelsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 			return provider.ListModels(callCtx, adapterCfg)
 		}
+		if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
+			for _, mi := range models {
+				if mi.ID == activeModel && sess != nil {
+					sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
+					break
+				}
+			}
+		}
 		listEmbeddingsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 			return provider.ListEmbeddingModels(callCtx, adapterCfg)
 		}
@@ -229,6 +237,14 @@ func runChat(cmd *cobra.Command, _ []string) error {
 				return err
 			}
 			activeModel = modelID
+			if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
+				for _, mi := range models {
+					if mi.ID == modelID && sess != nil {
+						sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
+						break
+					}
+				}
+			}
 			return nil
 		}
 		embeddingModelSelectedFn = func(modelID string) error {
@@ -372,6 +388,14 @@ func runChat(cmd *cobra.Command, _ []string) error {
 				listModelsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 					return provider.ListModels(callCtx, adapterCfg)
 				}
+				if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
+					for _, mi := range models {
+						if mi.ID == activeModel && sess != nil {
+							sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
+							break
+						}
+					}
+				}
 				listEmbeddingsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 					return provider.ListEmbeddingModels(callCtx, adapterCfg)
 				}
@@ -382,6 +406,14 @@ func runChat(cmd *cobra.Command, _ []string) error {
 						return err
 					}
 					activeModel = modelID
+					if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
+						for _, mi := range models {
+							if mi.ID == modelID && sess != nil {
+								sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
+								break
+							}
+						}
+					}
 					return nil
 				}
 				embeddingModelSelectedFn = func(modelID string) error {

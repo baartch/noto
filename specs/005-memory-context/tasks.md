@@ -114,9 +114,9 @@
 
 - [X] T039 [US3] Implement keyword/vector memory search executor with deterministic fallback in /home/andy/gitrepos/noto/internal/memory/search_tools.go
 - [X] T040 [US3] Implement time-range SQLite memory search executor with mixed raw+summary result support in /home/andy/gitrepos/noto/internal/memory/search_tools.go
-- [ ] T041 [US3] Add OpenRouter-compatible tool definitions and follow-up request handling in /home/andy/gitrepos/noto/internal/provider/openai_compatible.go
-- [ ] T042 [US3] Integrate and keep canonical tool-call orchestration in /home/andy/gitrepos/noto/internal/chat/pipeline.go and /home/andy/gitrepos/noto/internal/chat/session.go
-- [ ] T043 [US3] Gate tool exposure on model/provider capability metadata in /home/andy/gitrepos/noto/internal/provider/models.go and /home/andy/gitrepos/noto/internal/chat/session.go
+- [X] T041 [US3] Add OpenRouter-compatible tool definitions and follow-up request handling in /home/andy/gitrepos/noto/internal/provider/openai_compatible.go
+- [X] T042 [US3] Integrate and keep canonical tool-call orchestration in /home/andy/gitrepos/noto/internal/chat/pipeline.go and /home/andy/gitrepos/noto/internal/chat/session.go
+- [X] T043 [US3] Gate tool exposure on model/provider capability metadata in /home/andy/gitrepos/noto/internal/provider/models.go and /home/andy/gitrepos/noto/internal/chat/session.go
 
 **Checkpoint**: User Story 3 should be independently functional with or without default timeline context.
 
