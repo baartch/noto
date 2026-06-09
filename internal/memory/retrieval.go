@@ -215,6 +215,39 @@ func BuildMemoryBlock(notes []*store.MemoryNote) string {
 	return sb.String()
 }
 
+// BuildTimelineMemoryBlock formats raw notes, weekly summaries, and monthly summaries
+// into distinct sections for prompt assembly.
+func BuildTimelineMemoryBlock(rawNotes []*store.MemoryNote, weeklySummaries []*store.MemorySummary, monthlySummaries []*store.MemorySummary) string {
+	var sb strings.Builder
+
+	if len(rawNotes) > 0 {
+		sb.WriteString("## Raw Notes\n")
+		for _, n := range rawNotes {
+			fmt.Fprintf(&sb, "- [%s] %s\n", n.Category, n.Content)
+		}
+	}
+	if len(weeklySummaries) > 0 {
+		if sb.Len() > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString("## Weekly Summaries\n")
+		for _, s := range weeklySummaries {
+			fmt.Fprintf(&sb, "- [%s] %s\n", s.PeriodKey, s.Content)
+		}
+	}
+	if len(monthlySummaries) > 0 {
+		if sb.Len() > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString("## Monthly Summaries\n")
+		for _, s := range monthlySummaries {
+			fmt.Fprintf(&sb, "- [%s] %s\n", s.PeriodKey, s.Content)
+		}
+	}
+
+	return strings.TrimRight(sb.String(), "\n")
+}
+
 // SelectNotesForContext orders notes by relevance (rankedIDs) and enforces token budget.
 // If rankedIDs is empty, notes are assumed pre-sorted by importance then recency.
 func SelectNotesForContext(notes []*store.MemoryNote, rankedIDs []string, budget int) []*store.MemoryNote {
@@ -269,12 +302,11 @@ func estimateTokens(content string) int {
 	return len(fields)
 }
 
-// AssemblePrompt merges system prompt, summary, and memory block into the final prompt.
+// AssemblePrompt merges system prompt and memory block into the final prompt.
+// sessionSummary is intentionally ignored because conversation summaries are no
+// longer part of assembled memory context.
 func AssemblePrompt(systemPrompt, sessionSummary, memoryBlock string) string {
 	parts := []string{systemPrompt}
-	if sessionSummary != "" {
-		parts = append(parts, "\n## Previous Session Summary\n"+sessionSummary)
-	}
 	if memoryBlock != "" {
 		parts = append(parts, "\n"+memoryBlock)
 	}

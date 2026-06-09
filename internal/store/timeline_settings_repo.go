@@ -41,15 +41,6 @@ func (s *TimelineSettings) Normalize() *TimelineSettings {
 	if s == nil {
 		return DefaultTimelineSettings("")
 	}
-	if s.RawNoteDays <= 0 {
-		s.RawNoteDays = 30
-	}
-	if s.WeeklySummaryWeeks <= 0 {
-		s.WeeklySummaryWeeks = 8
-	}
-	if s.MonthlySummaryMonths == 0 {
-		s.MonthlySummaryMonths = MonthlySummaryAllRemaining
-	}
 	return s
 }
 

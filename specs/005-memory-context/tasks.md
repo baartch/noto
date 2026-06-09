@@ -54,10 +54,10 @@
 
 ### Tests for User Story 1
 
-- [ ] T016 [P] [US1] Add retrieval tests for configured raw-day, weekly-week, and monthly-summary windows plus preceding-Monday fill behavior, weekly-to-monthly no-gap coverage, and boundary-cutover rules in /home/andy/gitrepos/noto/tests/unit/memory/retrieval_timeline_test.go
-- [ ] T017 [P] [US1] Add integration test for timeline-based context assembly across multi-month history in /home/andy/gitrepos/noto/tests/integration/memory/timeline_context_test.go
-- [ ] T018 [P] [US1] Add integration test proving conversation summaries are excluded from assembled context in /home/andy/gitrepos/noto/tests/integration/memory/no_session_summary_test.go
-- [ ] T019 [P] [US1] Add integration test for bounded monthly-summary windows, rejection of zero weekly/monthly summary settings, and exclusion of history older than the monthly cutoff in /home/andy/gitrepos/noto/tests/integration/memory/timeline_settings_edges_test.go
+- [X] T016 [P] [US1] Add retrieval tests for configured raw-day, weekly-week, and monthly-summary windows plus preceding-Monday fill behavior, weekly-to-monthly no-gap coverage, and boundary-cutover rules in /home/andy/gitrepos/noto/tests/unit/memory/retrieval_timeline_test.go
+- [X] T017 [P] [US1] Add integration test for timeline-based context assembly across multi-month history in /home/andy/gitrepos/noto/tests/integration/memory/timeline_context_test.go
+- [X] T018 [P] [US1] Add integration test proving conversation summaries are excluded from assembled context in /home/andy/gitrepos/noto/tests/integration/memory/no_session_summary_test.go
+- [X] T019 [P] [US1] Add integration test for bounded monthly-summary windows, rejection of zero weekly/monthly summary settings, and exclusion of history older than the monthly cutoff in /home/andy/gitrepos/noto/tests/integration/memory/timeline_settings_edges_test.go
 
 ### Implementation for User Story 1
 
