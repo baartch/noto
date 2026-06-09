@@ -30,7 +30,7 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T005 Add timeline settings persistence model and accessors for raw-note days plus weekly/monthly month windows in /home/andy/gitrepos/noto/internal/store/timeline_settings_repo.go
+- [ ] T005 Add timeline settings persistence model and accessors for raw-note days, weekly-summary weeks, and monthly-summary months in /home/andy/gitrepos/noto/internal/store/timeline_settings_repo.go
 - [ ] T006 [P] Add weekly/monthly summary persistence models and repositories in /home/andy/gitrepos/noto/internal/store/memory_summary_repo.go
 - [ ] T007 [P] Add profile DB migration for timeline settings and summary artifacts in /home/andy/gitrepos/noto/internal/store/migrations/profile/0003_memory_timeline.sql
 - [ ] T008 Define timeline window selection primitives and period helpers in /home/andy/gitrepos/noto/internal/memory/timeline.go
@@ -50,20 +50,20 @@
 
 **Goal**: Deliver configurable default context assembly using a day-based raw-note window plus weekly-summary and monthly-summary windows without conversation summaries.
 
-**Independent Test**: Populate a profile with notes spanning several months, vary the timeline settings, and verify the assembled context includes the correct raw notes for the configured rolling-day window, weekly summaries for the configured monthly span, and monthly summaries for the configured older-history window.
+**Independent Test**: Populate a profile with notes spanning several months, vary the timeline settings, and verify the assembled context includes the correct raw notes for the configured rolling-day window, weekly summaries for the configured week span, and monthly summaries for the configured older-history window.
 
 ### Tests for User Story 1
 
-- [ ] T016 [P] [US1] Add retrieval tests for configured raw-day, weekly-month, and monthly-summary windows plus preceding-Monday fill behavior and boundary-cutover rules in /home/andy/gitrepos/noto/tests/unit/memory/retrieval_timeline_test.go
+- [ ] T016 [P] [US1] Add retrieval tests for configured raw-day, weekly-week, and monthly-summary windows plus preceding-Monday fill behavior, weekly-to-monthly no-gap coverage, and boundary-cutover rules in /home/andy/gitrepos/noto/tests/unit/memory/retrieval_timeline_test.go
 - [ ] T017 [P] [US1] Add integration test for timeline-based context assembly across multi-month history in /home/andy/gitrepos/noto/tests/integration/memory/timeline_context_test.go
 - [ ] T018 [P] [US1] Add integration test proving conversation summaries are excluded from assembled context in /home/andy/gitrepos/noto/tests/integration/memory/no_session_summary_test.go
 - [ ] T019 [P] [US1] Add integration test for zero-value layers, bounded monthly-summary windows, and exclusion of history older than the monthly cutoff in /home/andy/gitrepos/noto/tests/integration/memory/timeline_settings_edges_test.go
 
 ### Implementation for User Story 1
 
-- [ ] T020 [US1] Add raw-note day settings (any integer greater than 0) and weekly/monthly summary window settings to chat settings state and menu wiring in /home/andy/gitrepos/noto/internal/tui/model.go
-- [ ] T021 [US1] Load, persist, and apply raw-note day settings (any integer greater than 0) and weekly/monthly summary settings in chat bootstrap, live settings updates, and profile switching flows in /home/andy/gitrepos/noto/internal/app/chat_cmd.go
-- [ ] T022 [US1] Replace session-summary-based memory selection with timeline-window context assembly that fills the raw-note day window backward to the preceding Monday in /home/andy/gitrepos/noto/internal/memory/retrieval.go
+- [ ] T020 [US1] Add raw-note day settings (any integer greater than 0), weekly-summary week settings, and monthly-summary month settings to chat settings state and menu wiring in /home/andy/gitrepos/noto/internal/tui/model.go
+- [ ] T021 [US1] Load, persist, and apply raw-note day settings (any integer greater than 0), weekly-summary week settings, and monthly-summary month settings in chat bootstrap, live settings updates, and profile switching flows in /home/andy/gitrepos/noto/internal/app/chat_cmd.go
+- [ ] T022 [US1] Replace session-summary-based memory selection with timeline-window context assembly that fills the raw-note day window backward to the preceding Monday and extends weekly coverage to at least the first day of the following monthly-summary month in /home/andy/gitrepos/noto/internal/memory/retrieval.go
 - [ ] T023 [US1] Add formatted memory-block sections for raw notes, weekly summaries, and monthly summaries in /home/andy/gitrepos/noto/internal/memory/retrieval.go
 - [ ] T024 [US1] Remove reliance on conversation summaries during chat context assembly in /home/andy/gitrepos/noto/internal/chat/session.go and /home/andy/gitrepos/noto/internal/memory/retrieval.go
 - [ ] T025 [US1] Add fallback behavior for missing summary layers using best available memory in /home/andy/gitrepos/noto/internal/memory/retrieval.go
@@ -136,7 +136,7 @@
 
 ### Implementation for User Story 4
 
-- [ ] T047 [US4] Extend cache key construction with raw-note day settings, weekly/monthly summary settings, and assembled summary state in /home/andy/gitrepos/noto/internal/memory/retrieval.go
+- [ ] T047 [US4] Extend cache key construction with raw-note day settings, weekly-summary week settings, monthly-summary month settings, and assembled summary state in /home/andy/gitrepos/noto/internal/memory/retrieval.go
 - [ ] T048 [US4] Invalidate or stale cache entries on timeline-setting changes, including live in-session updates, in /home/andy/gitrepos/noto/internal/cache/invalidation.go and /home/andy/gitrepos/noto/internal/app/chat_cmd.go
 - [ ] T049 [US4] Invalidate or stale cache entries on summary artifact changes and classify corresponding miss reasons in /home/andy/gitrepos/noto/internal/cache/invalidation.go and /home/andy/gitrepos/noto/internal/memory/summary_rollups.go
 - [ ] T050 [US4] Preserve L1→L2 and stale-while-revalidate behavior under timeline retrieval in /home/andy/gitrepos/noto/internal/memory/retrieval.go and /home/andy/gitrepos/noto/internal/cache/service.go

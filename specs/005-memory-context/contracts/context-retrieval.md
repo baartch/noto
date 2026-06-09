@@ -6,12 +6,12 @@
 - **system_prompt** (or deterministic prompt identity): string
 - **timeline_settings**:
   - `raw_note_days`
-  - `weekly_summary_months`
+  - `weekly_summary_weeks`
   - `monthly_summary_months`
 
 Validation:
 - `raw_note_days > 0`
-- `weekly_summary_months >= 0`
+- `weekly_summary_weeks > 0`
 - `monthly_summary_months` is either `all_remaining` or an integer `>= 0`
 - **note_budget_tokens**: int
 - **embedding_model**: string
@@ -22,13 +22,14 @@ Validation:
 1. The system MUST assemble default memory context as a time-layered window.
 2. The system MUST include all raw notes that fall within the configured recent raw-note day window.
 3. The raw-note window MUST be computed from at least the configured rolling-day span and then extended backward to the preceding Monday so there is no gap before the weekly-summary layer.
-4. The system MUST include weekly summaries for the configured monthly span immediately preceding the raw-note window, starting with the first full week before the raw-note boundary.
-5. The system MUST include monthly summaries for the configured older-history monthly-summary window, switching only on completed calendar periods after the weekly-summary layer.
-6. If `monthly_summary_months` is a bounded integer instead of `all_remaining`, any history older than that monthly cutoff MUST be excluded from the default assembled context.
-7. If a configured layer has value `0`, that layer is skipped without failing context assembly.
-8. If a required summary is missing or stale, the system MUST use the best available memory for that period until regeneration completes.
-9. Conversation summaries MUST NOT be required or included in the default assembled context.
-10. The assembled context MUST distinguish raw notes, weekly summaries, and monthly summaries in its formatted output.
+4. The system MUST include weekly summaries for the configured number of weeks immediately preceding the raw-note window, starting with the first full week before the raw-note boundary.
+5. The weekly-summary layer MUST extend as needed to cover at least the first day of the following monthly-summary month so there is no gap before the monthly-summary layer.
+6. The system MUST include monthly summaries for the configured older-history monthly-summary window, switching only on completed calendar periods after the weekly-summary layer.
+7. If `monthly_summary_months` is a bounded integer instead of `all_remaining`, any history older than that monthly cutoff MUST be excluded from the default assembled context.
+8. If a configured layer has value `0`, that layer is skipped without failing context assembly.
+9. If a required summary is missing or stale, the system MUST use the best available memory for that period until regeneration completes.
+10. Conversation summaries MUST NOT be required or included in the default assembled context.
+11. The assembled context MUST distinguish raw notes, weekly summaries, and monthly summaries in its formatted output.
 
 ## Rollup Generation Contract
 

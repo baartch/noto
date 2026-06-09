@@ -90,7 +90,7 @@ tests/
 
 ## Phase 0: Research Plan
 
-1. Confirm timeline-window semantics for raw-note days, weekly-summary months, and monthly-summary months, including zero-value behavior and bounded monthly-history behavior.
+1. Confirm timeline-window semantics for raw-note days, weekly-summary weeks, and monthly-summary months, including zero-value behavior and bounded monthly-history behavior.
 2. Determine rollup generation and regeneration rules for week/month boundary transitions, missed-runtime catch-up, and stale-summary replacement.
 3. Determine how to represent and expose keyword/vector search and time-range DB search through OpenRouter tool-calling request/response loops while staying compatible with current provider abstractions.
 4. Confirm how to fetch and store model `context_length` metadata from the OpenRouter models API and how to use it as footer telemetry for the active model.
@@ -109,7 +109,7 @@ tests/
 
 ## Phase 2: Implementation Planning (for `/speckit.tasks`)
 
-- Add profile settings for configurable raw-note day windows (any integer greater than 0) plus weekly-summary and monthly-summary month windows, with raw-note windows always filled backward to the preceding Monday so there is no gap before weekly summaries.
+- Add profile settings for configurable raw-note day windows (any integer greater than 0) plus weekly-summary week and monthly-summary month windows, with raw-note windows always filled backward to the preceding Monday so there is no gap before weekly summaries and weekly-summary coverage extended as needed to reach at least the first day of the following monthly-summary month.
 - Replace session-summary-based context assembly with a timeline-window selector that uses raw notes, weekly summaries, and monthly summaries.
 - Implement weekly/monthly rollup creation, deduplication, and regeneration triggers when notes or periods change.
 - Extend storage models and migrations for summary artifacts and summary freshness/versioning.

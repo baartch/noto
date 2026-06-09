@@ -8,13 +8,13 @@ Represents the profile-local settings that shape default memory context composit
 
 - **profile_id**: string
 - **raw_note_days**: integer
-- **weekly_summary_months**: integer
+- **weekly_summary_weeks**: integer
 - **monthly_summary_months**: integer or sentinel for `all_remaining`
 - **updated_at**: timestamp
 
 Validation:
 - `raw_note_days > 0`
-- `weekly_summary_months >= 0`
+- `weekly_summary_weeks > 0`
 - `monthly_summary_months` is either `all_remaining` or an integer `>= 0`
 - Setting changes take effect on the next context assembly.
 
@@ -86,6 +86,7 @@ Represents the assembled default memory context for a chat turn.
 
 Validation:
 - Time coverage must follow the configured order: raw-note window, then weekly-summary window, then monthly-summary window.
+- The weekly-summary layer must extend as needed to cover at least the first day of the following monthly-summary month so there is no gap before monthly summaries begin.
 - Empty layers may be omitted.
 - Included records must clearly preserve their granularity type.
 
