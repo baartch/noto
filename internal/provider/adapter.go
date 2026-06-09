@@ -17,6 +17,11 @@ type Message struct {
 	Content string
 }
 
+// ToolSupport describes normalized provider tool-calling capability metadata.
+type ToolSupport struct {
+	SupportsTools bool
+}
+
 // CompletionRequest is the normalized request payload sent to a provider.
 type CompletionRequest struct {
 	Messages    []Message
