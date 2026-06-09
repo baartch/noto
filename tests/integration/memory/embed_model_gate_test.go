@@ -55,6 +55,7 @@ func TestEmbeddingsModelRequiredForRetrieval(t *testing.T) {
 		func() {},
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewSession: %v", err)

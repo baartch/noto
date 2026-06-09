@@ -78,6 +78,7 @@ type Session struct {
 	onNotes         NotesCallback
 	onNotesSaving   NotesSavingCallback
 	onContextStatus ContextStatusCallback
+	onStats         func(provider.Stats)
 	stats           provider.Stats
 	onUsage         func(provider.Usage)
 }
@@ -100,6 +101,7 @@ func NewSession(
 	onNotes NotesCallback,
 	onNotesSaving NotesSavingCallback,
 	onContextStatus ContextStatusCallback,
+	onStats func(provider.Stats),
 	onUsage func(provider.Usage),
 ) (*Session, error) {
 	// Build system prompt with injected memory context.
@@ -182,6 +184,7 @@ func NewSession(
 		onNotes:           onNotes,
 		onNotesSaving:     onNotesSaving,
 		onContextStatus:   onContextStatus,
+		onStats:           onStats,
 		onUsage:           onUsage,
 		backupStop:        make(chan struct{}),
 		pendingDone:       make(chan struct{}),
@@ -311,6 +314,9 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 
 	// Accumulate token/cost stats.
 	s.stats.Add(resp)
+	if s.onStats != nil {
+		s.onStats(s.stats)
+	}
 	if s.onUsage != nil {
 		s.onUsage(resp.Usage)
 	}

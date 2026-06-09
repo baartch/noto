@@ -154,18 +154,18 @@
 
 ### Tests for User Story 5
 
-- [ ] T052 [P] [US5] Add unit tests for footer token/context-capacity formatting and unknown-capacity fallback in /home/andy/gitrepos/noto/tests/unit/tui/footer_telemetry_test.go
-- [ ] T053 [P] [US5] Add integration test for footer updates after model metadata and usage changes in /home/andy/gitrepos/noto/tests/integration/tui/footer_context_capacity_test.go
-- [ ] T054 [P] [US5] Add integration test for rollup/tool/cache diagnostics visibility and miss-reason completeness in /home/andy/gitrepos/noto/tests/integration/memory/memory_diagnostics_test.go
+- [X] T052 [P] [US5] Add unit tests for footer token/context-capacity formatting and unknown-capacity fallback in /home/andy/gitrepos/noto/tests/unit/tui/footer_telemetry_test.go
+- [X] T053 [P] [US5] Add integration test for footer updates after model metadata and usage changes in /home/andy/gitrepos/noto/tests/integration/tui/footer_context_capacity_test.go
+- [X] T054 [P] [US5] Add integration test for rollup/tool/cache diagnostics visibility and miss-reason completeness in /home/andy/gitrepos/noto/tests/integration/memory/memory_diagnostics_test.go
 
 ### Implementation for User Story 5
 
-- [ ] T055 [US5] Extend provider model listing to parse and return `context_length` and supported tool parameters in /home/andy/gitrepos/noto/internal/provider/models.go
-- [ ] T056 [US5] Fetch/cache active model metadata during startup, profile switch, and model change flows in /home/andy/gitrepos/noto/internal/app/chat_cmd.go and /home/andy/gitrepos/noto/internal/chat/session.go
-- [ ] T057 [US5] Propagate active model context maximum into session stats in /home/andy/gitrepos/noto/internal/provider/stats.go and /home/andy/gitrepos/noto/internal/chat/session.go
-- [ ] T058 [US5] Update footer token/status rendering to show max context and used percentage next to tokens in /home/andy/gitrepos/noto/internal/tui/footer_view.go and /home/andy/gitrepos/noto/internal/tui/model.go
-- [ ] T059 [US5] Add unknown-capacity footer fallback behavior in /home/andy/gitrepos/noto/internal/tui/footer_view.go
-- [ ] T060 [US5] Extend diagnostics reporting with recent rollup activity, tool-call outcomes, timeline/summary miss-reason completeness, and bounded monthly-cutoff exclusion visibility in /home/andy/gitrepos/noto/internal/memory/retrieval.go and /home/andy/gitrepos/noto/internal/chat/pipeline.go
+- [X] T055 [US5] Extend provider model listing to parse and return `context_length` and supported tool parameters in /home/andy/gitrepos/noto/internal/provider/models.go
+- [X] T056 [US5] Fetch/cache active model metadata during startup, profile switch, and model change flows in /home/andy/gitrepos/noto/internal/app/chat_cmd.go and /home/andy/gitrepos/noto/internal/chat/session.go
+- [X] T057 [US5] Propagate active model context maximum into session stats in /home/andy/gitrepos/noto/internal/provider/stats.go and /home/andy/gitrepos/noto/internal/chat/session.go
+- [X] T058 [US5] Update footer token/status rendering to show max context and used percentage next to tokens in /home/andy/gitrepos/noto/internal/tui/footer_view.go and /home/andy/gitrepos/noto/internal/tui/model.go
+- [X] T059 [US5] Add unknown-capacity footer fallback behavior in /home/andy/gitrepos/noto/internal/tui/footer_view.go
+- [X] T060 [US5] Extend diagnostics reporting with recent rollup activity, tool-call outcomes, timeline/summary miss-reason completeness, and bounded monthly-cutoff exclusion visibility in /home/andy/gitrepos/noto/internal/memory/retrieval.go and /home/andy/gitrepos/noto/internal/chat/pipeline.go
 
 **Checkpoint**: All user stories should now be independently functional.
 
