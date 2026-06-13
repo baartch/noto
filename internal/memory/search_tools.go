@@ -12,9 +12,10 @@ import (
 
 // SearchResultItem is a normalized memory search result item.
 type SearchResultItem struct {
-	Content   string    `json:"content"`
-	Category  string    `json:"category"`
-	CreatedAt time.Time `json:"created_at"`
+	Content    string    `json:"content"`
+	Category   string    `json:"category"`
+	CreatedAt  time.Time `json:"created_at"`
+	Importance int       `json:"importance"`
 }
 
 // KeywordSearchInput is the input for keyword-based memory search.
@@ -54,9 +55,10 @@ func (t *KeywordSearchTool) Execute(ctx context.Context, input KeywordSearchInpu
 	for _, n := range notes {
 		if strings.Contains(strings.ToLower(n.Content), query) {
 			results = append(results, SearchResultItem{
-				Content:   n.Content,
-				Category:  string(n.Category),
-				CreatedAt: n.CreatedAt,
+				Content:    n.Content,
+				Category:   string(n.Category),
+				CreatedAt:  n.CreatedAt,
+				Importance: n.Importance,
 			})
 		}
 	}
@@ -106,9 +108,10 @@ func (t *TimeRangeSearchTool) Execute(ctx context.Context, input TimeRangeSearch
 		for _, n := range notes {
 			if !n.CreatedAt.Before(input.StartTime) && !n.CreatedAt.After(input.EndTime) {
 				results = append(results, SearchResultItem{
-					Content:   n.Content,
-					Category:  string(n.Category),
-					CreatedAt: n.CreatedAt,
+					Content:    n.Content,
+					Category:   string(n.Category),
+					CreatedAt:  n.CreatedAt,
+					Importance: n.Importance,
 				})
 			}
 		}
