@@ -38,7 +38,6 @@ func TestRetrievalPipeline_RanksNotes(t *testing.T) {
 	ctx := context.Background()
 
 	noteRepo := store.NewMemoryNoteRepo(db)
-	summaryRepo := store.NewSessionSummaryRepo(db)
 	p, _ := profile.NewService(store.NewProfileRepo(db)).Create(ctx, "Retrieval")
 
 	_ = noteRepo.Create(ctx, &store.MemoryNote{ID: "n1", ProfileID: p.ID, Category: store.CategoryFact, Content: "Alpha", Importance: 5, SourceMessageIDs: "[]"})
@@ -48,7 +47,6 @@ func TestRetrievalPipeline_RanksNotes(t *testing.T) {
 	index.results[0].Entry.ProfileID = p.ID
 	retrieval := memory.NewRetrieval(
 		noteRepo,
-		summaryRepo,
 		nil,
 		memory.WithVectorRetrieval(index, p.ID, &stubRetrievalEmbedder{}, "embed"),
 	)

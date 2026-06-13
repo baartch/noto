@@ -40,7 +40,7 @@ type VectorManifest struct {
 type VectorEntry struct {
 	ID             string
 	ProfileID      string
-	SourceType     string // "memory_note" | "session_summary" | "message"
+	SourceType     string // "memory_note" | "message"
 	SourceID       string
 	ChunkHash      string
 	EmbeddingModel string

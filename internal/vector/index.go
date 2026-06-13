@@ -24,9 +24,8 @@ type SourceType string
 
 // Known vector source types.
 const (
-	SourceMemoryNote     SourceType = "memory_note"
-	SourceSessionSummary SourceType = "session_summary"
-	SourceMessage        SourceType = "message"
+	SourceMemoryNote SourceType = "memory_note"
+	SourceMessage    SourceType = "message"
 )
 
 // Entry represents a single record tracked in the vector index.

@@ -25,7 +25,6 @@ func TestConversationRepairGuard_ArchivesLingeringActiveConversationsOnSessionSt
 	convRepo := store.NewConversationRepo(db)
 	msgRepo := store.NewMessageRepo(db)
 	noteRepo := store.NewMemoryNoteRepo(db)
-	summaryRepo := store.NewSessionSummaryRepo(db)
 
 	// Seed two lingering active conversations for the same profile.
 	if err := convRepo.Create(ctx, &store.Conversation{ID: "conv-old-1", ProfileID: p.ID, Status: store.ConversationActive}); err != nil {
@@ -46,7 +45,6 @@ func TestConversationRepairGuard_ArchivesLingeringActiveConversationsOnSessionSt
 		convRepo,
 		msgRepo,
 		noteRepo,
-		summaryRepo,
 		nil,
 		nil,
 		logger,

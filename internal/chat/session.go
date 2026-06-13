@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -50,7 +49,6 @@ type Session struct {
 	msgRepo           *store.MessageRepo
 	noteRepo          *store.MemoryNoteRepo
 	cacheRepo         *store.ContextCacheRepo
-	summaryRepo       *store.SessionSummaryRepo
 	adapter           provider.Adapter
 	retrieval         *memory.Retrieval
 	extractor         *memory.Extractor
@@ -95,7 +93,6 @@ func NewSession(
 	convRepo *store.ConversationRepo,
 	msgRepo *store.MessageRepo,
 	noteRepo *store.MemoryNoteRepo,
-	summaryRepo *store.SessionSummaryRepo,
 	adapter provider.Adapter,
 	extractorAdapter provider.Adapter,
 	logger observe.Logger,
@@ -121,7 +118,6 @@ func NewSession(
 	}
 	ret := memory.NewRetrieval(
 		noteRepo,
-		summaryRepo,
 		cacheRepo,
 		memory.WithVectorIndexPath(vecPath),
 		memory.WithWarnFunc(func(err error) {
@@ -175,7 +171,6 @@ func NewSession(
 		convRepo:          convRepo,
 		msgRepo:           msgRepo,
 		noteRepo:          noteRepo,
-		summaryRepo:       summaryRepo,
 		adapter:           adapter,
 		extractorAdapter:  extractorAdapter,
 		cacheRepo:         store.NewContextCacheRepo(db),
@@ -278,8 +273,8 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	}
 	if s.toolsEnabled {
 		req.Tools = []provider.ToolDefinition{
-			{Type: "function", Name: "search_memory_keywords", Description: "Search memory notes by keyword query", Parameters: map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string", "description": "Keyword or short phrase to search for in memory notes"}, "limit": map[string]any{"type": "integer", "description": "Maximum number of results to return"}}, "required": []string{"query"}}},
-			{Type: "function", Name: "search_memory_time_range", Description: "Search memory notes and summaries within a time range", Parameters: map[string]any{"type": "object", "properties": map[string]any{"start_time": map[string]any{"type": "string", "description": "Start of the time range in RFC3339 format"}, "end_time": map[string]any{"type": "string", "description": "End of the time range in RFC3339 format"}, "limit": map[string]any{"type": "integer", "description": "Maximum number of results to return"}}, "required": []string{"start_time", "end_time"}}},
+			{Type: "function", Name: "search_memory_keywords", Description: "Search memory notes by keyword query. Results are objects with content, category, and created_at.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string", "description": "Keyword or short phrase to search for in memory notes"}}, "required": []string{"query"}}},
+			{Type: "function", Name: "search_memory_time_range", Description: "Search memory notes within a time range. Results are objects with content, category, and created_at.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"start_time": map[string]any{"type": "string", "description": "Start of the time range in RFC3339 format"}, "end_time": map[string]any{"type": "string", "description": "End of the time range in RFC3339 format"}}, "required": []string{"start_time", "end_time"}}},
 		}
 		s.logger.Infof("tools: enabled for chat request with %d tool definitions", len(req.Tools))
 	} else {
@@ -297,7 +292,7 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 			s.logger.Infof("tools: executing tool call name=%s call_id=%s args=%s", call.Name, call.CallID, call.Arguments)
 			followup = append(followup, provider.Message{Role: "assistant", Content: call.Name, ToolCallID: call.CallID, ToolCallName: call.Name, ToolCallArguments: call.Arguments, ToolID: call.ID})
 			result := pipeline.executeToolCall(ctx, s.profileID, call)
-			s.logger.Infof("tools: tool call completed name=%s call_id=%s result=%s", call.Name, call.CallID, result)
+			s.logger.Infof("tools: tool call completed name=%s call_id=%s", call.Name, call.CallID)
 			followup = append(followup, provider.Message{Role: "tool", Content: result, ToolCallID: call.CallID})
 		}
 		resp, err = s.adapter.Complete(ctx, provider.CompletionRequest{Model: req.Model, Messages: followup, Temperature: req.Temperature, Tools: req.Tools})
@@ -580,7 +575,7 @@ func (s *Session) EmbeddingModel() string {
 	return s.embeddingModel
 }
 
-// Close archives the conversation, persists a session summary, and snapshots backups.
+// Close archives the conversation and snapshots backups.
 func (s *Session) Close(ctx context.Context) {
 	if s.profileSlug != "" {
 		s.stopBackupTicker()
@@ -590,61 +585,7 @@ func (s *Session) Close(ctx context.Context) {
 	}
 
 	s.waitForPendingNotes(4 * time.Second)
-	summaryText := buildSessionSummary(filterConversationMessages(s.history, s.conversationID))
-	if summaryText != "" {
-		handoff := NewSessionHandoff(s.convRepo, s.summaryRepo)
-		err := handoff.Execute(ctx, HandoffInput{
-			ProfileID:      s.profileID,
-			ConversationID: s.conversationID,
-			SummaryText:    summaryText,
-			OpenLoops:      "[]",
-			NextActions:    "[]",
-		})
-		if err != nil {
-			s.logger.Errorf("session handoff failed: %v", err)
-			_ = s.convRepo.Archive(ctx, s.conversationID)
-		}
-		return
-	}
 	_ = s.convRepo.Archive(ctx, s.conversationID)
-}
-
-func buildSessionSummary(messages []*store.Message) string {
-	if len(messages) == 0 {
-		return ""
-	}
-	maxMessages := 6
-	if len(messages) > maxMessages {
-		messages = messages[len(messages)-maxMessages:]
-	}
-	var sb strings.Builder
-	for _, m := range messages {
-		role := "User"
-		if m.Role == store.RoleAssistant {
-			role = "Assistant"
-		}
-		sb.WriteString("- " + role + ": " + truncateSummary(m.Content) + "\n")
-	}
-	return strings.TrimRight(sb.String(), "\n")
-}
-
-func truncateSummary(text string) string {
-	maxLen := 280
-	runes := []rune(strings.TrimSpace(text))
-	if len(runes) <= maxLen {
-		return string(runes)
-	}
-	return string(runes[:maxLen]) + "…"
-}
-
-func filterConversationMessages(messages []*store.Message, conversationID string) []*store.Message {
-	var out []*store.Message
-	for _, m := range messages {
-		if m.ConversationID == conversationID {
-			out = append(out, m)
-		}
-	}
-	return out
 }
 
 func (s *Session) markNotesPending() {

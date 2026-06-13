@@ -48,21 +48,6 @@ CREATE TABLE IF NOT EXISTS memory_notes (
 CREATE INDEX IF NOT EXISTS idx_memory_notes_profile_id ON memory_notes(profile_id);
 
 -- ============================================================
--- session_summaries
--- ============================================================
-CREATE TABLE IF NOT EXISTS session_summaries (
-    id              TEXT PRIMARY KEY,
-    profile_id      TEXT NOT NULL,
-    conversation_id TEXT,
-    summary_text    TEXT NOT NULL,
-    open_loops      TEXT NOT NULL DEFAULT '[]',
-    next_actions    TEXT NOT NULL DEFAULT '[]',
-    created_at      DATETIME NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_session_summaries_profile_id ON session_summaries(profile_id);
-
--- ============================================================
 -- system_prompts
 -- ============================================================
 CREATE TABLE IF NOT EXISTS system_prompts (
@@ -117,7 +102,7 @@ CREATE INDEX IF NOT EXISTS idx_context_cache_profile_id ON context_cache(profile
 CREATE TABLE IF NOT EXISTS vector_index_entries (
     id              TEXT PRIMARY KEY,
     profile_id      TEXT NOT NULL,
-    source_type     TEXT NOT NULL CHECK (source_type IN ('memory_note','session_summary','message')),
+    source_type     TEXT NOT NULL CHECK (source_type IN ('memory_note','message')),
     source_id       TEXT NOT NULL,
     chunk_hash      TEXT NOT NULL,
     embedding_model TEXT NOT NULL DEFAULT '',

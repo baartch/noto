@@ -150,7 +150,6 @@ func runChat(cmd *cobra.Command, _ []string) error {
 		convRepo := store.NewConversationRepo(profileDB)
 		msgRepo := store.NewMessageRepo(profileDB)
 		noteRepo := store.NewMemoryNoteRepo(profileDB)
-		summaryRepo := store.NewSessionSummaryRepo(profileDB)
 		logger, _ := observe.NewFileLogger("")
 
 		sess, err = chatpkg.NewSession(
@@ -159,7 +158,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			activeProfile.Slug,
 			systemPrompt,
 			profileDB,
-			convRepo, msgRepo, noteRepo, summaryRepo,
+			convRepo, msgRepo, noteRepo,
 			provider.NewOpenAICompatible(provider.Config{
 				ProviderType: "openai_compatible",
 				Endpoint:     adapterCfg.Endpoint,
@@ -345,7 +344,6 @@ func runChat(cmd *cobra.Command, _ []string) error {
 				convRepo := store.NewConversationRepo(profileDB)
 				msgRepo := store.NewMessageRepo(profileDB)
 				noteRepo := store.NewMemoryNoteRepo(profileDB)
-				summaryRepo := store.NewSessionSummaryRepo(profileDB)
 				logger, _ := observe.NewFileLogger("")
 
 				sess, err = chatpkg.NewSession(
@@ -354,7 +352,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					p.Slug,
 					systemPrompt,
 					profileDB,
-					convRepo, msgRepo, noteRepo, summaryRepo,
+					convRepo, msgRepo, noteRepo,
 					provider.NewOpenAICompatible(provider.Config{
 						ProviderType: "openai_compatible",
 						Endpoint:     adapterCfg.Endpoint,

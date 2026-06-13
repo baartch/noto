@@ -35,7 +35,6 @@ func TestMemoryContinuity_ManualNote_AppearsInRetrieval(t *testing.T) {
 	ctx := context.Background()
 
 	noteRepo := store.NewMemoryNoteRepo(db)
-	summaryRepo := store.NewSessionSummaryRepo(db)
 	p, _ := profile.NewService(store.NewProfileRepo(db)).Create(ctx, "Retrieval Test")
 
 	// Insert a note directly (simulating a previous session's extraction).
@@ -52,7 +51,7 @@ func TestMemoryContinuity_ManualNote_AppearsInRetrieval(t *testing.T) {
 	}
 
 	// Retrieval should include the note in the assembled prompt.
-	retrieval := memory.NewRetrieval(noteRepo, summaryRepo, nil)
+	retrieval := memory.NewRetrieval(noteRepo, nil)
 	rc, err := retrieval.Assemble(ctx, p.ID, "You are a helpful assistant.")
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)

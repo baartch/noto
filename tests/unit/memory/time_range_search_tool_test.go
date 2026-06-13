@@ -10,7 +10,7 @@ import (
 )
 
 func TestTimeRangeSearchTool_InvalidRange(t *testing.T) {
-	exec := memory.NewTimeRangeSearchTool(nil, nil)
+	exec := memory.NewTimeRangeSearchTool(nil)
 	_, err := exec.Execute(context.Background(), memory.TimeRangeSearchInput{
 		StartTime: time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC),
 		EndTime:   time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
@@ -20,12 +20,10 @@ func TestTimeRangeSearchTool_InvalidRange(t *testing.T) {
 	}
 }
 
-func TestTimeRangeSearchTool_ReturnsMixedRawAndSummaryResults(t *testing.T) {
+func TestTimeRangeSearchTool_ReturnsRawNoteResults(t *testing.T) {
 	notes := []*store.MemoryNote{{ID: "n1", Category: store.CategoryFact, Content: "June raw note", CreatedAt: time.Date(2026, 6, 5, 9, 0, 0, 0, time.UTC)}}
-	summaries := []*store.MemorySummary{{ID: "w1", SummaryType: store.SummaryTypeWeekly, PeriodKey: "2026-W23", Content: "Week summary", PeriodStart: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), PeriodEnd: time.Date(2026, 6, 8, 0, 0, 0, 0, time.UTC)}}
 	exec := memory.NewTimeRangeSearchTool(
 		func(context.Context) ([]*store.MemoryNote, error) { return notes, nil },
-		func(context.Context) ([]*store.MemorySummary, error) { return summaries, nil },
 	)
 	results, err := exec.Execute(context.Background(), memory.TimeRangeSearchInput{
 		StartTime: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
@@ -35,7 +33,10 @@ func TestTimeRangeSearchTool_ReturnsMixedRawAndSummaryResults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	if len(results) != 2 {
-		t.Fatalf("expected 2 mixed results, got %d", len(results))
+	if len(results) != 1 {
+		t.Fatalf("expected 1 raw-note result, got %d", len(results))
+	}
+	if results[0].Content != "June raw note" {
+		t.Fatalf("unexpected content: %q", results[0].Content)
 	}
 }

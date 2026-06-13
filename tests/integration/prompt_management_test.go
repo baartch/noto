@@ -171,13 +171,12 @@ func TestPromptChange_InvalidatesContextCacheAcrossRestart(t *testing.T) {
 	}
 
 	noteRepo := store.NewMemoryNoteRepo(db)
-	summaryRepo := store.NewSessionSummaryRepo(db)
 	cacheRepo := store.NewContextCacheRepo(db)
 	if err := noteRepo.Create(ctx, &store.MemoryNote{ID: "n1", ProfileID: p.ID, Category: store.CategoryFact, Content: "A", Importance: 5, SourceMessageIDs: "[]"}); err != nil {
 		t.Fatalf("create note: %v", err)
 	}
 
-	r1 := memory.NewRetrieval(noteRepo, summaryRepo, cacheRepo)
+	r1 := memory.NewRetrieval(noteRepo, cacheRepo)
 	ctx1, err := r1.Assemble(ctx, p.ID, "prompt v1")
 	if err != nil {
 		t.Fatalf("assemble v1: %v", err)
@@ -190,7 +189,7 @@ func TestPromptChange_InvalidatesContextCacheAcrossRestart(t *testing.T) {
 	if err := ps.SetSystemPrompt(ctx, "prompt v2"); err != nil {
 		t.Fatalf("set prompt v2: %v", err)
 	}
-	r2 := memory.NewRetrieval(noteRepo, summaryRepo, cacheRepo)
+	r2 := memory.NewRetrieval(noteRepo, cacheRepo)
 	ctx2, err := r2.Assemble(ctx, p.ID, "prompt v2")
 	if err != nil {
 		t.Fatalf("assemble v2: %v", err)

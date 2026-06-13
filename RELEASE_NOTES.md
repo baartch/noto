@@ -1,5 +1,15 @@
 # Release notes
 
+## 0.6.0
+
+June 13, 2026
+
+- Remove session summary
+- Tighten search tool results
+- Remove searching of summaries in search tools
+- Remove limit from search tools
+- Remove logging of search tools results
+
 ## 0.5.0
 
 June 9, 2026

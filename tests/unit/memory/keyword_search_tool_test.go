@@ -33,7 +33,10 @@ func TestKeywordSearchTool_FallbackReturnsDeterministicResults(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
 	}
-	if results[0].RecordID != "n1" {
-		t.Fatalf("expected highest-importance result first, got %q", results[0].RecordID)
+	if results[0].Content != "launch checklist" {
+		t.Fatalf("expected highest-importance result first, got %q", results[0].Content)
+	}
+	if !results[0].CreatedAt.Equal(time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("expected created_at to be preserved, got %v", results[0].CreatedAt)
 	}
 }
