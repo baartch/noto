@@ -12,13 +12,10 @@ import (
 
 // SearchResultItem is a normalized memory search result item.
 type SearchResultItem struct {
-	RecordType     string
-	RecordID       string
-	Content        string
-	Category       string
-	TimeStart      time.Time
-	TimeEnd        time.Time
-	RelevanceScore *float64
+	RecordType string    `json:"record_type"`
+	Content    string    `json:"content"`
+	Category   string    `json:"category"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // KeywordSearchInput is the input for keyword-based memory search.
@@ -59,11 +56,9 @@ func (t *KeywordSearchTool) Execute(ctx context.Context, input KeywordSearchInpu
 		if strings.Contains(strings.ToLower(n.Content), query) {
 			results = append(results, SearchResultItem{
 				RecordType: "raw_note",
-				RecordID:   n.ID,
 				Content:    n.Content,
 				Category:   string(n.Category),
-				TimeStart:  n.CreatedAt,
-				TimeEnd:    n.CreatedAt,
+				CreatedAt:  n.CreatedAt,
 			})
 		}
 	}
@@ -71,15 +66,15 @@ func (t *KeywordSearchTool) Execute(ctx context.Context, input KeywordSearchInpu
 		// deterministic fallback: importance then recency
 		var impI, impJ int
 		for _, n := range notes {
-			if n.ID == results[i].RecordID {
+			if n.Content == results[i].Content && string(n.Category) == results[i].Category && n.CreatedAt.Equal(results[i].CreatedAt) {
 				impI = n.Importance
 			}
-			if n.ID == results[j].RecordID {
+			if n.Content == results[j].Content && string(n.Category) == results[j].Category && n.CreatedAt.Equal(results[j].CreatedAt) {
 				impJ = n.Importance
 			}
 		}
 		if impI == impJ {
-			return results[i].TimeStart.After(results[j].TimeStart)
+			return results[i].CreatedAt.After(results[j].CreatedAt)
 		}
 		return impI > impJ
 	})
@@ -115,11 +110,9 @@ func (t *TimeRangeSearchTool) Execute(ctx context.Context, input TimeRangeSearch
 			if !n.CreatedAt.Before(input.StartTime) && !n.CreatedAt.After(input.EndTime) {
 				results = append(results, SearchResultItem{
 					RecordType: "raw_note",
-					RecordID:   n.ID,
 					Content:    n.Content,
 					Category:   string(n.Category),
-					TimeStart:  n.CreatedAt,
-					TimeEnd:    n.CreatedAt,
+					CreatedAt:  n.CreatedAt,
 				})
 			}
 		}
@@ -137,15 +130,13 @@ func (t *TimeRangeSearchTool) Execute(ctx context.Context, input TimeRangeSearch
 				}
 				results = append(results, SearchResultItem{
 					RecordType: recordType,
-					RecordID:   s.ID,
 					Content:    s.Content,
-					TimeStart:  s.PeriodStart,
-					TimeEnd:    s.PeriodEnd,
+					CreatedAt:  s.PeriodStart,
 				})
 			}
 		}
 	}
-	sort.SliceStable(results, func(i, j int) bool { return results[i].TimeStart.Before(results[j].TimeStart) })
+	sort.SliceStable(results, func(i, j int) bool { return results[i].CreatedAt.Before(results[j].CreatedAt) })
 	if input.Limit > 0 && len(results) > input.Limit {
 		results = results[:input.Limit]
 	}

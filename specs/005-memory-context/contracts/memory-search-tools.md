@@ -33,12 +33,9 @@ Retrieve memory records relevant to a keyword/topic request using the existing v
 Ordered list of result items containing:
 
 - **record_type**: `raw_note | weekly_summary | monthly_summary`
-- **record_id**: string
 - **content**: string
 - **category**: string (nullable)
-- **time_start**: timestamp
-- **time_end**: timestamp
-- **relevance_score**: number (nullable when fallback path cannot score)
+- **created_at**: timestamp
 
 ### Behavior Rules
 
@@ -68,11 +65,9 @@ Retrieve raw notes and summary artifacts whose timestamps fall within a requeste
 Ordered list of result items containing:
 
 - **record_type**: `raw_note | weekly_summary | monthly_summary`
-- **record_id**: string
 - **content**: string
 - **category**: string (nullable)
-- **time_start**: timestamp
-- **time_end**: timestamp
+- **created_at**: timestamp
 
 ### Behavior Rules
 

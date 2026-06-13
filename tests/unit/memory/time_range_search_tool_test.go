@@ -38,4 +38,13 @@ func TestTimeRangeSearchTool_ReturnsMixedRawAndSummaryResults(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("expected 2 mixed results, got %d", len(results))
 	}
+	if results[0].CreatedAt.After(results[1].CreatedAt) {
+		t.Fatalf("expected results sorted by created_at ascending: %v > %v", results[0].CreatedAt, results[1].CreatedAt)
+	}
+	if results[0].RecordType != "weekly_summary" {
+		t.Fatalf("expected weekly summary first, got %q", results[0].RecordType)
+	}
+	if results[1].RecordType != "raw_note" {
+		t.Fatalf("expected raw note second, got %q", results[1].RecordType)
+	}
 }
