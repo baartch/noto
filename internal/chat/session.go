@@ -79,7 +79,6 @@ type Session struct {
 	onContextStatus ContextStatusCallback
 	onStats         func(provider.Stats)
 	stats           provider.Stats
-	onUsage         func(provider.Usage)
 }
 
 // NewSession creates a new conversation, assembles the system prompt with
@@ -100,7 +99,6 @@ func NewSession(
 	onNotesSaving NotesSavingCallback,
 	onContextStatus ContextStatusCallback,
 	onStats func(provider.Stats),
-	onUsage func(provider.Usage),
 ) (*Session, error) {
 	// Build system prompt with injected memory context.
 	cacheRepo := store.NewContextCacheRepo(db)
@@ -181,7 +179,6 @@ func NewSession(
 		onNotesSaving:     onNotesSaving,
 		onContextStatus:   onContextStatus,
 		onStats:           onStats,
-		onUsage:           onUsage,
 		backupStop:        make(chan struct{}),
 		pendingDone:       make(chan struct{}),
 		baseSystemPrompt:  baseSystemPrompt,
@@ -331,9 +328,6 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	s.stats.AddCompletion(resp)
 	if s.onStats != nil {
 		s.onStats(s.stats)
-	}
-	if s.onUsage != nil {
-		s.onUsage(resp.Usage)
 	}
 
 	// Fire background extraction — never blocks the reply.
@@ -618,9 +612,6 @@ func (s *Session) recordAuxUsage(usage provider.Usage) {
 	s.stats.AddUsage(usage)
 	if s.onStats != nil {
 		s.onStats(s.stats)
-	}
-	if s.onUsage != nil {
-		s.onUsage(usage)
 	}
 }
 

@@ -74,21 +74,6 @@ func CacheStatusUpdated(formatted string) tea.Msg { return cacheStatusUpdatedMsg
 // UpdateAvailableNotice shows a transient update warning in the footer.
 func UpdateAvailableNotice(formatted string) tea.Msg { return updateNoticeMsg{formatted: formatted} }
 
-// UsageUpdatedMain applies usage from a main chat completion response.
-func UsageUpdatedMain(usage provider.Usage) tea.Msg {
-	return usageUpdatedMsg{usage: usage, source: usageSourceMain}
-}
-
-// UsageUpdatedExtractor applies usage from extractor model calls.
-func UsageUpdatedExtractor(usage provider.Usage) tea.Msg {
-	return usageUpdatedMsg{usage: usage, source: usageSourceExtractor}
-}
-
-// UsageUpdatedEmbeddings applies usage from embeddings model calls.
-func UsageUpdatedEmbeddings(usage provider.Usage) tea.Msg {
-	return usageUpdatedMsg{usage: usage, source: usageSourceEmbeddings}
-}
-
 // ProfileSwitched updates the TUI state after switching profiles.
 func ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, tokenStatus string, extractorFallback, embeddingModelMissing bool, provider ProviderFunc, listModels ListModelsFunc, listEmbeddings ListEmbeddingsFunc, modelSelected ModelSelectedFunc, embeddingModelSelected EmbeddingModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, settings *SettingsMenu, history []string, startupMessages []*store.Message, startupHistoryErr error) profileSwitchedMsg {
 	return profileSwitchedMsg{
@@ -142,10 +127,6 @@ type editorFinishedMsg struct {
 type statsUpdatedMsg struct{ formatted string }
 type cacheStatusUpdatedMsg struct{ formatted string }
 type updateNoticeMsg struct{ formatted string }
-type usageUpdatedMsg struct {
-	usage  provider.Usage
-	source usageSource
-}
 
 type profilesAction interface {
 	Label() string
@@ -291,9 +272,7 @@ type Model struct {
 	// notes badge
 	notesIndicator string
 
-	updateNotice          string
-	usage                 usageAccumulator
-	hasAuthoritativeStats bool
+	updateNotice string
 
 	// pending assistant state
 	pending      bool
@@ -831,19 +810,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// ---- stats update -------------------------------------------------------
 	case statsUpdatedMsg:
 		m.tokenStatus = msg.formatted
-		m.hasAuthoritativeStats = true
 
 	case cacheStatusUpdatedMsg:
 		m.cacheStatus = msg.formatted
 
 	case updateNoticeMsg:
 		m.updateNotice = msg.formatted
-
-	case usageUpdatedMsg:
-		m.usage.addFromUsage(msg.usage)
-		if !m.hasAuthoritativeStats {
-			m.tokenStatus = m.usage.formatTokenStatus()
-		}
 
 	case profileSwitchedMsg:
 		m.profileName = msg.profileName
@@ -853,11 +825,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.embeddingModelMissing = msg.embeddingModelMissing
 		m.cacheStatus = msg.cacheStatus
 		m.tokenStatus = msg.tokenStatus
-		m.hasAuthoritativeStats = msg.tokenStatus != ""
-		m.usage = usageAccumulator{}
-		if !m.hasAuthoritativeStats {
-			m.tokenStatus = m.usage.formatTokenStatus()
-		}
 		m.provider = msg.provider
 		m.listModels = msg.listModels
 		m.listEmbeddings = msg.listEmbeddings
