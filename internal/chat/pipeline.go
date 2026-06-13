@@ -103,7 +103,7 @@ func (p *Pipeline) Execute(ctx context.Context, input TurnInput) (*TurnOutput, e
 	if p.toolsEnabled {
 		req.Tools = []provider.ToolDefinition{
 			{Type: "function", Name: "search_memory_keywords", Description: "Search memory notes by keyword query. Results are objects with record_type, content, category, and created_at.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string", "description": "Keyword or short phrase to search for in memory notes"}, "limit": map[string]any{"type": "integer", "description": "Maximum number of results to return"}}, "required": []string{"query"}}},
-			{Type: "function", Name: "search_memory_time_range", Description: "Search memory notes and summaries within a time range. Results are objects with record_type, content, category, and created_at.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"start_time": map[string]any{"type": "string", "description": "Start of the time range in RFC3339 format"}, "end_time": map[string]any{"type": "string", "description": "End of the time range in RFC3339 format"}, "limit": map[string]any{"type": "integer", "description": "Maximum number of results to return"}}, "required": []string{"start_time", "end_time"}}},
+			{Type: "function", Name: "search_memory_time_range", Description: "Search memory notes within a time range. Results are objects with record_type, content, category, and created_at.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"start_time": map[string]any{"type": "string", "description": "Start of the time range in RFC3339 format"}, "end_time": map[string]any{"type": "string", "description": "End of the time range in RFC3339 format"}, "limit": map[string]any{"type": "integer", "description": "Maximum number of results to return"}}, "required": []string{"start_time", "end_time"}}},
 		}
 		p.logger.Infof("tools: enabled for pipeline request with %d tool definitions", len(req.Tools))
 	} else {
@@ -211,14 +211,6 @@ func (p *Pipeline) executeToolCall(ctx context.Context, profileID string, call p
 					return nil, nil
 				}
 				return p.noteRepo.ListByProfile(ctx, profileID)
-			},
-			func(ctx context.Context) ([]*store.MemorySummary, error) {
-				if p.summaryRepo == nil {
-					return nil, nil
-				}
-				weekly, _ := p.summaryRepo.ListByProfileAndType(ctx, profileID, store.SummaryTypeWeekly)
-				monthly, _ := p.summaryRepo.ListByProfileAndType(ctx, profileID, store.SummaryTypeMonthly)
-				return append(weekly, monthly...), nil
 			},
 		)
 		results, err := exec.Execute(ctx, memory.TimeRangeSearchInput{StartTime: args.StartTime, EndTime: args.EndTime, Limit: args.Limit})

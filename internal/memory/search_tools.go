@@ -84,18 +84,17 @@ func (t *KeywordSearchTool) Execute(ctx context.Context, input KeywordSearchInpu
 	return results, nil
 }
 
-// TimeRangeSearchTool executes time-bounded memory search across notes and summaries.
+// TimeRangeSearchTool executes time-bounded memory search across raw notes.
 type TimeRangeSearchTool struct {
-	listNotes     func(context.Context) ([]*store.MemoryNote, error)
-	listSummaries func(context.Context) ([]*store.MemorySummary, error)
+	listNotes func(context.Context) ([]*store.MemoryNote, error)
 }
 
 // NewTimeRangeSearchTool creates a time-range memory search tool executor.
-func NewTimeRangeSearchTool(listNotes func(context.Context) ([]*store.MemoryNote, error), listSummaries func(context.Context) ([]*store.MemorySummary, error)) *TimeRangeSearchTool {
-	return &TimeRangeSearchTool{listNotes: listNotes, listSummaries: listSummaries}
+func NewTimeRangeSearchTool(listNotes func(context.Context) ([]*store.MemoryNote, error)) *TimeRangeSearchTool {
+	return &TimeRangeSearchTool{listNotes: listNotes}
 }
 
-// Execute performs time-range search and can return mixed raw-note and summary results.
+// Execute performs time-range search across raw-note results.
 func (t *TimeRangeSearchTool) Execute(ctx context.Context, input TimeRangeSearchInput) ([]SearchResultItem, error) {
 	if input.EndTime.Before(input.StartTime) {
 		return nil, errors.New("memory: invalid time range")
@@ -113,25 +112,6 @@ func (t *TimeRangeSearchTool) Execute(ctx context.Context, input TimeRangeSearch
 					Content:    n.Content,
 					Category:   string(n.Category),
 					CreatedAt:  n.CreatedAt,
-				})
-			}
-		}
-	}
-	if t != nil && t.listSummaries != nil {
-		summaries, err := t.listSummaries(ctx)
-		if err != nil {
-			return nil, err
-		}
-		for _, s := range summaries {
-			if !s.PeriodStart.After(input.EndTime) && !s.PeriodEnd.Before(input.StartTime) {
-				recordType := "weekly_summary"
-				if s.SummaryType == store.SummaryTypeMonthly {
-					recordType = "monthly_summary"
-				}
-				results = append(results, SearchResultItem{
-					RecordType: recordType,
-					Content:    s.Content,
-					CreatedAt:  s.PeriodStart,
 				})
 			}
 		}
