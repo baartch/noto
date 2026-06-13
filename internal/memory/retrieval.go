@@ -25,9 +25,6 @@ type RetrievalContext struct {
 	// MemoryBlock is the formatted block of relevant memory notes.
 	MemoryBlock string
 
-	// SessionSummary is the most recent session summary text.
-	SessionSummary string
-
 	// AssembledPrompt is the final combined system prompt with injected context.
 	AssembledPrompt string
 
@@ -53,7 +50,6 @@ type CacheRepository interface {
 // Retrieval assembles context for a chat turn from SQLite source-of-truth data.
 type Retrieval struct {
 	noteRepo             *store.MemoryNoteRepo
-	sessionSummaryRepo   *store.SessionSummaryRepo
 	memorySummaryRepo    *store.MemorySummaryRepo
 	timelineSettingsRepo *store.TimelineSettingsRepo
 	cacheRepo            CacheRepository
@@ -112,8 +108,8 @@ func WithVectorRetrieval(index vector.Index, profileID string, embedder vector.E
 }
 
 // NewRetrieval creates a Retrieval service.
-func NewRetrieval(noteRepo *store.MemoryNoteRepo, summaryRepo *store.SessionSummaryRepo, cacheRepo CacheRepository, opts ...RetrievalOption) *Retrieval {
-	r := &Retrieval{noteRepo: noteRepo, sessionSummaryRepo: summaryRepo, cacheRepo: cacheRepo, l1: map[string]*store.ContextCacheEntry{}, diag: cache.NewDiagnostics()}
+func NewRetrieval(noteRepo *store.MemoryNoteRepo, cacheRepo CacheRepository, opts ...RetrievalOption) *Retrieval {
+	r := &Retrieval{noteRepo: noteRepo, cacheRepo: cacheRepo, l1: map[string]*store.ContextCacheEntry{}, diag: cache.NewDiagnostics()}
 	for _, opt := range opts {
 		opt(r)
 	}
@@ -172,7 +168,6 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 	ctxOut := &RetrievalContext{
 		SystemPrompt:        systemPrompt,
 		MemoryBlock:         memoryBlock,
-		SessionSummary:      "",
 		AssembledPrompt:     assembled,
 		CacheHit:            false,
 		CacheTier:           "none",

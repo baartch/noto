@@ -34,7 +34,6 @@ func TestEmbeddingsModelRequiredForRetrieval(t *testing.T) {
 	convRepo := store.NewConversationRepo(db)
 	msgRepo := store.NewMessageRepo(db)
 	noteRepo := store.NewMemoryNoteRepo(db)
-	summaryRepo := store.NewSessionSummaryRepo(db)
 
 	logger, _ := observe.NewFileLogger("")
 	defer logger.Close()
@@ -47,7 +46,6 @@ func TestEmbeddingsModelRequiredForRetrieval(t *testing.T) {
 		convRepo,
 		msgRepo,
 		noteRepo,
-		summaryRepo,
 		&stubAdapter{},
 		&stubAdapter{},
 		logger,
