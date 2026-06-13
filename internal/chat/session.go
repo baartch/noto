@@ -292,7 +292,7 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 			s.logger.Infof("tools: executing tool call name=%s call_id=%s args=%s", call.Name, call.CallID, call.Arguments)
 			followup = append(followup, provider.Message{Role: "assistant", Content: call.Name, ToolCallID: call.CallID, ToolCallName: call.Name, ToolCallArguments: call.Arguments, ToolID: call.ID})
 			result := pipeline.executeToolCall(ctx, s.profileID, call)
-			s.logger.Infof("tools: tool call completed name=%s call_id=%s result=%s", call.Name, call.CallID, result)
+			s.logger.Infof("tools: tool call completed name=%s call_id=%s", call.Name, call.CallID)
 			followup = append(followup, provider.Message{Role: "tool", Content: result, ToolCallID: call.CallID})
 		}
 		resp, err = s.adapter.Complete(ctx, provider.CompletionRequest{Model: req.Model, Messages: followup, Temperature: req.Temperature, Tools: req.Tools})

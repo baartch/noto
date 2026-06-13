@@ -128,7 +128,7 @@ func (p *Pipeline) Execute(ctx context.Context, input TurnInput) (*TurnOutput, e
 			p.logger.Infof("tools: executing tool call name=%s call_id=%s args=%s", call.Name, call.CallID, call.Arguments)
 			followup = append(followup, provider.Message{Role: "assistant", Content: call.Name, ToolCallID: call.CallID, ToolCallName: call.Name, ToolCallArguments: call.Arguments, ToolID: call.ID})
 			toolResult := p.executeToolCall(ctx, input.ProfileID, call)
-			p.logger.Infof("tools: tool call completed name=%s call_id=%s result=%s", call.Name, call.CallID, toolResult)
+			p.logger.Infof("tools: tool call completed name=%s call_id=%s", call.Name, call.CallID)
 			followup = append(followup, provider.Message{Role: "tool", Content: toolResult, ToolCallID: call.CallID})
 		}
 		resp, err = p.adapter.Complete(ctx, provider.CompletionRequest{Model: req.Model, Messages: followup, Temperature: req.Temperature, Tools: req.Tools})
