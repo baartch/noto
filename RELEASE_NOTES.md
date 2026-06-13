@@ -1,5 +1,11 @@
 # Release notes
 
+## 0.7.0
+
+June 13, 2026
+
+- Add importance to search tool results
+
 ## 0.6.0
 
 June 13, 2026

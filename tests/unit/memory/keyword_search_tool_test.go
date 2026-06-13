@@ -39,4 +39,7 @@ func TestKeywordSearchTool_FallbackReturnsDeterministicResults(t *testing.T) {
 	if !results[0].CreatedAt.Equal(time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("expected created_at to be preserved, got %v", results[0].CreatedAt)
 	}
+	if results[0].Importance != 9 {
+		t.Fatalf("expected importance to be preserved, got %d", results[0].Importance)
+	}
 }

@@ -39,4 +39,7 @@ func TestTimeRangeSearchTool_ReturnsRawNoteResults(t *testing.T) {
 	if results[0].Content != "June raw note" {
 		t.Fatalf("unexpected content: %q", results[0].Content)
 	}
+	if results[0].Importance != 0 {
+		t.Fatalf("expected default importance 0 when note importance is unset, got %d", results[0].Importance)
+	}
 }
