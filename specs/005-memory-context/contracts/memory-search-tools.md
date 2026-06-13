@@ -32,7 +32,6 @@ Retrieve memory records relevant to a keyword/topic request using the existing v
 
 Ordered list of result items containing:
 
-- **record_type**: `raw_note | weekly_summary | monthly_summary`
 - **content**: string
 - **category**: string (nullable)
 - **created_at**: timestamp
@@ -52,7 +51,7 @@ Ordered list of result items containing:
 
 ### Purpose
 
-Retrieve raw notes and summary artifacts whose timestamps fall within a requested time range.
+Retrieve raw notes whose timestamps fall within a requested time range.
 
 ### Input Schema
 
@@ -64,7 +63,6 @@ Retrieve raw notes and summary artifacts whose timestamps fall within a requeste
 
 Ordered list of result items containing:
 
-- **record_type**: `raw_note | weekly_summary | monthly_summary`
 - **content**: string
 - **category**: string (nullable)
 - **created_at**: timestamp
@@ -72,7 +70,7 @@ Ordered list of result items containing:
 ### Behavior Rules
 
 1. Only records within the requested range may be returned.
-2. Both raw notes and summary records may appear when both are in-range.
+2. Matching raw notes within the requested range may appear in the result set.
 3. Invalid ranges must return a structured validation error or empty result, not break the conversation.
 4. Results MUST be scoped to the active profile.
 

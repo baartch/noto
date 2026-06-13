@@ -36,9 +36,6 @@ func TestTimeRangeSearchTool_ReturnsRawNoteResults(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 raw-note result, got %d", len(results))
 	}
-	if results[0].RecordType != "raw_note" {
-		t.Fatalf("expected raw note result, got %q", results[0].RecordType)
-	}
 	if results[0].Content != "June raw note" {
 		t.Fatalf("unexpected content: %q", results[0].Content)
 	}
