@@ -1,5 +1,13 @@
 # Release notes
 
+## 0.8.0
+
+June 13, 2026
+
+- Route Extractor and Embedding usage stats to new provider stats
+- Remove deprecated stats path
+- Cleanup internal tests
+
 ## 0.7.0
 
 June 13, 2026

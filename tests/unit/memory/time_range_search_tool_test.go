@@ -21,7 +21,7 @@ func TestTimeRangeSearchTool_InvalidRange(t *testing.T) {
 }
 
 func TestTimeRangeSearchTool_ReturnsRawNoteResults(t *testing.T) {
-	notes := []*store.MemoryNote{{ID: "n1", Category: store.CategoryFact, Content: "June raw note", CreatedAt: time.Date(2026, 6, 5, 9, 0, 0, 0, time.UTC)}}
+	notes := []*store.MemoryNote{{ID: "n1", Category: store.CategoryFact, Content: "June raw note", Importance: 6, CreatedAt: time.Date(2026, 6, 5, 9, 0, 0, 0, time.UTC)}}
 	exec := memory.NewTimeRangeSearchTool(
 		func(context.Context) ([]*store.MemoryNote, error) { return notes, nil },
 	)
@@ -39,7 +39,7 @@ func TestTimeRangeSearchTool_ReturnsRawNoteResults(t *testing.T) {
 	if results[0].Content != "June raw note" {
 		t.Fatalf("unexpected content: %q", results[0].Content)
 	}
-	if results[0].Importance != 0 {
-		t.Fatalf("expected default importance 0 when note importance is unset, got %d", results[0].Importance)
+	if results[0].Importance != 6 {
+		t.Fatalf("expected importance to be preserved, got %d", results[0].Importance)
 	}
 }

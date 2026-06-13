@@ -79,7 +79,6 @@ type Session struct {
 	onContextStatus ContextStatusCallback
 	onStats         func(provider.Stats)
 	stats           provider.Stats
-	onUsage         func(provider.Usage)
 }
 
 // NewSession creates a new conversation, assembles the system prompt with
@@ -100,7 +99,6 @@ func NewSession(
 	onNotesSaving NotesSavingCallback,
 	onContextStatus ContextStatusCallback,
 	onStats func(provider.Stats),
-	onUsage func(provider.Usage),
 ) (*Session, error) {
 	// Build system prompt with injected memory context.
 	cacheRepo := store.NewContextCacheRepo(db)
@@ -181,7 +179,6 @@ func NewSession(
 		onNotesSaving:     onNotesSaving,
 		onContextStatus:   onContextStatus,
 		onStats:           onStats,
-		onUsage:           onUsage,
 		backupStop:        make(chan struct{}),
 		pendingDone:       make(chan struct{}),
 		baseSystemPrompt:  baseSystemPrompt,
@@ -328,12 +325,9 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	}
 
 	// Accumulate token/cost stats.
-	s.stats.Add(resp)
+	s.stats.AddCompletion(resp)
 	if s.onStats != nil {
 		s.onStats(s.stats)
-	}
-	if s.onUsage != nil {
-		s.onUsage(resp.Usage)
 	}
 
 	// Fire background extraction — never blocks the reply.
@@ -370,7 +364,11 @@ func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote
 	if err := s.ensureVectorManifest(ctx, manifestRepo); err != nil {
 		return err
 	}
-	syncer := vector.NewSyncer(s.vectorIndex, s.profileID, s.adapter, s.embeddingModel).WithManifest(manifestRepo)
+	var embedder vector.Embedder
+	if s.adapter != nil {
+		embedder = &usageReportingEmbedder{embedder: s.adapter, onUsage: s.recordAuxUsage}
+	}
+	syncer := vector.NewSyncer(s.vectorIndex, s.profileID, embedder, s.embeddingModel).WithManifest(manifestRepo)
 	records := make([]vector.MemoryNoteRecord, 0, len(notes))
 	for _, note := range notes {
 		records = append(records, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
@@ -423,9 +421,13 @@ func (s *Session) ensureVectorCompaction(ctx context.Context) error {
 		records = append(records, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
 	}
 
+	var embedder vector.Embedder
+	if s.adapter != nil {
+		embedder = &usageReportingEmbedder{embedder: s.adapter, onUsage: s.recordAuxUsage}
+	}
 	rebuilder := vector.NewRebuilder(manifestRepo, s.vectorIndex, s.profileID).
 		WithManifest(manifestRepo).
-		WithEmbedder(s.adapter, s.embeddingModel)
+		WithEmbedder(embedder, s.embeddingModel)
 	return rebuilder.Rebuild(ctx, records)
 }
 
@@ -438,21 +440,23 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 	defer cancel()
 
 	extractor := s.extractor
-	embedder := s.adapter
+	var embedder provider.Adapter
 	if s.extractorAdapter != nil {
 		extractor = memory.NewExtractor(s.noteRepo, s.extractorAdapter, s.cacheRepo)
 		embedder = s.extractorAdapter
 	} else if s.adapter != nil {
 		extractor = memory.NewExtractor(s.noteRepo, s.adapter, s.cacheRepo)
+		embedder = s.adapter
 	}
 	if embedder != nil && s.vectorIndex != nil && s.embeddingModel != "" {
-		deduper := vector.NewVectorDeduper(s.vectorIndex, s.profileID, embedder, s.embeddingModel).WithWarnFunc(func(err error) {
+		dedupEmbedder := &usageReportingEmbedder{embedder: embedder, onUsage: s.recordAuxUsage}
+		deduper := vector.NewVectorDeduper(s.vectorIndex, s.profileID, dedupEmbedder, s.embeddingModel).WithWarnFunc(func(err error) {
 			s.logger.Infof("vector dedup issue: %v", err)
 		})
 		extractor.WithDeduper(deduper)
 	}
 	extractor.WithLogHook(&sessionLogHook{logger: s.logger})
-	extractor.WithUsageHook(s.onUsage)
+	extractor.WithUsageHook(s.recordAuxUsage)
 	sourceIDs := []string{s.history[len(s.history)-2].ID, s.history[len(s.history)-1].ID}
 	result, err := extractor.ExtractTurn(ctx, s.profileID, s.profileSlug, s.conversationID, sourceIDs, userMsg, assistantMsg)
 	if err != nil {
@@ -586,6 +590,29 @@ func (s *Session) Close(ctx context.Context) {
 
 	s.waitForPendingNotes(4 * time.Second)
 	_ = s.convRepo.Archive(ctx, s.conversationID)
+}
+
+type usageReportingEmbedder struct {
+	embedder provider.Adapter
+	onUsage  func(provider.Usage)
+}
+
+func (u *usageReportingEmbedder) Embed(ctx context.Context, req provider.EmbeddingRequest) (*provider.EmbeddingResponse, error) {
+	if u == nil || u.embedder == nil {
+		return nil, nil
+	}
+	resp, err := u.embedder.Embed(ctx, req)
+	if err == nil && resp != nil && u.onUsage != nil {
+		u.onUsage(resp.Usage)
+	}
+	return resp, err
+}
+
+func (s *Session) recordAuxUsage(usage provider.Usage) {
+	s.stats.AddUsage(usage)
+	if s.onStats != nil {
+		s.onStats(s.stats)
+	}
 }
 
 func (s *Session) markNotesPending() {

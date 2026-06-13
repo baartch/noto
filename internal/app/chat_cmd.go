@@ -197,11 +197,6 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					prog.Send(tui.StatsUpdated(stats.Format()))
 				}
 			},
-			func(u provider.Usage) {
-				if prog != nil {
-					prog.Send(tui.UsageUpdatedMain(u))
-				}
-			},
 		)
 		if err != nil {
 			return fmt.Errorf("chat: start session: %w", err)
@@ -384,11 +379,6 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					func(stats provider.Stats) {
 						if prog != nil {
 							prog.Send(tui.StatsUpdated(stats.Format()))
-						}
-					},
-					func(u provider.Usage) {
-						if prog != nil {
-							prog.Send(tui.UsageUpdatedMain(u))
 						}
 					},
 				)

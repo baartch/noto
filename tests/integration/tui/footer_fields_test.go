@@ -2,8 +2,6 @@ package tui
 
 import (
 	"testing"
-
-	"noto/internal/tui"
 )
 
 func TestFooterFields_AlwaysVisibleSet(t *testing.T) {
@@ -15,5 +13,4 @@ func TestFooterFields_AlwaysVisibleSet(t *testing.T) {
 	if !(containsAny(view, "ctx:l1-hit", "ctx:l2-hit", "ctx:swr", "ctx:rebuild", "ctx:miss")) {
 		t.Fatalf("expected one of the ctx states in footer")
 	}
-	_ = tui.UsageUpdatedMain // keep compile reference for message API
 }

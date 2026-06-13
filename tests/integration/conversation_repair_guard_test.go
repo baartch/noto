@@ -52,7 +52,6 @@ func TestConversationRepairGuard_ArchivesLingeringActiveConversationsOnSessionSt
 		nil,
 		nil,
 		nil,
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewSession: %v", err)
