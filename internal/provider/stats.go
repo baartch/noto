@@ -15,14 +15,29 @@ type Stats struct {
 	ContextMax  int     // context window size (0 = unknown)
 }
 
-// Add accumulates stats from a single completion response.
-func (s *Stats) Add(resp *CompletionResponse) {
-	s.TokensIn += resp.PromptTokens
-	s.TokensOut += resp.CompletionTokens
-	s.TotalTokens += resp.PromptTokens + resp.CompletionTokens
-	if resp.Usage.HasUsage {
-		s.CostUSD += resp.Usage.Cost
+// AddUsage accumulates generic provider usage, including embedding usage.
+func (s *Stats) AddUsage(usage Usage) {
+	if !usage.HasUsage {
+		return
+	}
+	s.TokensIn += usage.PromptTokens
+	s.TokensOut += usage.CompletionTokens
+	if usage.TotalTokens > 0 {
+		s.TotalTokens += usage.TotalTokens
 	} else {
+		s.TotalTokens += usage.PromptTokens + usage.CompletionTokens
+	}
+	s.CostUSD += usage.Cost
+}
+
+// AddCompletion accumulates stats from a single completion response.
+func (s *Stats) AddCompletion(resp *CompletionResponse) {
+	if resp.Usage.HasUsage {
+		s.AddUsage(resp.Usage)
+	} else {
+		s.TokensIn += resp.PromptTokens
+		s.TokensOut += resp.CompletionTokens
+		s.TotalTokens += resp.PromptTokens + resp.CompletionTokens
 		s.CostUSD += resp.EstimatedCostUSD
 	}
 	s.ContextUsed = resp.PromptTokens // last request's prompt size
