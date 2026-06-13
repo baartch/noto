@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"charm.land/bubbles/v2/textarea"
@@ -104,6 +105,20 @@ func TestRefreshSuggestionsFiltersByPrefix(t *testing.T) {
 	}
 	if m.suggestions[0].CommandPath != "prompt edit" {
 		t.Fatalf("unexpected suggestion %q", m.suggestions[0].CommandPath)
+	}
+}
+
+func TestRenderSuggestionsWindowScrollsToCursor(t *testing.T) {
+	m := Model{}
+	m.suggestions = makeSuggestions(20)
+	m.suggCursor = 18
+
+	out := m.renderSuggestions(5)
+	if !strings.Contains(out, "cmd") {
+		t.Fatalf("expected rendered suggestions to include command text")
+	}
+	if !strings.Contains(out, "… 15 more") {
+		t.Fatalf("expected overflow indicator in rendered suggestions")
 	}
 }
 
