@@ -147,12 +147,9 @@ func wrapLinePreservingIndent(line string, maxWidth int) []string {
 		return []string{line}
 	}
 
-	availableWidth := maxWidth - indentWidth
-	if availableWidth <= 0 {
-		availableWidth = 1
-	}
-
-	words := strings.Fields(rest)
+	words := strings.FieldsFunc(rest, func(r rune) bool {
+		return r == ' '
+	})
 	if len(words) == 0 {
 		return []string{line}
 	}
