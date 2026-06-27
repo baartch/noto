@@ -112,41 +112,78 @@ func renderCommandLine(content string) string {
 	return strings.TrimRight(sb.String(), "\n")
 }
 
-// wordWrap wraps text at maxWidth characters, respecting word boundaries.
+// wordWrap wraps text at maxWidth characters, preserving explicit line breaks
+// and indentation while still wrapping long lines at word boundaries.
 func wordWrap(text string, maxWidth int) string {
 	if maxWidth <= 0 {
 		return text
 	}
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return text
+
+	lines := strings.Split(text, "\n")
+	wrapped := make([]string, 0, len(lines))
+	for _, line := range lines {
+		wrapped = append(wrapped, wrapLinePreservingIndent(line, maxWidth)...)
+	}
+	return strings.Join(wrapped, "\n")
+}
+
+func wrapLinePreservingIndent(line string, maxWidth int) []string {
+	if line == "" {
+		return []string{""}
 	}
 
-	var lines []string
+	indentWidth := 0
+	indentByteEnd := 0
+	for i, r := range line {
+		if r != ' ' && r != '\t' {
+			break
+		}
+		indentWidth++
+		indentByteEnd = i + utf8.RuneLen(r)
+	}
+	indent := line[:indentByteEnd]
+	rest := line[indentByteEnd:]
+	if rest == "" {
+		return []string{line}
+	}
+
+	availableWidth := maxWidth - indentWidth
+	if availableWidth <= 0 {
+		availableWidth = 1
+	}
+
+	words := strings.Fields(rest)
+	if len(words) == 0 {
+		return []string{line}
+	}
+
+	var out []string
 	var current strings.Builder
-	lineLen := 0
+	current.WriteString(indent)
+	lineLen := indentWidth
 
 	for _, word := range words {
 		wLen := utf8.RuneCountInString(word)
 		switch {
-		case lineLen == 0:
+		case lineLen == indentWidth:
 			current.WriteString(word)
-			lineLen = wLen
+			lineLen += wLen
 		case lineLen+1+wLen <= maxWidth:
 			current.WriteByte(' ')
 			current.WriteString(word)
 			lineLen += 1 + wLen
 		default:
-			lines = append(lines, current.String())
+			out = append(out, current.String())
 			current.Reset()
+			current.WriteString(indent)
 			current.WriteString(word)
-			lineLen = wLen
+			lineLen = indentWidth + wLen
 		}
 	}
 	if current.Len() > 0 {
-		lines = append(lines, current.String())
+		out = append(out, current.String())
 	}
-	return strings.Join(lines, "\n")
+	return out
 }
 
 // formatTimestamp returns a display timestamp for a message.
