@@ -163,6 +163,18 @@ func (s *sidebarModel) loadInitialBatch(ctx context.Context) tea.Cmd {
 	return s.loadPage(ctx, 0)
 }
 
+func (s *sidebarModel) needsLoad() bool {
+	switch s.activeTab {
+	case sidebarTabNotes:
+		return len(s.notes) == 0
+	case sidebarTabWeekly:
+		return len(s.weekly) == 0
+	case sidebarTabMonthly:
+		return len(s.monthly) == 0
+	}
+	return false
+}
+
 func (s *sidebarModel) loadMore(ctx context.Context) tea.Cmd {
 	if s.loading || !s.hasMore {
 		return nil

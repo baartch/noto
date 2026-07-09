@@ -645,12 +645,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.sidebar.activeTab = (m.sidebar.activeTab + 1) % 3
 				m.sidebar.viewport.SetContent(m.sidebar.renderContent())
 				m.sidebar.viewport.GotoBottom()
-				return m, nil
+				var cmd tea.Cmd
+				if m.sidebar.needsLoad() {
+					cmd = m.sidebar.loadInitialBatch(context.Background())
+				}
+				return m, cmd
 			case msg.Key().Code == tea.KeyTab && msg.Key().Mod.Contains(tea.ModShift):
 				m.sidebar.activeTab = (m.sidebar.activeTab + 2) % 3
 				m.sidebar.viewport.SetContent(m.sidebar.renderContent())
 				m.sidebar.viewport.GotoBottom()
-				return m, nil
+				var cmd tea.Cmd
+				if m.sidebar.needsLoad() {
+					cmd = m.sidebar.loadInitialBatch(context.Background())
+				}
+				return m, cmd
 			case msg.Key().Code == tea.KeyEsc:
 				return m.toggleSidebar()
 			}

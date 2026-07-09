@@ -88,7 +88,7 @@ func TestSidebar_RenderNoteEntry(t *testing.T) {
 	})
 
 	t.Run("includes background", func(t *testing.T) {
-		if !strings.Contains(content, "48;5;235") {
+		if !strings.Contains(content, "48;5;233") {
 			t.Fatal("expected background color in rendered note")
 		}
 	})
@@ -124,7 +124,7 @@ func TestSidebar_RenderSummaryEntry(t *testing.T) {
 		if !strings.Contains(content, "07-05") {
 			t.Fatal("expected end date (July 5th) in weekly summary")
 		}
-		if !strings.Contains(content, "48;5;235") {
+		if !strings.Contains(content, "48;5;233") {
 			t.Fatal("expected background color in summary entry")
 		}
 	})
