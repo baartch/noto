@@ -83,6 +83,22 @@ func (s *sidebarModel) renderTabs() string {
 	return strings.Join(parts, "  ")
 }
 
+func categoryEmoji(cat store.MemoryCategory) string {
+	switch cat {
+	case store.CategoryFact:
+		return "📝"
+	case store.CategoryProgress:
+		return "📈"
+	case store.CategoryBlocker:
+		return "🚧"
+	case store.CategoryActionItem:
+		return "✅"
+	case store.CategoryOther:
+		return "📌"
+	}
+	return "📌"
+}
+
 func (s *sidebarModel) renderContent() string {
 	switch s.activeTab {
 	case sidebarTabNotes:
@@ -103,7 +119,7 @@ func (s *sidebarModel) renderNoteList() string {
 	innerW := max(s.width-4, 10)
 	for i := len(s.notes) - 1; i >= 0; i-- {
 		n := s.notes[i]
-		meta := fmt.Sprintf("%s  I%d  ·  %s", n.Category, n.Importance, n.CreatedAt.Format("2006-01-02 15:04"))
+		meta := fmt.Sprintf("%s  ★%d  ·  %s", categoryEmoji(n.Category), n.Importance, n.CreatedAt.Format("2006-01-02 15:04"))
 		body := wordWrap(n.Content, innerW)
 		rendered := sidebarEntryBorder.Width(s.width - 2).Render(
 			sidebarMetaStyle.Render(meta) + "\n" + body,

@@ -76,11 +76,11 @@ func TestSidebar_RenderNoteEntry(t *testing.T) {
 	content := s.renderContent()
 
 	t.Run("includes metadata", func(t *testing.T) {
-		if !strings.Contains(content, "fact") {
-			t.Fatal("expected category 'fact' in rendered note")
+		if !strings.Contains(content, "📝") {
+			t.Fatal("expected category emoji in rendered note")
 		}
-		if !strings.Contains(content, "I8") {
-			t.Fatal("expected 'I8' (importance prefix) in rendered note")
+		if !strings.Contains(content, "★8") {
+			t.Fatal("expected '★8' (importance) in rendered note")
 		}
 		if !strings.Contains(content, "2026-07-09 14:30") {
 			t.Fatal("expected timestamp in rendered note")
@@ -173,8 +173,8 @@ func TestSidebar_CategoryRenderedWithoutLabel(t *testing.T) {
 	if strings.Contains(content, "Category:") {
 		t.Fatal("category should not have a label prefix")
 	}
-	if !strings.Contains(content, "progress") {
-		t.Fatal("expected category 'progress' to appear")
+	if !strings.Contains(content, "📈") {
+		t.Fatal("expected category emoji '📈' for progress")
 	}
 }
 
@@ -193,9 +193,9 @@ func TestSidebar_MetadataFormat(t *testing.T) {
 		},
 	}
 	content := s.renderContent()
-	// Format: "action_item  I10  ·  2026-07-09 14:30"
-	if !strings.Contains(content, "action_item  I10  ·") {
-		t.Fatalf("expected metadata 'action_item  I10  · ...', got:\n%s", content)
+	// Format: "✅  ★10  ·  2026-07-09 14:30"
+	if !strings.Contains(content, "★10  ·") {
+		t.Fatalf("expected metadata '✅  ★10  · ...', got:\n%s", content)
 	}
 }
 
