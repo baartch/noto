@@ -2446,6 +2446,7 @@ func (m Model) toggleSidebar() (Model, tea.Cmd) {
 		return m, m.sidebar.loadInitialBatch(context.Background())
 	}
 	m.viewport.SetWidth(m.width)
+	m.viewport.SetContent(m.renderHistory())
 	m.input.SetWidth(m.width - 4)
 	return m, nil
 }
