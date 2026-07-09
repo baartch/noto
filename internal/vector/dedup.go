@@ -6,7 +6,7 @@ import (
 	"noto/internal/provider"
 )
 
-const defaultDedupThreshold = 0.92
+const defaultDedupThreshold = 0.82
 
 // DedupResult captures duplicate detection results.
 type DedupResult struct {

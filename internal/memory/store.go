@@ -50,6 +50,31 @@ func LinkCandidateContext(ctx context.Context, repo *store.MemoryNoteRepo, note 
 	return repo.Update(ctx, note)
 }
 
+// UpdateCandidateAsDuplicate merges candidate content into the existing note and links context.
+// Unlike LinkCandidateContext which only merges source IDs, this updates the note's
+// content, importance, and category to reflect the refined information.
+func UpdateCandidateAsDuplicate(ctx context.Context, repo *store.MemoryNoteRepo, note *store.MemoryNote, candidate NoteCandidate, sourceMessageIDs []string) error {
+	if note == nil {
+		return nil
+	}
+	if candidate.Content != "" && candidate.Content != note.Content {
+		note.Content = candidate.Content
+	}
+	if candidate.Importance > 0 {
+		note.Importance = normalizeImportance(candidate)
+	}
+	cat := normalizeCategory(candidate.Category)
+	if cat != note.Category {
+		note.Category = cat
+	}
+	merged, _, err := mergeSourceMessageIDs(note.SourceMessageIDs, sourceMessageIDs)
+	if err != nil {
+		return err
+	}
+	note.SourceMessageIDs = merged
+	return repo.Update(ctx, note)
+}
+
 func normalizeCategory(raw string) store.MemoryCategory {
 	cat := store.MemoryCategory(raw)
 	switch cat {

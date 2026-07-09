@@ -50,3 +50,10 @@ For additional context about technologies to be used, project structure,
 shell commands, and other important information, read:
 - `specs/005-memory-context/plan.md`
 <!-- SPECKIT END -->
+
+<!-- lean-ctx -->
+## lean-ctx
+
+lean-ctx is active — the MCP tools replace native equivalents.
+Full rules: LEAN-CTX.md (open on demand — do not auto-load).
+<!-- /lean-ctx -->
