@@ -495,13 +495,28 @@ func New(
 				execCtx.ProfileID)
 		}(),
 	}
+	if m.sidebar != nil {
+		m.sidebar.open = true
+		if execCtx.ProfileSlug != "" {
+			if meta, err := profile.ReadMetadata(execCtx.ProfileSlug); err == nil {
+				m.sidebar.open = meta.SidebarOpen
+			}
+		}
+	}
 	m.loadInitialConversationHistory(nil)
 	m.resetInputHistoryWindow()
 	return m
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return textarea.Blink }
+func (m Model) Init() tea.Cmd {
+	var cmds []tea.Cmd
+	cmds = append(cmds, textarea.Blink)
+	if m.sidebar != nil && m.sidebar.open {
+		cmds = append(cmds, m.sidebar.loadInitialBatch(context.Background()))
+	}
+	return tea.Batch(cmds...)
+}
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -2437,6 +2452,9 @@ func (m Model) toggleSidebar() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.sidebar.open = !m.sidebar.open
+
+	m.persistSidebarOpen()
+
 	if m.sidebar.open {
 		m.sidebar.width = max(m.width/4, 36)
 		mainWidth := m.width - m.sidebar.width - 1
@@ -2449,6 +2467,19 @@ func (m Model) toggleSidebar() (Model, tea.Cmd) {
 	m.viewport.SetContent(m.renderHistory())
 	m.input.SetWidth(m.width - 4)
 	return m, nil
+}
+
+func (m Model) persistSidebarOpen() {
+	if m.execCtx == nil || m.execCtx.ProfileSlug == "" {
+		return
+	}
+	meta, err := profile.ReadMetadata(m.execCtx.ProfileSlug)
+	if err != nil {
+		return
+	}
+	meta.SidebarOpen = m.sidebar.open
+	meta.UpdatedAt = time.Now().UTC()
+	_ = profile.WriteMetadata(meta)
 }
 
 func (m Model) handleSidebarMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
