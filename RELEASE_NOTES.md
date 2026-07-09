@@ -1,5 +1,11 @@
 # Release notes
 
+## 0.9.1
+
+July 9, 2026
+
+- Fix updating notes
+
 ## 0.9.0
 
 July 9, 2026

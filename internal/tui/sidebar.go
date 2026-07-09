@@ -383,8 +383,14 @@ func (s *sidebarModel) highlightProgress(noteID string) float64 {
 }
 
 func highlightBgColor(p float64) string {
-	// transition from bright blue "33" to entry bg "233"
-	return strconv.Itoa(max(0, min(255, 33+int(p*200.0))))
+	// hex interpolation from bubble blue to entry bg — avoids 256-color palette
+	// discontinuities that produce weird intermediate hues
+	startR, startG, startB := 0, 95, 175 // #005FAF (xterm 25, userBubbleBg)
+	endR, endG, endB := 18, 18, 18       // #121212 (xterm 233, sidebar entry bg)
+	r := max(0, min(255, int(float64(startR)+float64(endR-startR)*p)))
+	g := max(0, min(255, int(float64(startG)+float64(endG-startG)*p)))
+	b := max(0, min(255, int(float64(startB)+float64(endB-startB)*p)))
+	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
 }
 
 func highlightFgColor(p float64) string {
