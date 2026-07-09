@@ -91,20 +91,26 @@ func (s *Syncer) SyncNotes(ctx context.Context, notes []MemoryNoteRecord) error 
 			EmbeddingModel: s.embeddingModel,
 		}
 
-		// Check if metadata exists with matching hash (content hasn't changed)
+		// Decide whether to reuse the existing manifest metadata or embed fresh.
+		// Reuse only if the FileIndex actually has the entry's vector data.
+		// If memory.vec was deleted/corrupted, metadata survives in SQLite but
+		// the vector data is gone — we must re-embed.
+		hasVector := false
 		if existing, ok := existingMetadata[note.ID]; ok && existing.ChunkHash == chunkHash {
-			// Reuse existing embedding metadata
-			entry.EmbeddingDim = existing.EmbeddingDim
-			entry.VectorRef = existing.VectorRef
-			// Load vector ref from file index if available
 			if fileIndex, ok := s.index.(*FileIndex); ok {
-				if ref, ok := fileIndex.VectorRefFor(SourceMemoryNote, note.ID); ok {
-					entry.VectorRef = ref
+				_, hasVector = fileIndex.VectorRefFor(SourceMemoryNote, note.ID)
+			}
+			if hasVector {
+				entry.EmbeddingDim = existing.EmbeddingDim
+				entry.VectorRef = existing.VectorRef
+				if fileIndex, ok := s.index.(*FileIndex); ok {
+					if ref, ok := fileIndex.VectorRefFor(SourceMemoryNote, note.ID); ok {
+						entry.VectorRef = ref
+					}
 				}
 			}
-			// Note: Vector data will be reconstructed during index operations
-		} else {
-			// Need to embed (new note or content changed)
+		}
+		if !hasVector {
 			if fileIndex, ok := s.index.(*FileIndex); ok {
 				if ref, ok := fileIndex.VectorRefFor(SourceMemoryNote, note.ID); ok {
 					entry.VectorRef = ref

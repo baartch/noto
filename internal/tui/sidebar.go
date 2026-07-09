@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -19,6 +21,23 @@ const (
 	sidebarTabMonthly = 2
 	sidebarPageSize   = 20
 )
+
+type noteAnimState struct {
+	active    bool
+	startTime time.Time
+	dur       time.Duration
+	stagger   time.Duration
+	noteIDs   map[string]int // note ID → animation order index
+}
+
+type noteHighlightState struct {
+	active    bool
+	startTime time.Time
+	dur       time.Duration
+	noteIDs   map[string]bool
+}
+
+type sidebarAnimTick struct{}
 
 type sidebarModel struct {
 	open      bool
@@ -36,6 +55,9 @@ type sidebarModel struct {
 	noteRepo    *store.MemoryNoteRepo
 	summaryRepo *store.MemorySummaryRepo
 	profileID   string
+
+	animState      noteAnimState
+	highlightState noteHighlightState
 }
 
 func newSidebar(width int, noteRepo *store.MemoryNoteRepo, summaryRepo *store.MemorySummaryRepo, profileID string) *sidebarModel {
@@ -118,17 +140,48 @@ func (s *sidebarModel) renderNoteList() string {
 	}
 	var sb strings.Builder
 	innerW := max(s.width-4, 10)
-	for i, n := range slices.Backward(s.notes) {
+	var prevRendered bool
+	for _, n := range slices.Backward(s.notes) {
+		p := s.noteFadeProgress(n.ID)
+		if p <= 0.0 && s.animState.active {
+			continue
+		}
 		meta := fmt.Sprintf("%s  ★%d  ·  %s", categoryEmoji(n.Category), n.Importance, n.CreatedAt.Format("2006-01-02 15:04"))
 		body := wordWrap(n.Content, innerW)
-		rendered := sidebarEntryBorder.Width(s.width - 2).Render(
-			sidebarMetaStyle.Render(meta) + "\n" + body,
-		)
-		sb.WriteString(rendered)
-		sb.WriteString("\n")
-		if i > 0 {
+
+		if prevRendered {
 			sb.WriteString("\n")
 		}
+
+		hp := s.highlightProgress(n.ID)
+		switch {
+		case hp < 1.0:
+			bg := highlightBgColor(hp)
+			fg := highlightFgColor(hp)
+			entryStyle := lipgloss.NewStyle().
+				Background(lipgloss.Color(bg)).
+				Foreground(lipgloss.Color(fg)).
+				Padding(0, 1).
+				Width(s.width - 2)
+			metaStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color(fg))
+			sb.WriteString(entryStyle.Render(
+				metaStyle.Render(meta) + "\n" + body,
+			))
+		case p < 1.0:
+			c := fadeColor(p)
+			entryStyle := sidebarEntryBorder.Foreground(lipgloss.Color(c))
+			metaStyle := sidebarMetaStyle.Foreground(lipgloss.Color(c))
+			sb.WriteString(entryStyle.Width(s.width - 2).Render(
+				metaStyle.Render(meta) + "\n" + body,
+			))
+		default:
+			sb.WriteString(sidebarEntryBorder.Width(s.width - 2).Render(
+				sidebarMetaStyle.Render(meta) + "\n" + body,
+			))
+		}
+		sb.WriteString("\n")
+		prevRendered = true
 	}
 	s.appendFooter(&sb)
 	return sb.String()
@@ -232,12 +285,162 @@ func (s *sidebarModel) loadSummariesPage(ctx context.Context, summaryType string
 	return sidebarBatchMsg{tab: tab, summaries: sm, hasMore: hasMore}
 }
 
+func (s *sidebarModel) reloadNotes(ctx context.Context) tea.Cmd {
+	oldNotes := make(map[string]*store.MemoryNote, len(s.notes))
+	for _, n := range s.notes {
+		oldNotes[n.ID] = n
+	}
+	s.notes = nil
+	s.hasMore = false
+	s.loading = true
+	return func() tea.Msg {
+		all, more, err := s.noteRepo.ListByProfilePaginated(ctx, s.profileID, 9999, 0)
+		if err != nil {
+			return sidebarLoadErr{tab: sidebarTabNotes, err: err}
+		}
+		var newIDs, updatedIDs []string
+		for _, n := range all {
+			if old, existed := oldNotes[n.ID]; !existed {
+				newIDs = append(newIDs, n.ID)
+			} else if old.Content != n.Content || old.Importance != n.Importance {
+				updatedIDs = append(updatedIDs, n.ID)
+			}
+		}
+		hasMore := more || len(all) > sidebarPageSize
+		display := all
+		if len(display) > sidebarPageSize {
+			display = display[:sidebarPageSize]
+		}
+		return sidebarBatchMsg{tab: sidebarTabNotes, notes: display, hasMore: hasMore, newIDs: newIDs, updatedIDs: updatedIDs}
+	}
+}
+
+func (s *sidebarModel) noteFadeProgress(noteID string) float64 {
+	if !s.animState.active {
+		return 1.0
+	}
+	idx, ok := s.animState.noteIDs[noteID]
+	if !ok {
+		return 1.0
+	}
+	elapsed := time.Since(s.animState.startTime)
+	noteDelay := time.Duration(idx) * s.animState.stagger
+	noteElapsed := elapsed - noteDelay
+	if noteElapsed < 0 {
+		return 0.0
+	}
+	p := float64(noteElapsed) / float64(s.animState.dur)
+	if p > 1.0 {
+		return 1.0
+	}
+	return p
+}
+
+func fadeColor(p float64) string {
+	return strconv.Itoa(max(233, min(255, 233+int(p*19.0))))
+}
+
+func (s *sidebarModel) startAnimation(noteIDs []string) tea.Cmd {
+	s.animState = noteAnimState{
+		active:    true,
+		startTime: time.Now(),
+		dur:       700 * time.Millisecond,
+		stagger:   200 * time.Millisecond,
+		noteIDs:   make(map[string]int, len(noteIDs)),
+	}
+	for i, id := range noteIDs {
+		s.animState.noteIDs[id] = i
+	}
+	return tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg {
+		return sidebarAnimTick{}
+	})
+}
+
+func (s *sidebarModel) startHighlight(noteIDs []string) tea.Cmd {
+	s.highlightState = noteHighlightState{
+		active:    true,
+		startTime: time.Now(),
+		dur:       5 * time.Second,
+		noteIDs:   make(map[string]bool, len(noteIDs)),
+	}
+	for _, id := range noteIDs {
+		s.highlightState.noteIDs[id] = true
+	}
+	return tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg {
+		return sidebarAnimTick{}
+	})
+}
+
+func (s *sidebarModel) highlightProgress(noteID string) float64 {
+	if !s.highlightState.active || !s.highlightState.noteIDs[noteID] {
+		return 1.0
+	}
+	p := float64(time.Since(s.highlightState.startTime)) / float64(s.highlightState.dur)
+	if p > 1.0 {
+		return 1.0
+	}
+	return p
+}
+
+func highlightBgColor(p float64) string {
+	// hex interpolation from bubble blue to entry bg — avoids 256-color palette
+	// discontinuities that produce weird intermediate hues
+	startR, startG, startB := 0, 95, 175 // #005FAF (xterm 25, userBubbleBg)
+	endR, endG, endB := 18, 18, 18       // #121212 (xterm 233, sidebar entry bg)
+	r := max(0, min(255, int(float64(startR)+float64(endR-startR)*p)))
+	g := max(0, min(255, int(float64(startG)+float64(endG-startG)*p)))
+	b := max(0, min(255, int(float64(startB)+float64(endB-startB)*p)))
+	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
+}
+
+func highlightFgColor(p float64) string {
+	// transition from bright white "255" to entry fg "252"
+	return strconv.Itoa(max(0, min(255, 255-int(p*3.0))))
+}
+
+func (s *sidebarModel) handleAnimTick() tea.Cmd {
+	animDone := !s.animState.active
+	if !animDone {
+		elapsed := time.Since(s.animState.startTime)
+		total := len(s.animState.noteIDs)
+		if total == 0 {
+			s.animState.active = false
+			animDone = true
+		} else {
+			lastDone := elapsed >= s.animState.dur+time.Duration(total-1)*s.animState.stagger
+			if lastDone {
+				s.animState.active = false
+				s.animState.noteIDs = nil
+				animDone = true
+			}
+		}
+	}
+
+	highlightDone := !s.highlightState.active
+	if !highlightDone {
+		if time.Since(s.highlightState.startTime) >= s.highlightState.dur {
+			s.highlightState.active = false
+			s.highlightState.noteIDs = nil
+			highlightDone = true
+		}
+	}
+
+	if animDone && highlightDone {
+		return nil
+	}
+	return tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg {
+		return sidebarAnimTick{}
+	})
+}
+
 // sidebarBatchMsg carries a page of loaded data.
 type sidebarBatchMsg struct {
-	tab       int
-	notes     []*store.MemoryNote
-	summaries []*store.MemorySummary
-	hasMore   bool
+	tab        int
+	notes      []*store.MemoryNote
+	summaries  []*store.MemorySummary
+	hasMore    bool
+	newIDs     []string
+	updatedIDs []string
 }
 
 type sidebarLoadErr struct {

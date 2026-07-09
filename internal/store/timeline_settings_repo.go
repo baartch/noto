@@ -21,6 +21,7 @@ type TimelineSettings struct {
 	RawNoteDays          int
 	WeeklySummaryWeeks   int
 	MonthlySummaryMonths int // -1 means all remaining
+	DedupMaxAgeDays      int // notes older than this are never updated/merged by dedup
 	UpdatedAt            time.Time
 }
 
@@ -37,6 +38,9 @@ func (s *TimelineSettings) Validate() error {
 	}
 	if s.MonthlySummaryMonths != MonthlySummaryAllRemaining && s.MonthlySummaryMonths <= 0 {
 		return errors.New("store: monthly_summary_months must be > 0 or all_remaining")
+	}
+	if s.DedupMaxAgeDays < 0 {
+		return errors.New("store: dedup_max_age_days must be >= 0")
 	}
 	return nil
 }
@@ -56,6 +60,7 @@ func DefaultTimelineSettings(profileID string) *TimelineSettings {
 		RawNoteDays:          30,
 		WeeklySummaryWeeks:   8,
 		MonthlySummaryMonths: MonthlySummaryAllRemaining,
+		DedupMaxAgeDays:      7,
 	}
 }
 
@@ -74,7 +79,7 @@ func (r *TimelineSettingsRepo) Get(ctx context.Context, profileID string) (*Time
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT key, value, updated_at
 		FROM settings
-		WHERE profile_id = ? AND key IN ('raw_note_days', 'weekly_summary_weeks', 'monthly_summary_months')
+		WHERE profile_id = ? AND key IN ('raw_note_days', 'weekly_summary_weeks', 'monthly_summary_months', 'dedup_max_age_days')
 	`, profileID)
 	if err != nil {
 		return nil, fmt.Errorf("store: get timeline settings: %w", err)
@@ -105,6 +110,10 @@ func (r *TimelineSettingsRepo) Get(ctx context.Context, profileID string) (*Time
 				s.MonthlySummaryMonths = MonthlySummaryAllRemaining
 			} else if _, err := fmt.Sscanf(value, "%d", &s.MonthlySummaryMonths); err != nil {
 				return nil, fmt.Errorf("store: parse monthly_summary_months: %w", err)
+			}
+		case "dedup_max_age_days":
+			if _, err := fmt.Sscanf(value, "%d", &s.DedupMaxAgeDays); err != nil {
+				return nil, fmt.Errorf("store: parse dedup_max_age_days: %w", err)
 			}
 		}
 	}
@@ -149,6 +158,7 @@ func (r *TimelineSettingsRepo) Upsert(ctx context.Context, s *TimelineSettings) 
 		{key: "raw_note_days", value: strconv.Itoa(s.RawNoteDays)},
 		{key: "weekly_summary_weeks", value: strconv.Itoa(s.WeeklySummaryWeeks)},
 		{key: "monthly_summary_months", value: monthlyValue},
+		{key: "dedup_max_age_days", value: strconv.Itoa(s.DedupMaxAgeDays)},
 	}
 	for _, entry := range entries {
 		if _, err := r.db.ExecContext(ctx, `

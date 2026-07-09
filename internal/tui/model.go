@@ -265,6 +265,7 @@ type Model struct {
 	rawNoteDays          int
 	weeklySummaryWeeks   int
 	monthlySummaryMonths string
+	dedupMaxAgeDays      int
 	systemPrompt         string
 	providerEndpoint     string
 	providerAPIKey       string // decrypted; displayed obfuscated
@@ -495,13 +496,28 @@ func New(
 				execCtx.ProfileID)
 		}(),
 	}
+	if m.sidebar != nil {
+		m.sidebar.open = true
+		if execCtx.ProfileSlug != "" {
+			if meta, err := profile.ReadMetadata(execCtx.ProfileSlug); err == nil {
+				m.sidebar.open = meta.SidebarOpen
+			}
+		}
+	}
 	m.loadInitialConversationHistory(nil)
 	m.resetInputHistoryWindow()
 	return m
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return textarea.Blink }
+func (m Model) Init() tea.Cmd {
+	var cmds []tea.Cmd
+	cmds = append(cmds, textarea.Blink)
+	if m.sidebar != nil && m.sidebar.open {
+		cmds = append(cmds, m.sidebar.loadInitialBatch(context.Background()))
+	}
+	return tea.Batch(cmds...)
+}
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -659,8 +675,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmd = m.sidebar.loadInitialBatch(context.Background())
 				}
 				return m, cmd
-			case msg.Key().Code == tea.KeyEsc:
-				return m.toggleSidebar()
 			}
 			// Other keys fall through to normal handling.
 		}
@@ -845,6 +859,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return clearNotesIndicatorMsg{}
 			}))
 		}
+		if (saved > 0 || updated > 0) && m.sidebar != nil && m.sidebar.open && m.sidebar.activeTab == sidebarTabNotes {
+			cmds = append(cmds, m.sidebar.reloadNotes(context.Background()))
+		}
 
 	case notesSavingMsg:
 		m.notesIndicator = "📝 validating…"
@@ -861,6 +878,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.tab {
 		case sidebarTabNotes:
 			m.sidebar.notes = append(m.sidebar.notes, msg.notes...)
+			if len(msg.newIDs) > 0 {
+				cmds = append(cmds, m.sidebar.startAnimation(msg.newIDs))
+			}
+			if len(msg.updatedIDs) > 0 {
+				cmds = append(cmds, m.sidebar.startHighlight(msg.updatedIDs))
+			}
 		case sidebarTabWeekly:
 			m.sidebar.weekly = append(m.sidebar.weekly, msg.summaries...)
 		case sidebarTabMonthly:
@@ -875,6 +898,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sidebar.viewport.GotoBottom()
 		} else {
 			m.sidebar.viewport.SetYOffset(m.sidebar.viewport.YOffset() + newHeight - oldHeight)
+		}
+
+	case sidebarAnimTick:
+		if m.sidebar != nil && (m.sidebar.animState.active || m.sidebar.highlightState.active) {
+			m.sidebar.viewport.SetContent(m.sidebar.renderContent())
+			m.sidebar.viewport.GotoBottom()
+			cmds = append(cmds, m.sidebar.handleAnimTick())
 		}
 
 	case sidebarLoadErr:
@@ -945,6 +975,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshSettingsValues()
 		m.syncSettingsList()
 		m.syncViewport()
+		m.reinitSidebar()
+		if m.sidebar != nil && m.sidebar.open {
+			cmds = append(cmds, m.sidebar.loadInitialBatch(context.Background()))
+		}
 
 	case profileSwitchFailedMsg:
 		m.err = msg.err
@@ -1892,7 +1926,7 @@ func (m Model) handleSettingsSave() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		switch entry.ID {
-		case settingsIDRawNoteDays, settingsIDWeeklySummaryWeeks:
+		case settingsIDRawNoteDays, settingsIDWeeklySummaryWeeks, settingsIDDedupMaxAgeDays:
 			if m.execCtx == nil || m.execCtx.DB == nil || m.execCtx.ProfileID == "" {
 				m.settingsErr = "timeline settings unavailable"
 				return m, nil
@@ -1910,6 +1944,9 @@ func (m Model) handleSettingsSave() (tea.Model, tea.Cmd) {
 			case settingsIDWeeklySummaryWeeks:
 				current.WeeklySummaryWeeks = parsed
 				m.weeklySummaryWeeks = parsed
+			case settingsIDDedupMaxAgeDays:
+				current.DedupMaxAgeDays = parsed
+				m.dedupMaxAgeDays = parsed
 			}
 			if err := repo.Upsert(context.Background(), current); err != nil {
 				m.settingsErr = err.Error()
@@ -2028,6 +2065,7 @@ func (m *Model) refreshSettingsValues() {
 		if settings, err := timelineRepo.GetOrDefault(ctx, m.execCtx.ProfileID); err == nil {
 			m.rawNoteDays = settings.RawNoteDays
 			m.weeklySummaryWeeks = settings.WeeklySummaryWeeks
+			m.dedupMaxAgeDays = settings.DedupMaxAgeDays
 			if settings.MonthlySummaryMonths == store.MonthlySummaryAllRemaining {
 				m.monthlySummaryMonths = "all_remaining"
 			} else {
@@ -2077,6 +2115,10 @@ func applyToMenu(menu *SettingsMenu, m *Model) {
 			}
 		case settingsIDMonthlySummaryMonths:
 			entries[i].Value = m.monthlySummaryMonths
+		case settingsIDDedupMaxAgeDays:
+			if m.dedupMaxAgeDays > 0 {
+				entries[i].Value = strconv.Itoa(m.dedupMaxAgeDays)
+			}
 		case settingsIDSystemPrompt:
 			entries[i].Value = m.systemPrompt
 		case settingsIDProviderEndpoint:
@@ -2437,6 +2479,9 @@ func (m Model) toggleSidebar() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.sidebar.open = !m.sidebar.open
+
+	m.persistSidebarOpen()
+
 	if m.sidebar.open {
 		m.sidebar.width = max(m.width/4, 36)
 		mainWidth := m.width - m.sidebar.width - 1
@@ -2449,6 +2494,36 @@ func (m Model) toggleSidebar() (Model, tea.Cmd) {
 	m.viewport.SetContent(m.renderHistory())
 	m.input.SetWidth(m.width - 4)
 	return m, nil
+}
+
+func (m *Model) reinitSidebar() {
+	m.sidebar = nil
+	if m.execCtx == nil || m.execCtx.DB == nil {
+		return
+	}
+	m.sidebar = newSidebar(max(m.width/4, 36),
+		store.NewMemoryNoteRepo(m.execCtx.DB),
+		store.NewMemorySummaryRepo(m.execCtx.DB),
+		m.execCtx.ProfileID)
+	m.sidebar.open = true
+	if m.execCtx.ProfileSlug != "" {
+		if meta, err := profile.ReadMetadata(m.execCtx.ProfileSlug); err == nil {
+			m.sidebar.open = meta.SidebarOpen
+		}
+	}
+}
+
+func (m Model) persistSidebarOpen() {
+	if m.execCtx == nil || m.execCtx.ProfileSlug == "" {
+		return
+	}
+	meta, err := profile.ReadMetadata(m.execCtx.ProfileSlug)
+	if err != nil {
+		return
+	}
+	meta.SidebarOpen = m.sidebar.open
+	meta.UpdatedAt = time.Now().UTC()
+	_ = profile.WriteMetadata(meta)
 }
 
 func (m Model) handleSidebarMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
