@@ -24,7 +24,7 @@ Output schema (all keys required):
   "confidence": 0.0-1.0,
   "notes": [
     {
-      "action": "add|update",  ← do NOT emit "merge"; the system auto-detects it
+      "action": "add|update",
       "target_id": "note_id_when_updating",
       "category": "fact|progress|blocker|action_item|other",
       "content": "max 220 chars, one concise sentence",
@@ -44,16 +44,12 @@ Hard rules:
    - "confidence": 0
    - "notes": []
 4) Set "action" per note:
-   - Use "update" when clearly correcting/refining existing memory.
+   - Use "update" only when clearly correcting/refining existing memory.
    - For "update", copy the full "target_id: mn-..." value from the note listing.
    - For "add", set "target_id" to "".
-   - You do NOT need to emit "merge" — the system auto-detects when an "add"
-     overlaps multiple existing notes and merges them automatically.
 5) Do not duplicate existing notes; prefer update when correcting, add when new.
    - If the user changes their mind or refines a detail (e.g. "actually I prefer X, not Y"),
      find the matching existing note and use "update" with its target_id.
-   - If the same topic has multiple existing notes, just use "add" — the system
-     will merge them automatically.
    - Only use "add" when the topic is genuinely new and no existing note is relevant.
 6) Keep note content atomic and specific (no lists, no combined topics).
 

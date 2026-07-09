@@ -140,7 +140,8 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, profileSlug, con
 		addItems = append(addItems, it)
 	}
 
-	processor := NewProcessor(e.noteRepo, e.deduper, e.logHook)
+	processor := NewProcessor(e.noteRepo, e.deduper, e.logHook).
+		WithNoteMaxAgeDays(e.noteMaxAgeDays)
 	if e.noteRepo != nil && e.noteRepo.DB() != nil {
 		processor.WithSummaryRollups(NewSummaryRollupBuilder(e.noteRepo, store.NewMemorySummaryRepo(e.noteRepo.DB())))
 	}
