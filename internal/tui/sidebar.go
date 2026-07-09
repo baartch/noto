@@ -30,6 +30,13 @@ type noteAnimState struct {
 	noteIDs   map[string]int // note ID → animation order index
 }
 
+type noteHighlightState struct {
+	active    bool
+	startTime time.Time
+	dur       time.Duration
+	noteIDs   map[string]bool
+}
+
 type sidebarAnimTick struct{}
 
 type sidebarModel struct {
@@ -49,8 +56,9 @@ type sidebarModel struct {
 	summaryRepo *store.MemorySummaryRepo
 	profileID   string
 
-	animState    noteAnimState
-	reloadOldIDs map[string]bool
+	animState      noteAnimState
+	highlightState noteHighlightState
+	reloadOldNotes map[string]*store.MemoryNote
 }
 
 func newSidebar(width int, noteRepo *store.MemoryNoteRepo, summaryRepo *store.MemorySummaryRepo, profileID string) *sidebarModel {
@@ -146,14 +154,29 @@ func (s *sidebarModel) renderNoteList() string {
 			sb.WriteString("\n")
 		}
 
-		if p < 1.0 {
+		hp := s.highlightProgress(n.ID)
+		switch {
+		case hp < 1.0:
+			bg := highlightBgColor(hp)
+			fg := highlightFgColor(hp)
+			entryStyle := lipgloss.NewStyle().
+				Background(lipgloss.Color(bg)).
+				Foreground(lipgloss.Color(fg)).
+				Padding(0, 1).
+				Width(s.width - 2)
+			metaStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color(fg))
+			sb.WriteString(entryStyle.Render(
+				metaStyle.Render(meta) + "\n" + body,
+			))
+		case p < 1.0:
 			c := fadeColor(p)
 			entryStyle := sidebarEntryBorder.Foreground(lipgloss.Color(c))
 			metaStyle := sidebarMetaStyle.Foreground(lipgloss.Color(c))
 			sb.WriteString(entryStyle.Width(s.width - 2).Render(
 				metaStyle.Render(meta) + "\n" + body,
 			))
-		} else {
+		default:
 			sb.WriteString(sidebarEntryBorder.Width(s.width - 2).Render(
 				sidebarMetaStyle.Render(meta) + "\n" + body,
 			))
@@ -264,9 +287,9 @@ func (s *sidebarModel) loadSummariesPage(ctx context.Context, summaryType string
 }
 
 func (s *sidebarModel) reloadNotes(ctx context.Context) tea.Cmd {
-	s.reloadOldIDs = make(map[string]bool, len(s.notes))
+	s.reloadOldNotes = make(map[string]*store.MemoryNote, len(s.notes))
 	for _, n := range s.notes {
-		s.reloadOldIDs[n.ID] = true
+		s.reloadOldNotes[n.ID] = n
 	}
 	s.notes = nil
 	s.hasMore = false
@@ -304,7 +327,7 @@ func (s *sidebarModel) startAnimation(noteIDs []string) tea.Cmd {
 		active:    true,
 		startTime: time.Now(),
 		dur:       700 * time.Millisecond,
-		stagger:   500 * time.Millisecond,
+		stagger:   200 * time.Millisecond,
 		noteIDs:   make(map[string]int, len(noteIDs)),
 	}
 	for i, id := range noteIDs {
@@ -315,18 +338,70 @@ func (s *sidebarModel) startAnimation(noteIDs []string) tea.Cmd {
 	})
 }
 
-func (s *sidebarModel) handleAnimTick() tea.Cmd {
-	elapsed := time.Since(s.animState.startTime)
-	total := len(s.animState.noteIDs)
-	if total == 0 {
-		s.animState.active = false
-		return nil
+func (s *sidebarModel) startHighlight(noteIDs []string) tea.Cmd {
+	s.highlightState = noteHighlightState{
+		active:    true,
+		startTime: time.Now(),
+		dur:       5 * time.Second,
+		noteIDs:   make(map[string]bool, len(noteIDs)),
 	}
-	lastDone := elapsed >= s.animState.dur+time.Duration(total-1)*s.animState.stagger
-	if lastDone {
-		s.animState.active = false
-		s.animState.noteIDs = nil
-		s.reloadOldIDs = nil
+	for _, id := range noteIDs {
+		s.highlightState.noteIDs[id] = true
+	}
+	return tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg {
+		return sidebarAnimTick{}
+	})
+}
+
+func (s *sidebarModel) highlightProgress(noteID string) float64 {
+	if !s.highlightState.active || !s.highlightState.noteIDs[noteID] {
+		return 1.0
+	}
+	p := float64(time.Since(s.highlightState.startTime)) / float64(s.highlightState.dur)
+	if p > 1.0 {
+		return 1.0
+	}
+	return p
+}
+
+func highlightBgColor(p float64) string {
+	// transition from bright blue "33" to entry bg "233"
+	return strconv.Itoa(max(0, min(255, 33+int(p*200.0))))
+}
+
+func highlightFgColor(p float64) string {
+	// transition from bright white "255" to entry fg "252"
+	return strconv.Itoa(max(0, min(255, 255-int(p*3.0))))
+}
+
+func (s *sidebarModel) handleAnimTick() tea.Cmd {
+	animDone := !s.animState.active
+	if !animDone {
+		elapsed := time.Since(s.animState.startTime)
+		total := len(s.animState.noteIDs)
+		if total == 0 {
+			s.animState.active = false
+			animDone = true
+		} else {
+			lastDone := elapsed >= s.animState.dur+time.Duration(total-1)*s.animState.stagger
+			if lastDone {
+				s.animState.active = false
+				s.animState.noteIDs = nil
+				animDone = true
+			}
+		}
+	}
+
+	highlightDone := !s.highlightState.active
+	if !highlightDone {
+		if time.Since(s.highlightState.startTime) >= s.highlightState.dur {
+			s.highlightState.active = false
+			s.highlightState.noteIDs = nil
+			highlightDone = true
+		}
+	}
+
+	if animDone && highlightDone {
 		return nil
 	}
 	return tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg {
