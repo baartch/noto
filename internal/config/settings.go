@@ -45,9 +45,12 @@ Hard rules:
    - "notes": []
 4) Set "action" per note:
    - Use "update" only when clearly correcting/refining existing memory.
-   - For "update", include a valid "target_id" from Existing notes.
+   - For "update", copy the full "target_id: mn-..." value from the note listing.
    - For "add", set "target_id" to "".
 5) Do not duplicate existing notes; prefer update when correcting, add when new.
+   - If the user changes their mind or refines a detail (e.g. "actually I prefer X, not Y"),
+     find the matching existing note and use "update" with its target_id.
+   - Only use "add" when the topic is genuinely new and no existing note is relevant.
 6) Keep note content atomic and specific (no lists, no combined topics).
 
 Importance rubric:

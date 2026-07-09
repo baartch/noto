@@ -200,12 +200,12 @@ func formatExistingNotes(existing []*store.MemoryNote) string {
 	if len(existing) == 0 {
 		return "(none)"
 	}
-	if len(existing) > 50 {
-		existing = existing[:50]
+	if len(existing) > 25 {
+		existing = existing[:25]
 	}
 	lines := make([]string, 0, len(existing))
-	for _, n := range existing {
-		lines = append(lines, fmt.Sprintf("- %s | (%s) %s", n.ID, n.Category, n.Content))
+	for i, n := range existing {
+		lines = append(lines, fmt.Sprintf("- [#%d] (%s) %s  → target_id: %s", i+1, n.Category, n.Content, n.ID))
 	}
 	return strings.Join(lines, "\n")
 }
