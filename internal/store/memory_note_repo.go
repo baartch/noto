@@ -124,6 +124,41 @@ func (r *MemoryNoteRepo) ListByProfile(ctx context.Context, profileID string) ([
 	return notes, rows.Err()
 }
 
+// ListByProfilePaginated returns memory notes with pagination, ordered by created_at DESC.
+func (r *MemoryNoteRepo) ListByProfilePaginated(ctx context.Context, profileID string, limit, offset int) ([]*MemoryNote, bool, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, profile_id, COALESCE(conversation_id,''), category, content, importance,
+		       source_message_ids, created_at, updated_at
+		FROM memory_notes
+		WHERE profile_id = ?
+		ORDER BY created_at DESC
+		LIMIT ? OFFSET ?
+	`, profileID, limit, offset)
+	if err != nil {
+		return nil, false, fmt.Errorf("store: list memory notes paginated: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var notes []*MemoryNote
+	for rows.Next() {
+		n := &MemoryNote{}
+		var cat string
+		if err := rows.Scan(
+			&n.ID, &n.ProfileID, &n.ConversationID, &cat, &n.Content, &n.Importance,
+			&n.SourceMessageIDs, &n.CreatedAt, &n.UpdatedAt,
+		); err != nil {
+			return nil, false, fmt.Errorf("store: scan memory note: %w", err)
+		}
+		n.Category = MemoryCategory(cat)
+		notes = append(notes, n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	hasMore := len(notes) == limit
+	return notes, hasMore, nil
+}
+
 // Update updates the content and importance of a memory note.
 func (r *MemoryNoteRepo) Update(ctx context.Context, n *MemoryNote) error {
 	result, err := r.db.ExecContext(ctx, `
