@@ -296,6 +296,8 @@ type Model struct {
 	embeddingModelMissing  bool
 	promptBootstrapWarning bool
 	embeddingModel         string
+
+	sidebar *sidebarModel
 }
 
 type conversationHistoryWindow struct {
@@ -324,6 +326,7 @@ type keyMap struct {
 	clearInput    key.Binding
 	toggleHelp    key.Binding
 	openSettings  key.Binding
+	toggleSidebar key.Binding
 	profileNew    key.Binding
 	profileRename key.Binding
 	profileDelete key.Binding
@@ -417,6 +420,7 @@ func New(
 		clearInput:    key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "clear")),
 		toggleHelp:    key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("ctrl+h", "help")),
 		openSettings:  key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j", "settings")),
+		toggleSidebar: key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("ctrl+p", "sidebar")),
 		profileNew:    key.NewBinding(key.WithKeys("ctrl+n"), key.WithHelp("ctrl+n", "new profile")),
 		profileRename: key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "rename profile")),
 		profileDelete: key.NewBinding(key.WithKeys("ctrl+k"), key.WithHelp("ctrl+k", "delete profile")),
@@ -431,6 +435,7 @@ func New(
 		secondary: []key.Binding{
 			keys.openSettings,
 			keys.openModel,
+			keys.toggleSidebar,
 			keys.clearInput,
 			key.NewBinding(key.WithKeys("wheel"), key.WithHelp("wheel", "scroll messages/input by cursor zone")),
 			key.NewBinding(key.WithKeys("pgup/pgdn"), key.WithHelp("pgup/pgdn", "scroll messages")),
@@ -480,6 +485,15 @@ func New(
 		settingsEditor:         settingsEditor,
 		settingsErr:            "",
 		historyErr:             "",
+		sidebar: func() *sidebarModel {
+			if execCtx == nil || execCtx.DB == nil {
+				return nil
+			}
+			return newSidebar(36,
+				store.NewMemoryNoteRepo(execCtx.DB),
+				store.NewMemorySummaryRepo(execCtx.DB),
+				execCtx.ProfileID)
+		}(),
 	}
 	m.loadInitialConversationHistory(nil)
 	m.resetInputHistoryWindow()
@@ -498,17 +512,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.input.SetWidth(msg.Width - 4)
+		if m.sidebar != nil {
+			m.sidebar.width = max(msg.Width/5, 36)
+		}
+		mainWidth := m.width
+		if m.sidebar != nil && m.sidebar.open {
+			mainWidth = m.width - m.sidebar.width - 1
+		}
+		m.input.SetWidth(mainWidth - 4)
 		// header(1) + divider(1) + inputDivider(1) + inputLine(1) + padding(1) = 5
 		vpH := msg.Height - 5 // inputDivider+input+hint+footer
 		vpH = max(vpH, 1)
 		if !m.ready {
-			m.viewport = viewport.New(viewport.WithWidth(msg.Width), viewport.WithHeight(vpH))
+			m.viewport = viewport.New(viewport.WithWidth(mainWidth), viewport.WithHeight(vpH))
 			m.viewport.SetContent(m.renderHistory())
 			m.viewport.GotoBottom()
 			m.ready = true
 		} else {
-			m.viewport.SetWidth(msg.Width)
+			m.viewport.SetWidth(mainWidth)
 			m.viewport.SetHeight(vpH)
 		}
 
@@ -522,6 +543,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ---- mouse --------------------------------------------------------------
 	case tea.MouseWheelMsg:
+		if m.sidebar != nil && m.sidebar.open {
+			mouse := msg.Mouse()
+			if mouse.X >= m.width-m.sidebar.width {
+				return m.handleSidebarMouseWheel(msg)
+			}
+		}
 		return m.handleMouseWheel(msg)
 
 	// ---- keyboard -----------------------------------------------------------
@@ -609,6 +636,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateSuggNav(msg, cmds)
 		}
 
+		// Sidebar: Tab/Shift+Tab cycle tabs, Esc closes.
+		if m.sidebar != nil && m.sidebar.open {
+			switch {
+			case key.Matches(msg, m.keys.toggleSidebar):
+				return m.toggleSidebar()
+			case msg.Key().Code == tea.KeyTab:
+				m.sidebar.activeTab = (m.sidebar.activeTab + 1) % 3
+				m.sidebar.viewport.SetContent(m.sidebar.renderContent())
+				m.sidebar.viewport.GotoBottom()
+				return m, nil
+			case msg.Key().Code == tea.KeyTab && msg.Key().Mod.Contains(tea.ModShift):
+				m.sidebar.activeTab = (m.sidebar.activeTab + 2) % 3
+				m.sidebar.viewport.SetContent(m.sidebar.renderContent())
+				m.sidebar.viewport.GotoBottom()
+				return m, nil
+			case msg.Key().Code == tea.KeyEsc:
+				return m.toggleSidebar()
+			}
+			// Other keys fall through to normal handling.
+		}
+
 		//exhaustive:ignore
 		switch {
 		case key.Matches(msg, m.keys.clearInput):
@@ -625,6 +673,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.toggleHelp):
 			m.help.ShowAll = !m.help.ShowAll
 			return m, nil
+
+		case key.Matches(msg, m.keys.toggleSidebar):
+			return m.toggleSidebar()
 
 		case key.Matches(msg, m.keys.openSettings) || msg.String() == "ctrl+j" || msg.Key().Keystroke() == "ctrl+j":
 			m.clearSuggestions()
@@ -793,6 +844,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clearNotesIndicatorMsg:
 		m.notesIndicator = ""
+
+	// ---- sidebar ------------------------------------------------------------
+	case sidebarBatchMsg:
+		oldContent := m.sidebar.renderContent()
+		oldHeight := lipgloss.Height(oldContent)
+		wasAtBottom := m.sidebar.viewport.AtBottom()
+		switch msg.tab {
+		case sidebarTabNotes:
+			m.sidebar.notes = append(m.sidebar.notes, msg.notes...)
+		case sidebarTabWeekly:
+			m.sidebar.weekly = append(m.sidebar.weekly, msg.summaries...)
+		case sidebarTabMonthly:
+			m.sidebar.monthly = append(m.sidebar.monthly, msg.summaries...)
+		}
+		m.sidebar.hasMore = msg.hasMore
+		m.sidebar.loading = false
+		newContent := m.sidebar.renderContent()
+		newHeight := lipgloss.Height(newContent)
+		m.sidebar.viewport.SetContent(newContent)
+		if wasAtBottom {
+			m.sidebar.viewport.GotoBottom()
+		} else {
+			m.sidebar.viewport.SetYOffset(m.sidebar.viewport.YOffset() + newHeight - oldHeight)
+		}
+
+	case sidebarLoadErr:
+		m.sidebar.loading = false
+		m.err = msg.err
 
 	// ---- editor finished ----------------------------------------------------
 	case editorFinishedMsg:
@@ -1315,6 +1394,11 @@ func (m Model) View() tea.View {
 		return tea.NewView("")
 	}
 
+	mainWidth := m.width
+	if m.sidebar != nil && m.sidebar.open {
+		mainWidth = m.width - m.sidebar.width - 1
+	}
+
 	// ---- middle: picker or suggestions ----
 	var mid strings.Builder
 	ph := max(m.height/2, 10)
@@ -1327,7 +1411,7 @@ func (m Model) View() tea.View {
 		mid.WriteString(m.renderSuggestions(m.suggestionMaxHeight()))
 	}
 
-	helperWidth := max(m.width-2, 0)
+	helperWidth := max(mainWidth-2, 0)
 	m.help.SetWidth(helperWidth)
 	m.updateListHelp()
 	var helpBlock string
@@ -1344,7 +1428,7 @@ func (m Model) View() tea.View {
 	}
 
 	// ---- input bar ----
-	inputDivider := dividerStyle.Render(strings.Repeat("─", m.width))
+	inputDivider := dividerStyle.Render(strings.Repeat("─", mainWidth))
 	inputView := strings.TrimRight(m.input.View(), "\n")
 	inputLine := lipgloss.NewStyle().PaddingLeft(1).Render(inputView)
 
@@ -1357,13 +1441,40 @@ func (m Model) View() tea.View {
 		m.viewport.SetHeight(desiredViewportHeight)
 	}
 
-	view := tea.NewView(m.viewport.View() + "\n" +
+	content := m.viewport.View() + "\n" +
 		midStr +
 		errBlock +
 		helpBlock +
 		inputDivider + "\n" +
 		inputLine + "\n" +
-		footer)
+		footer
+	if m.sidebar != nil && m.sidebar.open {
+		sidebarContent := m.sidebar.render(m.height)
+		mainLines := strings.Split(content, "\n")
+		sideLines := strings.Split(sidebarContent, "\n")
+		n := max(len(mainLines), len(sideLines))
+		var sb strings.Builder
+		for i := range n {
+			var ml, sl string
+			if i < len(mainLines) {
+				ml = mainLines[i]
+			}
+			if i < len(sideLines) {
+				sl = sideLines[i]
+			}
+			w := lipgloss.Width(ml)
+			if w < mainWidth {
+				ml += strings.Repeat(" ", mainWidth-w)
+			}
+			sb.WriteString(ml)
+			sb.WriteString(sl)
+			if i < n-1 {
+				sb.WriteString("\n")
+			}
+		}
+		content = sb.String()
+	}
+	view := tea.NewView(content)
 	view.AltScreen = true
 	view.MouseMode = tea.MouseModeCellMotion
 	return view
@@ -2313,6 +2424,48 @@ func (m Model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) toggleSidebar() (Model, tea.Cmd) {
+	if m.sidebar == nil {
+		return m, nil
+	}
+	m.sidebar.open = !m.sidebar.open
+	if m.sidebar.open {
+		m.sidebar.width = max(m.width/5, 36)
+		mainWidth := m.width - m.sidebar.width - 1
+		m.viewport.SetWidth(mainWidth)
+		m.viewport.SetContent(m.renderHistory())
+		m.input.SetWidth(mainWidth - 4)
+		return m, m.sidebar.loadInitialBatch(context.Background())
+	}
+	m.viewport.SetWidth(m.width)
+	m.input.SetWidth(m.width - 4)
+	return m, nil
+}
+
+func (m Model) handleSidebarMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	mouse := msg.Mouse()
+	if mouse.Button == tea.MouseWheelUp {
+		var cmd tea.Cmd
+		for range conversationWheelStepLines {
+			m.sidebar.viewport, cmd = m.sidebar.viewport.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+		}
+		// Load more when scrolled to the top.
+		if m.sidebar.viewport.AtTop() && m.sidebar.hasMore && !m.sidebar.loading {
+			cmds := []tea.Cmd{cmd, m.sidebar.loadMore(context.Background())}
+			return m, tea.Batch(cmds...)
+		}
+		return m, cmd
+	}
+	if mouse.Button == tea.MouseWheelDown {
+		var cmd tea.Cmd
+		for range conversationWheelStepLines {
+			m.sidebar.viewport, cmd = m.sidebar.viewport.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+		}
+		return m, cmd
+	}
+	return m, nil
+}
+
 func (m *Model) syncViewport() {
 	if !m.ready {
 		return
@@ -2333,9 +2486,12 @@ func (m *Model) renderHistory() string {
 		return "\n" + headerStyle.Render("  No messages yet — start typing below.") + "\n"
 	}
 
-	termWidth := m.width
+	termWidth := m.viewport.Width()
 	if termWidth < 40 {
-		termWidth = 80 // safe default before WindowSizeMsg
+		termWidth = m.width // fallback before viewport is ready
+	}
+	if termWidth < 40 {
+		termWidth = 80
 	}
 
 	var sb strings.Builder
