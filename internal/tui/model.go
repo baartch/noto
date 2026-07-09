@@ -513,7 +513,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		if m.sidebar != nil {
-			m.sidebar.width = max(msg.Width/5, 36)
+			m.sidebar.width = max(msg.Width/4, 36)
 		}
 		mainWidth := m.width
 		if m.sidebar != nil && m.sidebar.open {
@@ -2438,7 +2438,7 @@ func (m Model) toggleSidebar() (Model, tea.Cmd) {
 	}
 	m.sidebar.open = !m.sidebar.open
 	if m.sidebar.open {
-		m.sidebar.width = max(m.width/5, 36)
+		m.sidebar.width = max(m.width/4, 36)
 		mainWidth := m.width - m.sidebar.width - 1
 		m.viewport.SetWidth(mainWidth)
 		m.viewport.SetContent(m.renderHistory())

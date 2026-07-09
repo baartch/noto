@@ -14,7 +14,7 @@ import (
 func TestSidebar_JoinWidths(t *testing.T) {
 	width := 200
 	height := 40
-	sidebarW := max(width/5, 36)
+	sidebarW := max(width/4, 36)
 	mainWidth := width - sidebarW - 1
 
 	vp := viewport.New(
