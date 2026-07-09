@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -19,6 +21,16 @@ const (
 	sidebarTabMonthly = 2
 	sidebarPageSize   = 20
 )
+
+type noteAnimState struct {
+	active    bool
+	startTime time.Time
+	dur       time.Duration
+	stagger   time.Duration
+	noteIDs   map[string]int // note ID → animation order index
+}
+
+type sidebarAnimTick struct{}
 
 type sidebarModel struct {
 	open      bool
@@ -36,6 +48,9 @@ type sidebarModel struct {
 	noteRepo    *store.MemoryNoteRepo
 	summaryRepo *store.MemorySummaryRepo
 	profileID   string
+
+	animState    noteAnimState
+	reloadOldIDs map[string]bool
 }
 
 func newSidebar(width int, noteRepo *store.MemoryNoteRepo, summaryRepo *store.MemorySummaryRepo, profileID string) *sidebarModel {
@@ -118,17 +133,33 @@ func (s *sidebarModel) renderNoteList() string {
 	}
 	var sb strings.Builder
 	innerW := max(s.width-4, 10)
-	for i, n := range slices.Backward(s.notes) {
+	var prevRendered bool
+	for _, n := range slices.Backward(s.notes) {
+		p := s.noteFadeProgress(n.ID)
+		if p <= 0.0 && s.animState.active {
+			continue
+		}
 		meta := fmt.Sprintf("%s  ★%d  ·  %s", categoryEmoji(n.Category), n.Importance, n.CreatedAt.Format("2006-01-02 15:04"))
 		body := wordWrap(n.Content, innerW)
-		rendered := sidebarEntryBorder.Width(s.width - 2).Render(
-			sidebarMetaStyle.Render(meta) + "\n" + body,
-		)
-		sb.WriteString(rendered)
-		sb.WriteString("\n")
-		if i > 0 {
+
+		if prevRendered {
 			sb.WriteString("\n")
 		}
+
+		if p < 1.0 {
+			c := fadeColor(p)
+			entryStyle := sidebarEntryBorder.Foreground(lipgloss.Color(c))
+			metaStyle := sidebarMetaStyle.Foreground(lipgloss.Color(c))
+			sb.WriteString(entryStyle.Width(s.width - 2).Render(
+				metaStyle.Render(meta) + "\n" + body,
+			))
+		} else {
+			sb.WriteString(sidebarEntryBorder.Width(s.width - 2).Render(
+				sidebarMetaStyle.Render(meta) + "\n" + body,
+			))
+		}
+		sb.WriteString("\n")
+		prevRendered = true
 	}
 	s.appendFooter(&sb)
 	return sb.String()
@@ -230,6 +261,77 @@ func (s *sidebarModel) loadSummariesPage(ctx context.Context, summaryType string
 		return sidebarLoadErr{tab: tab, err: err}
 	}
 	return sidebarBatchMsg{tab: tab, summaries: sm, hasMore: hasMore}
+}
+
+func (s *sidebarModel) reloadNotes(ctx context.Context) tea.Cmd {
+	s.reloadOldIDs = make(map[string]bool, len(s.notes))
+	for _, n := range s.notes {
+		s.reloadOldIDs[n.ID] = true
+	}
+	s.notes = nil
+	s.hasMore = false
+	s.loading = true
+	return s.loadPage(ctx, 0)
+}
+
+func (s *sidebarModel) noteFadeProgress(noteID string) float64 {
+	if !s.animState.active {
+		return 1.0
+	}
+	idx, ok := s.animState.noteIDs[noteID]
+	if !ok {
+		return 1.0
+	}
+	elapsed := time.Since(s.animState.startTime)
+	noteDelay := time.Duration(idx) * s.animState.stagger
+	noteElapsed := elapsed - noteDelay
+	if noteElapsed < 0 {
+		return 0.0
+	}
+	p := float64(noteElapsed) / float64(s.animState.dur)
+	if p > 1.0 {
+		return 1.0
+	}
+	return p
+}
+
+func fadeColor(p float64) string {
+	return strconv.Itoa(max(233, min(255, 233+int(p*19.0))))
+}
+
+func (s *sidebarModel) startAnimation(noteIDs []string) tea.Cmd {
+	s.animState = noteAnimState{
+		active:    true,
+		startTime: time.Now(),
+		dur:       700 * time.Millisecond,
+		stagger:   500 * time.Millisecond,
+		noteIDs:   make(map[string]int, len(noteIDs)),
+	}
+	for i, id := range noteIDs {
+		s.animState.noteIDs[id] = i
+	}
+	return tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg {
+		return sidebarAnimTick{}
+	})
+}
+
+func (s *sidebarModel) handleAnimTick() tea.Cmd {
+	elapsed := time.Since(s.animState.startTime)
+	total := len(s.animState.noteIDs)
+	if total == 0 {
+		s.animState.active = false
+		return nil
+	}
+	lastDone := elapsed >= s.animState.dur+time.Duration(total-1)*s.animState.stagger
+	if lastDone {
+		s.animState.active = false
+		s.animState.noteIDs = nil
+		s.reloadOldIDs = nil
+		return nil
+	}
+	return tea.Tick(16*time.Millisecond, func(t time.Time) tea.Msg {
+		return sidebarAnimTick{}
+	})
 }
 
 // sidebarBatchMsg carries a page of loaded data.

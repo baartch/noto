@@ -858,6 +858,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return clearNotesIndicatorMsg{}
 			}))
 		}
+		if saved > 0 && m.sidebar != nil && m.sidebar.open && m.sidebar.activeTab == sidebarTabNotes {
+			cmds = append(cmds, m.sidebar.reloadNotes(context.Background()))
+		}
 
 	case notesSavingMsg:
 		m.notesIndicator = "📝 validating…"
@@ -873,7 +876,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		wasAtBottom := m.sidebar.viewport.AtBottom()
 		switch msg.tab {
 		case sidebarTabNotes:
+			var newIDs []string
+			if m.sidebar.reloadOldIDs != nil {
+				for _, n := range msg.notes {
+					if !m.sidebar.reloadOldIDs[n.ID] {
+						newIDs = append(newIDs, n.ID)
+					}
+				}
+				m.sidebar.reloadOldIDs = nil
+			}
 			m.sidebar.notes = append(m.sidebar.notes, msg.notes...)
+			if len(newIDs) > 0 {
+				cmds = append(cmds, m.sidebar.startAnimation(newIDs))
+			}
 		case sidebarTabWeekly:
 			m.sidebar.weekly = append(m.sidebar.weekly, msg.summaries...)
 		case sidebarTabMonthly:
@@ -888,6 +903,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sidebar.viewport.GotoBottom()
 		} else {
 			m.sidebar.viewport.SetYOffset(m.sidebar.viewport.YOffset() + newHeight - oldHeight)
+		}
+
+	case sidebarAnimTick:
+		if m.sidebar != nil && m.sidebar.animState.active {
+			m.sidebar.viewport.SetContent(m.sidebar.renderContent())
+			m.sidebar.viewport.GotoBottom()
+			cmds = append(cmds, m.sidebar.handleAnimTick())
 		}
 
 	case sidebarLoadErr:
