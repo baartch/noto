@@ -22,6 +22,12 @@ func (c *NoopCodec) ReadVectors(_ io.Reader, _ int, _ int) ([]float32, error) { 
 // WriteVectors is a no-op.
 func (c *NoopCodec) WriteVectors(_ io.Writer, _ []float32, _ int) error { return nil }
 
+// ReadEntries returns no entries.
+func (c *NoopCodec) ReadEntries(_ io.Reader, _ int) ([]EntryRecord, error) { return nil, nil }
+
+// WriteEntries is a no-op.
+func (c *NoopCodec) WriteEntries(_ io.Writer, _ []EntryRecord) error { return nil }
+
 // ReadGraph returns an empty graph payload.
 func (c *NoopCodec) ReadGraph(_ io.Reader) ([]byte, error) { return nil, nil }
 

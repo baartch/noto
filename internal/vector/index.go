@@ -120,6 +120,9 @@ func (f *FileIndex) WithProfile(profileID string) {
 }
 
 // Load reads memory.vec into memory if it exists.
+// Supports V1 (NOTOVEC1 — vectors + graph only) and V2 (NOTOVEC2 — includes entry metadata).
+// V2 files fully restore f.entries and f.refToKey so Search works across sessions.
+// V1 files keep entries empty (backward compat; entries are repopulated on next sync).
 func (f *FileIndex) Load() error {
 	if f.codec == nil {
 		return errors.New("vector: codec not configured")
@@ -148,6 +151,27 @@ func (f *FileIndex) Load() error {
 	}
 	f.vectors = reshapeVectors(vectors, int(header.EntryCount), int(header.EmbeddingDim))
 
+	// V2 format includes entry metadata — restore entries and refToKey map
+	if header.HasEntries {
+		entries, err := f.codec.ReadEntries(file, int(header.EntryCount))
+		if err != nil {
+			return ErrIndexCorrupted
+		}
+		for _, entry := range entries {
+			key := entryKey(SourceType(entry.SourceType), entry.SourceID)
+			f.entries[key] = Entry{
+				ID:         "ve-" + entry.SourceID,
+				SourceType: SourceType(entry.SourceType),
+				SourceID:   entry.SourceID,
+				ChunkHash:  entry.ChunkHash,
+				VectorRef:  entry.VectorRef,
+			}
+			if entry.VectorRef != "" {
+				f.refToKey[entry.VectorRef] = key
+			}
+		}
+	}
+
 	graphBytes, err := f.codec.ReadGraph(file)
 	if err != nil {
 		return ErrIndexCorrupted
@@ -155,12 +179,6 @@ func (f *FileIndex) Load() error {
 	if f.graph != nil && len(graphBytes) > 0 {
 		if err := f.graph.Deserialize(graphBytes); err != nil {
 			return ErrIndexCorrupted
-		}
-		for i, vec := range f.vectors {
-			entry, ok := f.entries[f.refToKey[strconv.Itoa(i)]]
-			if ok {
-				_ = f.graph.Insert(entry.ID, vec)
-			}
 		}
 	}
 	f.loaded = true
@@ -268,7 +286,7 @@ func (f *FileIndex) Rebuild(entries []Entry) error {
 	return f.Flush()
 }
 
-// Flush writes the index to disk.
+// Flush writes the index to disk in V2 format (includes entry metadata).
 func (f *FileIndex) Flush() error {
 	if f.path == "" {
 		return nil
@@ -291,6 +309,7 @@ func (f *FileIndex) Flush() error {
 		EmbeddingModel: f.embeddingModel,
 		EmbeddingDim:   uint32(f.embeddingDim),
 		EntryCount:     uint32(len(f.vectors)),
+		HasEntries:     true,
 	}
 	if err := f.codec.WriteHeader(file, header); err != nil {
 		_ = file.Close()
@@ -299,6 +318,20 @@ func (f *FileIndex) Flush() error {
 	if err := f.codec.WriteVectors(file, flat, f.embeddingDim); err != nil {
 		_ = file.Close()
 		return fmt.Errorf("vector: write vectors: %w", err)
+	}
+	// Persist entry metadata so Load() can fully restore entries + refToKey
+	records := make([]vecfile.EntryRecord, 0, len(f.entries))
+	for _, entry := range f.entries {
+		records = append(records, vecfile.EntryRecord{
+			SourceType: string(entry.SourceType),
+			SourceID:   entry.SourceID,
+			ChunkHash:  entry.ChunkHash,
+			VectorRef:  entry.VectorRef,
+		})
+	}
+	if err := f.codec.WriteEntries(file, records); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("vector: write entries: %w", err)
 	}
 	var graphBytes []byte
 	if f.graph != nil {
