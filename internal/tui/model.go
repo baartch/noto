@@ -958,6 +958,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshSettingsValues()
 		m.syncSettingsList()
 		m.syncViewport()
+		m.reinitSidebar()
+		if m.sidebar != nil && m.sidebar.open {
+			cmds = append(cmds, m.sidebar.loadInitialBatch(context.Background()))
+		}
 
 	case profileSwitchFailedMsg:
 		m.err = msg.err
@@ -2465,6 +2469,23 @@ func (m Model) toggleSidebar() (Model, tea.Cmd) {
 	m.viewport.SetContent(m.renderHistory())
 	m.input.SetWidth(m.width - 4)
 	return m, nil
+}
+
+func (m *Model) reinitSidebar() {
+	m.sidebar = nil
+	if m.execCtx == nil || m.execCtx.DB == nil {
+		return
+	}
+	m.sidebar = newSidebar(max(m.width/4, 36),
+		store.NewMemoryNoteRepo(m.execCtx.DB),
+		store.NewMemorySummaryRepo(m.execCtx.DB),
+		m.execCtx.ProfileID)
+	m.sidebar.open = true
+	if m.execCtx.ProfileSlug != "" {
+		if meta, err := profile.ReadMetadata(m.execCtx.ProfileSlug); err == nil {
+			m.sidebar.open = meta.SidebarOpen
+		}
+	}
 }
 
 func (m Model) persistSidebarOpen() {
