@@ -58,7 +58,6 @@ type sidebarModel struct {
 
 	animState      noteAnimState
 	highlightState noteHighlightState
-	reloadOldNotes map[string]*store.MemoryNote
 }
 
 func newSidebar(width int, noteRepo *store.MemoryNoteRepo, summaryRepo *store.MemorySummaryRepo, profileID string) *sidebarModel {
@@ -287,14 +286,33 @@ func (s *sidebarModel) loadSummariesPage(ctx context.Context, summaryType string
 }
 
 func (s *sidebarModel) reloadNotes(ctx context.Context) tea.Cmd {
-	s.reloadOldNotes = make(map[string]*store.MemoryNote, len(s.notes))
+	oldNotes := make(map[string]*store.MemoryNote, len(s.notes))
 	for _, n := range s.notes {
-		s.reloadOldNotes[n.ID] = n
+		oldNotes[n.ID] = n
 	}
 	s.notes = nil
 	s.hasMore = false
 	s.loading = true
-	return s.loadPage(ctx, 0)
+	return func() tea.Msg {
+		all, more, err := s.noteRepo.ListByProfilePaginated(ctx, s.profileID, 9999, 0)
+		if err != nil {
+			return sidebarLoadErr{tab: sidebarTabNotes, err: err}
+		}
+		var newIDs, updatedIDs []string
+		for _, n := range all {
+			if old, existed := oldNotes[n.ID]; !existed {
+				newIDs = append(newIDs, n.ID)
+			} else if old.Content != n.Content || old.Importance != n.Importance {
+				updatedIDs = append(updatedIDs, n.ID)
+			}
+		}
+		hasMore := more || len(all) > sidebarPageSize
+		display := all
+		if len(display) > sidebarPageSize {
+			display = display[:sidebarPageSize]
+		}
+		return sidebarBatchMsg{tab: sidebarTabNotes, notes: display, hasMore: hasMore, newIDs: newIDs, updatedIDs: updatedIDs}
+	}
 }
 
 func (s *sidebarModel) noteFadeProgress(noteID string) float64 {
@@ -411,10 +429,12 @@ func (s *sidebarModel) handleAnimTick() tea.Cmd {
 
 // sidebarBatchMsg carries a page of loaded data.
 type sidebarBatchMsg struct {
-	tab       int
-	notes     []*store.MemoryNote
-	summaries []*store.MemorySummary
-	hasMore   bool
+	tab        int
+	notes      []*store.MemoryNote
+	summaries  []*store.MemorySummary
+	hasMore    bool
+	newIDs     []string
+	updatedIDs []string
 }
 
 type sidebarLoadErr struct {

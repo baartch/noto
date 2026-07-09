@@ -876,23 +876,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		wasAtBottom := m.sidebar.viewport.AtBottom()
 		switch msg.tab {
 		case sidebarTabNotes:
-			var newIDs, updatedIDs []string
-			if m.sidebar.reloadOldNotes != nil {
-				for _, n := range msg.notes {
-					if old, existed := m.sidebar.reloadOldNotes[n.ID]; !existed {
-						newIDs = append(newIDs, n.ID)
-					} else if old.Content != n.Content {
-						updatedIDs = append(updatedIDs, n.ID)
-					}
-				}
-				m.sidebar.reloadOldNotes = nil
-			}
 			m.sidebar.notes = append(m.sidebar.notes, msg.notes...)
-			if len(newIDs) > 0 {
-				cmds = append(cmds, m.sidebar.startAnimation(newIDs))
+			if len(msg.newIDs) > 0 {
+				cmds = append(cmds, m.sidebar.startAnimation(msg.newIDs))
 			}
-			if len(updatedIDs) > 0 {
-				cmds = append(cmds, m.sidebar.startHighlight(updatedIDs))
+			if len(msg.updatedIDs) > 0 {
+				cmds = append(cmds, m.sidebar.startHighlight(msg.updatedIDs))
 			}
 		case sidebarTabWeekly:
 			m.sidebar.weekly = append(m.sidebar.weekly, msg.summaries...)
