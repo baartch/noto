@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"time"
 
 	"noto/internal/store"
 	"noto/internal/vector"
@@ -13,6 +14,7 @@ type Processor struct {
 	summaryBuilder *SummaryRollupBuilder
 	deduper        vector.Deduper
 	logHook        CaptureLogHook
+	noteMaxAgeDays int
 }
 
 // NewProcessor creates a Processor.
@@ -26,6 +28,13 @@ func NewProcessor(noteRepo *store.MemoryNoteRepo, deduper vector.Deduper, logHoo
 // WithSummaryRollups configures summary stale-marking support for changed notes.
 func (p *Processor) WithSummaryRollups(builder *SummaryRollupBuilder) *Processor {
 	p.summaryBuilder = builder
+	return p
+}
+
+// WithNoteMaxAgeDays limits dedup updates to notes created within the given number of days.
+// 0 or negative means no limit (all notes are eligible).
+func (p *Processor) WithNoteMaxAgeDays(days int) *Processor {
+	p.noteMaxAgeDays = days
 	return p
 }
 
@@ -54,20 +63,28 @@ func (p *Processor) Process(
 		if p.deduper != nil {
 			res, err := p.deduper.CheckDuplicate(ctx, profileID, candidate.Content)
 			if err == nil && res.IsDuplicate {
-				candidate.DuplicateOf = res.MatchID
-				p.logHook.DuplicateDetected(candidate, res.MatchID)
 				note, err := p.noteRepo.GetByID(ctx, res.MatchID)
 				if err == nil {
-					if err := UpdateCandidateAsDuplicate(ctx, p.noteRepo, note, candidate, sourceMessageIDs); err != nil {
-						p.logHook.NoteStorageFailed(candidate, err)
-						return notes, updated, err
+					// Age guard: only update if note is within the age window
+					withinWindow := p.noteMaxAgeDays <= 0
+					if !withinWindow {
+						cutoff := time.Now().Add(-time.Duration(p.noteMaxAgeDays) * 24 * time.Hour)
+						withinWindow = !note.CreatedAt.Before(cutoff)
 					}
-					if p.summaryBuilder != nil {
-						_ = p.summaryBuilder.MarkCoveredSummariesStale(ctx, profileID, note.CreatedAt)
+					if withinWindow {
+						candidate.DuplicateOf = res.MatchID
+						p.logHook.DuplicateDetected(candidate, res.MatchID)
+						if err := UpdateCandidateAsDuplicate(ctx, p.noteRepo, note, candidate, sourceMessageIDs); err != nil {
+							p.logHook.NoteStorageFailed(candidate, err)
+							return notes, updated, err
+						}
+						if p.summaryBuilder != nil {
+							_ = p.summaryBuilder.MarkCoveredSummariesStale(ctx, profileID, note.CreatedAt)
+						}
+						updated++
+						continue
 					}
-					updated++
 				}
-				continue
 			}
 		}
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"noto/internal/config"
 	"noto/internal/provider"
@@ -19,6 +20,7 @@ type ExtractionResult struct {
 	Notes        []*store.MemoryNote
 	UpdatedNotes []*store.MemoryNote
 	Updated      int
+	Merged       int
 }
 
 // extractionResponse is the JSON shape the LLM returns for an extraction.
@@ -30,11 +32,12 @@ type extractionResponse struct {
 
 // extractedItem is the JSON shape the LLM returns per note.
 type extractedItem struct {
-	Action     string `json:"action"`    // add | update
-	TargetID   string `json:"target_id"` // required when action=update
-	Category   string `json:"category"`  // fact | progress | blocker | action_item | other
-	Content    string `json:"content"`
-	Importance int    `json:"importance"` // 1-10
+	Action     string   `json:"action"`    // add | update | merge
+	TargetID   string   `json:"target_id"` // required when action=update
+	Category   string   `json:"category"`  // fact | progress | blocker | action_item | other
+	Content    string   `json:"content"`
+	Importance int      `json:"importance"` // 1-10
+	mergeIDs   []string // set by reconcileAdditions; not from LLM
 }
 
 // CacheInvalidator invalidates cached memory retrieval context.
@@ -44,12 +47,13 @@ type CacheInvalidator interface {
 
 // Extractor extracts memory notes using the LLM and persists them to SQLite.
 type Extractor struct {
-	noteRepo    *store.MemoryNoteRepo
-	adapter     provider.Adapter // nil disables extraction
-	invalidator CacheInvalidator
-	deduper     vector.Deduper
-	logHook     CaptureLogHook
-	onUsage     func(provider.Usage)
+	noteRepo       *store.MemoryNoteRepo
+	adapter        provider.Adapter // nil disables extraction
+	invalidator    CacheInvalidator
+	deduper        vector.Deduper
+	logHook        CaptureLogHook
+	onUsage        func(provider.Usage)
+	noteMaxAgeDays int
 }
 
 // NewExtractor creates an Extractor. Pass nil adapter to disable LLM extraction.
@@ -74,6 +78,13 @@ func (e *Extractor) WithLogHook(hook CaptureLogHook) *Extractor {
 // WithUsageHook configures usage callback for extractor model calls.
 func (e *Extractor) WithUsageHook(hook func(provider.Usage)) *Extractor {
 	e.onUsage = hook
+	return e
+}
+
+// WithNoteMaxAgeDays limits dedup/merge/update to notes created within the given number of days.
+// 0 or negative means no limit (all notes are eligible).
+func (e *Extractor) WithNoteMaxAgeDays(days int) *Extractor {
+	e.noteMaxAgeDays = days
 	return e
 }
 
@@ -102,10 +113,11 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, profileSlug, con
 		return &ExtractionResult{}, nil
 	}
 	items := resp.Notes
-	reconcileAdditions(existing, items)
+	reconcileAdditions(existing, items, e.noteMaxAgeDays)
 	updatedNotes := make([]*store.MemoryNote, 0)
 	addItems := make([]extractedItem, 0, len(items))
 	updatedCount := 0
+	mergedCount := 0
 	for _, it := range items {
 		if it.Action == "update" && it.TargetID != "" {
 			if note, updated, err := e.updateNote(ctx, profileID, it.TargetID, []extractedItem{it}, sourceMessageIDs); err == nil && updated {
@@ -113,6 +125,17 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, profileSlug, con
 				updatedCount++
 				continue
 			}
+		}
+		if it.Action == "merge" && len(it.mergeIDs) > 0 {
+			for _, id := range it.mergeIDs {
+				_ = e.noteRepo.Delete(ctx, id)
+			}
+			it.Action = "add"
+			it.TargetID = ""
+			it.mergeIDs = nil
+			addItems = append(addItems, it)
+			mergedCount++
+			continue
 		}
 		addItems = append(addItems, it)
 	}
@@ -130,7 +153,7 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, profileSlug, con
 		_ = e.invalidator.InvalidateAll(ctx, profileID)
 	}
 
-	return &ExtractionResult{Notes: notes, UpdatedNotes: updatedNotes, Updated: updated + updatedCount}, nil
+	return &ExtractionResult{Notes: notes, UpdatedNotes: updatedNotes, Updated: updated + updatedCount, Merged: mergedCount}, nil
 }
 
 // llmExtract calls the model and parses the JSON response. Never returns an error
@@ -181,7 +204,7 @@ func validateExtractionPayload(payload extractionResponse) error {
 		return rejectErr("has_new_info=true with empty notes")
 	}
 	for i, n := range payload.Notes {
-		if n.Action != "add" && n.Action != "update" {
+		if n.Action != "add" && n.Action != "update" && n.Action != "merge" {
 			return rejectErr("note[%d]: invalid action", i)
 		}
 		if n.Action == "update" && strings.TrimSpace(n.TargetID) == "" {
@@ -257,13 +280,15 @@ func (e *Extractor) updateNote(ctx context.Context, profileID, targetID string, 
 }
 
 // reconcileAdditions checks "add" items against existing notes shown to the LLM.
-// If an "add" item has high word-overlap with an existing note, it's auto-converted
-// to "update" with the correct target_id. This is a safety net for when the LLM
-// outputs "add" instead of "update" for corrections.
-func reconcileAdditions(existing []*store.MemoryNote, items []extractedItem) {
+// If an "add" item has high word-overlap with existing notes within the age window,
+// it's auto-converted to "update" (1 match) or "merge" (2+ matches). This is a
+// safety net for when the LLM outputs "add" instead of "update"/"merge".
+// maxAgeDays <= 0 means no age limit.
+func reconcileAdditions(existing []*store.MemoryNote, items []extractedItem, maxAgeDays int) {
 	if len(existing) == 0 {
 		return
 	}
+	cutoff := time.Now().Add(-time.Duration(maxAgeDays) * 24 * time.Hour)
 	for i, item := range items {
 		if item.Action != "add" {
 			continue
@@ -273,15 +298,22 @@ func reconcileAdditions(existing []*store.MemoryNote, items []extractedItem) {
 			continue
 		}
 
+		var matchedIDs []string
 		var bestID string
 		var bestScore float64
 
 		for _, note := range existing {
+			if maxAgeDays > 0 && note.CreatedAt.Before(cutoff) {
+				continue
+			}
 			noteWords := tokenize(note.Content)
 			if len(noteWords) == 0 {
 				continue
 			}
 			score := jaccardSimilarity(itemWords, noteWords)
+			if score >= textDedupThreshold {
+				matchedIDs = append(matchedIDs, note.ID)
+			}
 			if score > bestScore {
 				bestScore = score
 				bestID = note.ID
@@ -289,8 +321,13 @@ func reconcileAdditions(existing []*store.MemoryNote, items []extractedItem) {
 		}
 
 		if bestID != "" && bestScore >= textDedupThreshold {
-			items[i].Action = "update"
-			items[i].TargetID = bestID
+			if len(matchedIDs) > 1 {
+				items[i].Action = "merge"
+				items[i].mergeIDs = matchedIDs
+			} else {
+				items[i].Action = "update"
+				items[i].TargetID = bestID
+			}
 		}
 	}
 }
