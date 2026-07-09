@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -195,6 +196,21 @@ func NewSession(
 	if profileSlug != "" {
 		s.startBackupTicker()
 	}
+
+	// Rebuild vector index from existing notes if the index file is missing.
+	// This avoids "index file not found" warnings on every turn and ensures
+	// the vector deduper works from the first extraction.
+	if s.noteRepo != nil && s.embeddingModel != "" && s.adapter != nil && s.vectorIndex != nil {
+		if _, err := os.Stat(vecPath); os.IsNotExist(err) {
+			existingNotes, listErr := s.noteRepo.ListByProfile(ctx, profileID)
+			if listErr == nil && len(existingNotes) > 0 {
+				if syncErr := s.syncVectorIndex(ctx, existingNotes); syncErr != nil {
+					logger.Infof("initial vector index rebuild: %v", syncErr)
+				}
+			}
+		}
+	}
+
 	return s, nil
 }
 
