@@ -1,4 +1,4 @@
-.PHONY: all build test lint fmt vet tidy clean
+.PHONY: all build test lint fmt vet tidy clean get
 
 BINARY := noto
 CMD     := ./cmd/noto
@@ -53,3 +53,7 @@ tidy:
 ## clean: remove build artefacts
 clean:
 	rm -rf ./bin
+
+### get: download dependencies
+get:
+	go get -u ./...
