@@ -12,6 +12,8 @@ import (
 	"noto/internal/vector"
 )
 
+const textDedupThreshold = 0.45
+
 // ExtractionResult holds the notes extracted from a single exchange.
 type ExtractionResult struct {
 	Notes        []*store.MemoryNote
@@ -100,6 +102,7 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, profileSlug, con
 		return &ExtractionResult{}, nil
 	}
 	items := resp.Notes
+	reconcileAdditions(existing, items)
 	updatedNotes := make([]*store.MemoryNote, 0)
 	addItems := make([]extractedItem, 0, len(items))
 	updatedCount := 0
@@ -251,4 +254,80 @@ func (e *Extractor) updateNote(ctx context.Context, profileID, targetID string, 
 		_ = e.invalidator.InvalidateAll(ctx, profileID)
 	}
 	return note, true, nil
+}
+
+// reconcileAdditions checks "add" items against existing notes shown to the LLM.
+// If an "add" item has high word-overlap with an existing note, it's auto-converted
+// to "update" with the correct target_id. This is a safety net for when the LLM
+// outputs "add" instead of "update" for corrections.
+func reconcileAdditions(existing []*store.MemoryNote, items []extractedItem) {
+	if len(existing) == 0 {
+		return
+	}
+	for i, item := range items {
+		if item.Action != "add" {
+			continue
+		}
+		itemWords := tokenize(item.Content)
+		if len(itemWords) == 0 {
+			continue
+		}
+
+		var bestID string
+		var bestScore float64
+
+		for _, note := range existing {
+			noteWords := tokenize(note.Content)
+			if len(noteWords) == 0 {
+				continue
+			}
+			score := jaccardSimilarity(itemWords, noteWords)
+			if score > bestScore {
+				bestScore = score
+				bestID = note.ID
+			}
+		}
+
+		if bestID != "" && bestScore >= textDedupThreshold {
+			items[i].Action = "update"
+			items[i].TargetID = bestID
+		}
+	}
+}
+
+func tokenize(s string) []string {
+	words := strings.Fields(strings.ToLower(s))
+	out := make([]string, 0, len(words))
+	for _, w := range words {
+		out = append(out, strings.Trim(w, ".,!?;:\"'()[]{}"))
+	}
+	return out
+}
+
+func jaccardSimilarity(a, b []string) float64 {
+	if len(a) == 0 && len(b) == 0 {
+		return 1
+	}
+	if len(a) == 0 || len(b) == 0 {
+		return 0
+	}
+	setA := make(map[string]struct{}, len(a))
+	for _, w := range a {
+		setA[w] = struct{}{}
+	}
+	setB := make(map[string]struct{}, len(b))
+	for _, w := range b {
+		setB[w] = struct{}{}
+	}
+	inter := 0
+	for w := range setA {
+		if _, ok := setB[w]; ok {
+			inter++
+		}
+	}
+	union := len(setA) + len(setB) - inter
+	if union == 0 {
+		return 0
+	}
+	return float64(inter) / float64(union)
 }

@@ -41,7 +41,7 @@ func (p *Processor) Process(
 	updated := 0
 
 	for _, item := range items {
-		if item.Action != "" && item.Action != "add" {
+		if item.Action != "" && item.Action != "add" && item.Action != "update" {
 			continue
 		}
 		candidate := EvaluateCandidate(item.Content, item.Importance, []string{item.Content})
