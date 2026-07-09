@@ -3,6 +3,7 @@
 Auto-generated from all feature plans. Last updated: 2026-04-27
 
 ## Active Technologies
+
 - Go 1.26+
 - Cobra (CLI)
 - Bubble Tea v2 + Bubbles v2 + Lip Gloss v2 (TUI)
@@ -33,11 +34,15 @@ tests/
 `make clean` - Clean build artifacts
 `make run` - Run the application
 
+**ALWAYS** run `make tidy` after adding or removing dependencies to ensure `go.mod` and `go.sum` are up to date.
+**ALWAYS** run `make fmt lint test` after making changes to ensure code quality and correctness.
+
 ## Code Style
 
 Go 1.26+: Follow standard conventions
 
 ## Recent Changes
+
 - 004-bubbletea-tui: Added Go 1.26+ + Cobra CLI, Bubble Tea v2, Bubbles v2, Lip Gloss v2, OpenAI-compatible provider adapter
 - 005-memory-context: Added Go 1.26+ + Cobra CLI, Bubble Tea v2, Bubbles v2, Lip Gloss v2, modernc.org/sqlite, OpenAI-compatible provider adapter, internal pure-Go HNSW index
 - 009-messenger-chat-ui: Added Go 1.26+ + Cobra CLI, Bubble Tea v2, Bubbles v2 (textarea, viewport), Lip Gloss v2, modernc.org/sqlite
@@ -46,14 +51,19 @@ Go 1.26+: Follow standard conventions
 <!-- MANUAL ADDITIONS END -->
 
 <!-- SPECKIT START -->
+
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read:
+
 - `specs/005-memory-context/plan.md`
 <!-- SPECKIT END -->
 
 <!-- lean-ctx -->
+
 ## lean-ctx
 
 lean-ctx is active — the MCP tools replace native equivalents.
 Full rules: LEAN-CTX.md (open on demand — do not auto-load).
+**ALWAYS** use lean-ctx commits whenever possible.
+
 <!-- /lean-ctx -->
