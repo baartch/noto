@@ -87,9 +87,9 @@ func TestSidebar_RenderNoteEntry(t *testing.T) {
 		}
 	})
 
-	t.Run("includes border", func(t *testing.T) {
-		if !strings.Contains(content, "─") {
-			t.Fatal("expected border characters in rendered note")
+	t.Run("includes background", func(t *testing.T) {
+		if !strings.Contains(content, "48;5;235") {
+			t.Fatal("expected background color in rendered note")
 		}
 	})
 }
@@ -118,11 +118,14 @@ func TestSidebar_RenderSummaryEntry(t *testing.T) {
 		if !strings.Contains(content, "2026-W27") {
 			t.Fatal("expected period key in summary")
 		}
-		if !strings.Contains(content, "2026-06-29") || !strings.Contains(content, "2026-07-05") {
-			t.Fatal("expected period dates in weekly summary")
+		if !strings.Contains(content, "2026-06-29") {
+			t.Fatal("expected start date 2026-06-29 in weekly summary")
 		}
-		if !strings.Contains(content, "─") {
-			t.Fatal("expected border in summary entry")
+		if !strings.Contains(content, "07-05") {
+			t.Fatal("expected end date (July 5th) in weekly summary")
+		}
+		if !strings.Contains(content, "48;5;235") {
+			t.Fatal("expected background color in summary entry")
 		}
 	})
 }

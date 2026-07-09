@@ -110,6 +110,9 @@ func (s *sidebarModel) renderNoteList() string {
 		)
 		sb.WriteString(rendered)
 		sb.WriteString("\n")
+		if i > 0 {
+			sb.WriteString("\n")
+		}
 	}
 	s.appendFooter(&sb)
 	return sb.String()
@@ -137,6 +140,9 @@ func (s *sidebarModel) renderSummaryList(list []*store.MemorySummary) string {
 		)
 		sb.WriteString(rendered)
 		sb.WriteString("\n")
+		if i > 0 {
+			sb.WriteString("\n")
+		}
 	}
 	s.appendFooter(&sb)
 	return sb.String()

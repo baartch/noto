@@ -63,7 +63,7 @@ var (
 	sidebarBorder      = lipgloss.NewStyle().BorderLeft(true).BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("39")).PaddingLeft(1)
 	sidebarActiveTab   = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true).Underline(true)
 	sidebarInactiveTab = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	sidebarEntryBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("236")).Padding(0, 1)
+	sidebarEntryBorder = lipgloss.NewStyle().Background(lipgloss.Color("233")).Foreground(lipgloss.Color("252")).Padding(0, 1)
 	sidebarMetaStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	sidebarLoading     = lipgloss.NewStyle().Foreground(lipgloss.Color("243"))
 	sidebarEmpty       = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
