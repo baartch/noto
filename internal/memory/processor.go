@@ -58,14 +58,14 @@ func (p *Processor) Process(
 				p.logHook.DuplicateDetected(candidate, res.MatchID)
 				note, err := p.noteRepo.GetByID(ctx, res.MatchID)
 				if err == nil {
-			if err := UpdateCandidateAsDuplicate(ctx, p.noteRepo, note, candidate, sourceMessageIDs); err != nil {
-				p.logHook.NoteStorageFailed(candidate, err)
-				return notes, updated, err
-			}
-			if p.summaryBuilder != nil {
-				_ = p.summaryBuilder.MarkCoveredSummariesStale(ctx, profileID, note.CreatedAt)
-			}
-			updated++
+					if err := UpdateCandidateAsDuplicate(ctx, p.noteRepo, note, candidate, sourceMessageIDs); err != nil {
+						p.logHook.NoteStorageFailed(candidate, err)
+						return notes, updated, err
+					}
+					if p.summaryBuilder != nil {
+						_ = p.summaryBuilder.MarkCoveredSummariesStale(ctx, profileID, note.CreatedAt)
+					}
+					updated++
 				}
 				continue
 			}
