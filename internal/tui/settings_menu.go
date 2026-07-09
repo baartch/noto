@@ -11,6 +11,7 @@ const (
 	settingsIDRawNoteDays          = "raw_note_days"
 	settingsIDWeeklySummaryWeeks   = "weekly_summary_weeks"
 	settingsIDMonthlySummaryMonths = "monthly_summary_months"
+	settingsIDDedupMaxAgeDays      = "dedup_max_age_days"
 	settingsIDProviders            = "providers"
 	settingsIDProfiles             = "profiles"
 	settingsIDThemes               = "themes"
@@ -134,6 +135,13 @@ func DefaultSettingsMenu() *SettingsMenu {
 				Label:     "Monthly Summary Months",
 				Kind:      SettingsEntryValue,
 				ValueType: SettingsValueText,
+				Source:    string(SettingsSourceDB),
+			},
+			{
+				ID:        settingsIDDedupMaxAgeDays,
+				Label:     "Dedup Max Age Days",
+				Kind:      SettingsEntryValue,
+				ValueType: SettingsValueNumber,
 				Source:    string(SettingsSourceDB),
 			},
 		},

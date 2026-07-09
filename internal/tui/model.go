@@ -265,6 +265,7 @@ type Model struct {
 	rawNoteDays          int
 	weeklySummaryWeeks   int
 	monthlySummaryMonths string
+	dedupMaxAgeDays      int
 	systemPrompt         string
 	providerEndpoint     string
 	providerAPIKey       string // decrypted; displayed obfuscated
@@ -1925,7 +1926,7 @@ func (m Model) handleSettingsSave() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		switch entry.ID {
-		case settingsIDRawNoteDays, settingsIDWeeklySummaryWeeks:
+		case settingsIDRawNoteDays, settingsIDWeeklySummaryWeeks, settingsIDDedupMaxAgeDays:
 			if m.execCtx == nil || m.execCtx.DB == nil || m.execCtx.ProfileID == "" {
 				m.settingsErr = "timeline settings unavailable"
 				return m, nil
@@ -1943,6 +1944,9 @@ func (m Model) handleSettingsSave() (tea.Model, tea.Cmd) {
 			case settingsIDWeeklySummaryWeeks:
 				current.WeeklySummaryWeeks = parsed
 				m.weeklySummaryWeeks = parsed
+			case settingsIDDedupMaxAgeDays:
+				current.DedupMaxAgeDays = parsed
+				m.dedupMaxAgeDays = parsed
 			}
 			if err := repo.Upsert(context.Background(), current); err != nil {
 				m.settingsErr = err.Error()
@@ -2061,6 +2065,7 @@ func (m *Model) refreshSettingsValues() {
 		if settings, err := timelineRepo.GetOrDefault(ctx, m.execCtx.ProfileID); err == nil {
 			m.rawNoteDays = settings.RawNoteDays
 			m.weeklySummaryWeeks = settings.WeeklySummaryWeeks
+			m.dedupMaxAgeDays = settings.DedupMaxAgeDays
 			if settings.MonthlySummaryMonths == store.MonthlySummaryAllRemaining {
 				m.monthlySummaryMonths = "all_remaining"
 			} else {
@@ -2110,6 +2115,10 @@ func applyToMenu(menu *SettingsMenu, m *Model) {
 			}
 		case settingsIDMonthlySummaryMonths:
 			entries[i].Value = m.monthlySummaryMonths
+		case settingsIDDedupMaxAgeDays:
+			if m.dedupMaxAgeDays > 0 {
+				entries[i].Value = strconv.Itoa(m.dedupMaxAgeDays)
+			}
 		case settingsIDSystemPrompt:
 			entries[i].Value = m.systemPrompt
 		case settingsIDProviderEndpoint:
