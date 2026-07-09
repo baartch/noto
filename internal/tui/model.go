@@ -674,8 +674,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmd = m.sidebar.loadInitialBatch(context.Background())
 				}
 				return m, cmd
-			case msg.Key().Code == tea.KeyEsc:
-				return m.toggleSidebar()
 			}
 			// Other keys fall through to normal handling.
 		}
