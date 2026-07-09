@@ -106,6 +106,34 @@ func (r *MemorySummaryRepo) ListByProfileAndType(ctx context.Context, profileID,
 	return out, rows.Err()
 }
 
+// ListByProfileAndTypePaginated lists summary artifacts with pagination.
+func (r *MemorySummaryRepo) ListByProfileAndTypePaginated(ctx context.Context, profileID, summaryType string, limit, offset int) ([]*MemorySummary, bool, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, profile_id, summary_type, period_key, period_start, period_end, content, source_state_version, freshness_state, created_at, updated_at
+		FROM memory_summaries
+		WHERE profile_id = ? AND summary_type = ?
+		ORDER BY period_start DESC
+		LIMIT ? OFFSET ?
+	`, profileID, summaryType, limit, offset)
+	if err != nil {
+		return nil, false, fmt.Errorf("store: list memory summaries paginated: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []*MemorySummary
+	for rows.Next() {
+		var s MemorySummary
+		if err := rows.Scan(&s.ID, &s.ProfileID, &s.SummaryType, &s.PeriodKey, &s.PeriodStart, &s.PeriodEnd, &s.Content, &s.SourceStateVersion, &s.FreshnessState, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, false, fmt.Errorf("store: scan memory summary: %w", err)
+		}
+		out = append(out, &s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	hasMore := len(out) == limit
+	return out, hasMore, nil
+}
+
 // MarkFreshness updates the freshness state for a stored summary artifact.
 func (r *MemorySummaryRepo) MarkFreshness(ctx context.Context, profileID, summaryType, periodKey, freshness string) error {
 	_, err := r.db.ExecContext(ctx, `
