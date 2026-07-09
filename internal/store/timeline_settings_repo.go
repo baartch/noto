@@ -39,8 +39,8 @@ func (s *TimelineSettings) Validate() error {
 	if s.MonthlySummaryMonths != MonthlySummaryAllRemaining && s.MonthlySummaryMonths <= 0 {
 		return errors.New("store: monthly_summary_months must be > 0 or all_remaining")
 	}
-	if s.DedupMaxAgeDays <= 0 {
-		return errors.New("store: dedup_max_age_days must be > 0")
+	if s.DedupMaxAgeDays < 0 {
+		return errors.New("store: dedup_max_age_days must be >= 0")
 	}
 	return nil
 }

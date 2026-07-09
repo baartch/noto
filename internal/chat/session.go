@@ -473,6 +473,11 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 	}
 	extractor.WithLogHook(&sessionLogHook{logger: s.logger})
 	extractor.WithUsageHook(s.recordAuxUsage)
+	if s.db != nil {
+		if settings, err := store.NewTimelineSettingsRepo(s.db).GetOrDefault(ctx, s.profileID); err == nil {
+			extractor.WithNoteMaxAgeDays(settings.DedupMaxAgeDays)
+		}
+	}
 	sourceIDs := []string{s.history[len(s.history)-2].ID, s.history[len(s.history)-1].ID}
 	result, err := extractor.ExtractTurn(ctx, s.profileID, s.profileSlug, s.conversationID, sourceIDs, userMsg, assistantMsg)
 	if err != nil {
@@ -480,7 +485,7 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 		s.markNotesDone(0)
 		return
 	}
-	s.logger.Infof("extraction result: notes=%d, updated=%d", len(result.Notes), result.Updated)
+	s.logger.Infof("extraction result: notes=%d, updated=%d, merged=%d", len(result.Notes), result.Updated, result.Merged)
 
 	if (len(result.Notes) > 0 || len(result.UpdatedNotes) > 0) && s.adapter != nil {
 		syncBatch := append([]*store.MemoryNote{}, result.Notes...)
