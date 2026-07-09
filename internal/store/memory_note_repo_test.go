@@ -27,13 +27,13 @@ func TestMemoryNoteRepo_ListByProfilePaginated(t *testing.T) {
 	for i := range 25 {
 		id := string(rune('a' + i))
 		note := &MemoryNote{
-			ID:        string(rune('a' + i)),
-			ProfileID: profileID,
-			Category:  CategoryFact,
-			Content:   "note " + id,
+			ID:         string(rune('a' + i)),
+			ProfileID:  profileID,
+			Category:   CategoryFact,
+			Content:    "note " + id,
 			Importance: 5,
-			CreatedAt: now.Add(-time.Duration(i) * time.Hour),
-			UpdatedAt: now.Add(-time.Duration(i) * time.Hour),
+			CreatedAt:  now.Add(-time.Duration(i) * time.Hour),
+			UpdatedAt:  now.Add(-time.Duration(i) * time.Hour),
 		}
 		if err := repo.Create(ctx, note); err != nil {
 			t.Fatalf("create note %d: %v", i, err)
