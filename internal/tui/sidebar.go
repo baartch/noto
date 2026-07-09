@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/viewport"
@@ -117,8 +118,7 @@ func (s *sidebarModel) renderNoteList() string {
 	}
 	var sb strings.Builder
 	innerW := max(s.width-4, 10)
-	for i := len(s.notes) - 1; i >= 0; i-- {
-		n := s.notes[i]
+	for i, n := range slices.Backward(s.notes) {
 		meta := fmt.Sprintf("%s  ★%d  ·  %s", categoryEmoji(n.Category), n.Importance, n.CreatedAt.Format("2006-01-02 15:04"))
 		body := wordWrap(n.Content, innerW)
 		rendered := sidebarEntryBorder.Width(s.width - 2).Render(
@@ -141,8 +141,7 @@ func (s *sidebarModel) renderSummaryList(list []*store.MemorySummary) string {
 	var sb strings.Builder
 	innerW := max(s.width-4, 10)
 	isMonthly := s.activeTab == sidebarTabMonthly
-	for i := len(list) - 1; i >= 0; i-- {
-		sm := list[i]
+	for i, sm := range slices.Backward(list) {
 		var meta string
 		if isMonthly {
 			meta = sm.PeriodKey
