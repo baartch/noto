@@ -41,7 +41,7 @@ func TestTUIModel_HandlesWindowResize(t *testing.T) {
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		nil,
+		nil, false,
 	)
 
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
@@ -76,7 +76,7 @@ func TestTUIModel_TogglesHelp(t *testing.T) {
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		nil,
+		nil, false,
 	)
 
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
@@ -116,7 +116,7 @@ func TestTUIModel_OpenSettingsShortcut(t *testing.T) {
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		nil,
+		nil, false,
 	)
 
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
@@ -175,7 +175,7 @@ func newSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext) {
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		nil,
+		nil, false,
 	)
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m := updated.(tui.Model)
@@ -275,7 +275,7 @@ func TestSettingsSubmenuNavigation_EscBehavior(t *testing.T) {
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		nil,
+		nil, false,
 	)
 
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})

@@ -75,7 +75,7 @@ func CacheStatusUpdated(formatted string) tea.Msg { return cacheStatusUpdatedMsg
 func UpdateAvailableNotice(formatted string) tea.Msg { return updateNoticeMsg{formatted: formatted} }
 
 // ProfileSwitched updates the TUI state after switching profiles.
-func ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, tokenStatus string, extractorFallback, embeddingModelMissing bool, provider ProviderFunc, listModels ListModelsFunc, listEmbeddings ListEmbeddingsFunc, modelSelected ModelSelectedFunc, embeddingModelSelected EmbeddingModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, settings *SettingsMenu, history []string, startupMessages []*store.Message, startupHistoryErr error) profileSwitchedMsg {
+func ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, tokenStatus string, extractorFallback, embeddingModelMissing bool, provider ProviderFunc, listModels ListModelsFunc, listEmbeddings ListEmbeddingsFunc, modelSelected ModelSelectedFunc, embeddingModelSelected EmbeddingModelSelectedFunc, extractorModelSelected ExtractorModelSelectedFunc, settings *SettingsMenu, history []string, startupMessages []*store.Message, startupHistoryErr error, needsProviderSetup bool) profileSwitchedMsg {
 	return profileSwitchedMsg{
 		profileName:            profileName,
 		activeModel:            activeModel,
@@ -95,6 +95,7 @@ func ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, c
 		history:                history,
 		startupMessages:        startupMessages,
 		startupHistoryErr:      startupHistoryErr,
+		needsProviderSetup:     needsProviderSetup,
 	}
 }
 
@@ -178,6 +179,7 @@ type profileSwitchedMsg struct {
 	history                []string
 	startupMessages        []*store.Message
 	startupHistoryErr      error
+	needsProviderSetup     bool
 }
 type profileSwitchFailedMsg struct{ err error }
 type spinnerTickMsg struct{}
@@ -247,6 +249,10 @@ type Model struct {
 	picker             *pickerState
 	pickerKind         pickerKind
 	pickerFromSettings bool
+
+	// provider setup dialog
+	providerSetup      *providerSetupState
+	needsProviderSetup bool
 
 	// settings dialog
 	settingsOpen bool
@@ -363,6 +369,11 @@ func (m Model) ViewportHeight() int {
 	return m.viewport.Height()
 }
 
+// SetNeedsProviderSetup marks the model to show the provider setup dialog on first render.
+func (m *Model) SetNeedsProviderSetup() {
+	m.needsProviderSetup = true
+}
+
 // New creates a new TUI Model.
 func New(
 	profileName string,
@@ -386,6 +397,7 @@ func New(
 	backupSelected BackupSelectedFunc,
 	extractorModelSelected ExtractorModelSelectedFunc,
 	inputHistory []string,
+	needsProviderSetup bool,
 ) Model {
 	ti := textarea.New()
 	ti.Placeholder = "Type a message or /command…"
@@ -506,6 +518,10 @@ func New(
 	}
 	m.loadInitialConversationHistory(nil)
 	m.resetInputHistoryWindow()
+	if needsProviderSetup {
+		m.providerSetup = newProviderSetupState(80)
+		m.needsProviderSetup = true
+	}
 	return m
 }
 
@@ -531,6 +547,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.sidebar != nil {
 			m.sidebar.width = max(msg.Width/4, 36)
 		}
+		if m.providerSetup != nil {
+			m.providerSetup.updateSize(msg.Width, msg.Height)
+		}
 		mainWidth := m.width
 		if m.sidebar != nil && m.sidebar.open {
 			mainWidth = m.width - m.sidebar.width - 1
@@ -551,6 +570,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ---- clipboard ----------------------------------------------------------
 	case tea.PasteMsg:
+		if m.providerSetup != nil && m.providerSetup.paginator.Page == 1 {
+			var cmd tea.Cmd
+			m.providerSetup.apiInput, cmd = m.providerSetup.apiInput.Update(msg)
+			return m, cmd
+		}
 		if m.settingsOpen && m.settingsEditing {
 			var cmd tea.Cmd
 			m.settingsEditor, cmd = m.settingsEditor.Update(msg)
@@ -569,6 +593,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ---- keyboard -----------------------------------------------------------
 	case tea.KeyPressMsg:
+		if m.providerSetup != nil {
+			cmd := m.providerSetup.Update(msg)
+			if cmd != nil {
+				return m, cmd
+			}
+			return m, nil
+		}
 		if m.picker != nil {
 			return m.updatePicker(msg, cmds)
 		}
@@ -979,10 +1010,52 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.sidebar != nil && m.sidebar.open {
 			cmds = append(cmds, m.sidebar.loadInitialBatch(context.Background()))
 		}
+		if msg.needsProviderSetup {
+			m.providerSetup = newProviderSetupState(m.width)
+		} else {
+			m.providerSetup = nil
+		}
 
 	case profileSwitchFailedMsg:
 		m.err = msg.err
 		m.syncViewport()
+
+	// ---- provider setup dialog -----------------------------------------------
+	case providerSetupMsg:
+		if msg.cancel {
+			m.providerSetup = nil
+			return m, tea.Quit
+		}
+		// Save the provider config and trigger profile switch to create session.
+		m.providerEndpoint = msg.result.Endpoint
+		m.providerAPIKey = msg.result.APIKey
+		m.providerSetup = nil
+		if m.execCtx != nil && m.execCtx.DB != nil {
+			repo := store.NewProviderConfigRepo(m.execCtx.DB)
+			if err := repo.SetEndpoint(context.Background(), m.execCtx.ProfileID, msg.result.Endpoint); err != nil {
+				m.err = err
+				return m, nil
+			}
+			pass, err := security.MachinePassphrase()
+			if err != nil {
+				m.err = err
+				return m, nil
+			}
+			encrypted, err := security.Encrypt(msg.result.APIKey, pass)
+			if err != nil {
+				m.err = err
+				return m, nil
+			}
+			if err := repo.SetCredentialRef(context.Background(), m.execCtx.ProfileID, encrypted); err != nil {
+				m.err = err
+				return m, nil
+			}
+		}
+		// Trigger profile switch to reload config and create session.
+		if m.profileSwitch != nil {
+			return m, m.profileSwitch(m.profileName)
+		}
+		return m, nil
 
 	case spinnerTickMsg:
 		if m.pending {
@@ -1445,6 +1518,9 @@ func (m Model) View() tea.View {
 	var mid strings.Builder
 	ph := max(m.height/2, 10)
 	switch {
+	case m.providerSetup != nil:
+		m.providerSetup.updateSize(m.width, m.height)
+		mid.WriteString(m.providerSetup.View() + "\n")
 	case m.picker != nil:
 		mid.WriteString(m.picker.render(ph) + "\n")
 	case m.settingsOpen:

@@ -95,7 +95,7 @@ func TestProviderSetupState_Page1EnterConfirmsWithKey(t *testing.T) {
 		t.Fatalf("expected providerSetupMsg, got %T", msg)
 	}
 	if psm.cancel {
-		t.Fatal("expected not cancelled")
+		t.Fatal("expected not canceled")
 	}
 	if psm.result.Endpoint == "" {
 		t.Fatal("expected non-empty endpoint")

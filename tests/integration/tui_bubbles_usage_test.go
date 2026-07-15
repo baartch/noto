@@ -37,7 +37,7 @@ func TestTUIModel_UsesBubblesComponents(t *testing.T) {
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		nil,
+		nil, false,
 	)
 
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 100, Height: 30})

@@ -68,7 +68,7 @@ func newProfileSettingsModel(t *testing.T) (tui.Model, *commands.ExecContext, *p
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		nil,
+		nil, false,
 	)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = asModel(t, updated)

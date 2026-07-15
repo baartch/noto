@@ -27,7 +27,7 @@ func newScrollModelWithHistory() tui.Model {
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		[]string{"one", "two", "three", "four", "five"},
+		[]string{"one", "two", "three", "four", "five"}, false,
 	)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = updated.(tui.Model)

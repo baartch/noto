@@ -36,9 +36,9 @@ type providerSetupState struct {
 	height       int
 }
 
-// providerListItem wraps a provider.ProviderInfo for the list.Model.
+// providerListItem wraps a provider.Info for the list.Model.
 type providerListItem struct {
-	info     provider.ProviderInfo
+	info     provider.Info
 	selected bool
 }
 
@@ -116,7 +116,7 @@ func (s *providerSetupState) updateSize(width, height int) {
 	s.apiInput.SetWidth(max(width-12, 20))
 }
 
-func (s *providerSetupState) selectedProvider() provider.ProviderInfo {
+func (s *providerSetupState) selectedProvider() provider.Info {
 	idx := s.providerList.Index()
 	if idx < 0 || idx >= len(provider.AvailableProviders) {
 		return provider.AvailableProviders[0]
