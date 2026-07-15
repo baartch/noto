@@ -85,7 +85,7 @@ func newProviderSetupState(width int) *providerSetupState {
 
 	items := make([]list.Item, len(provider.AvailableProviders))
 	for i, prov := range provider.AvailableProviders {
-		items[i] = providerListItem{info: prov, selected: i == 0}
+		items[i] = providerListItem{info: prov}
 	}
 	l := list.New(items, providerListDelegate{}, width-4, 0)
 	l.SetShowStatusBar(false)
