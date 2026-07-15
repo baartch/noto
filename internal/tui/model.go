@@ -627,18 +627,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.settingsOpen && !m.settingsEditing {
 			if m.profileDeleteCandidate != "" {
-				switch msg.Key().Code {
-				case tea.KeyEnter:
+				if msg.String() == "y" {
 					return m.confirmProfileDelete()
-				case tea.KeyEsc:
-					m.profileDeleteCandidate = ""
-					m.settingsErr = ""
-					return m, nil
-				default:
-					m.profileDeleteCandidate = ""
-					m.settingsErr = ""
-					return m, nil
 				}
+				m.profileDeleteCandidate = ""
+				m.settingsErr = ""
+				return m, nil
 			}
 			// ctrl+h toggles help; ctrl+j closes settings
 			if key.Matches(msg, m.keys.toggleHelp) {
@@ -2330,7 +2324,7 @@ func (m *Model) handleProfileDeleteRequest() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.profileDeleteCandidate = name
-	m.settingsErr = "press enter to confirm deleting \"" + name + "\" or esc to cancel"
+	m.settingsErr = "press y to delete \"" + name + "\", any other key to cancel"
 	return m, nil
 }
 
@@ -2341,21 +2335,10 @@ func (m *Model) confirmProfileDelete() (tea.Model, tea.Cmd) {
 	name := m.profileDeleteCandidate
 	m.profileDeleteCandidate = ""
 	m.settingsErr = ""
-	return m.deleteSelectedProfileByName(name)
-}
-
-func (m *Model) deleteSelectedProfileByName(name string) (tea.Model, tea.Cmd) {
 	if m.profileService == nil {
 		return m, nil
 	}
-	if name == "" {
-		return m, nil
-	}
-	confirm := func(string) bool { return true }
-	if m.execCtx != nil && m.execCtx.Confirm != nil {
-		confirm = m.execCtx.Confirm
-	}
-	if err := m.profileService.Delete(context.Background(), name, confirm); err != nil {
+	if err := m.profileService.Delete(context.Background(), name, func(string) bool { return true }); err != nil {
 		if errors.Is(err, profile.ErrConfirmationRequired) {
 			m.settingsErr = "delete canceled"
 			m.err = nil
