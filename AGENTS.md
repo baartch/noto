@@ -41,12 +41,6 @@ tests/
 
 Go 1.26+: Follow standard conventions
 
-## Recent Changes
-
-- 004-bubbletea-tui: Added Go 1.26+ + Cobra CLI, Bubble Tea v2, Bubbles v2, Lip Gloss v2, OpenAI-compatible provider adapter
-- 005-memory-context: Added Go 1.26+ + Cobra CLI, Bubble Tea v2, Bubbles v2, Lip Gloss v2, modernc.org/sqlite, OpenAI-compatible provider adapter, internal pure-Go HNSW index
-- 009-messenger-chat-ui: Added Go 1.26+ + Cobra CLI, Bubble Tea v2, Bubbles v2 (textarea, viewport), Lip Gloss v2, modernc.org/sqlite
-
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
 
