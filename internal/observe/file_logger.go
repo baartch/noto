@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"noto/internal/config"
 )
 
 // FileLogger writes events and messages to a file.
@@ -21,7 +23,10 @@ type FileLogger struct {
 // NewFileLogger creates a new FileLogger that writes to the given path.
 func NewFileLogger(path string) (*FileLogger, error) {
 	// Ensure directory exists
-	dir := fmt.Sprintf("%v/.noto", os.Getenv("HOME"))
+	dir, err := config.AppDir()
+	if err != nil {
+		return nil, fmt.Errorf("observe: determine app dir: %w", err)
+	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, fmt.Errorf("observe: create log dir: %w", err)
 	}

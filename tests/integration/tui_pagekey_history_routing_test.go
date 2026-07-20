@@ -25,7 +25,7 @@ func TestPageKeysRouteToMessagesHistoryRegardlessOfHover(t *testing.T) {
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		[]string{"h1", "h2", "h3", "h4", "h5"},
+		[]string{"h1", "h2", "h3", "h4", "h5"}, false,
 	)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = updated.(tui.Model)

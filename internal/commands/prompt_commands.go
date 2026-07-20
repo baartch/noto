@@ -42,6 +42,7 @@ func RegisterPromptCommands(r *Registry) error {
 			Path:        "prompt edit",
 			Usage:       "prompt edit",
 			Description: "Edit the system prompt for the active profile in $EDITOR",
+			Aliases:     []string{"edit prompt"},
 			Scope:       ScopeProfile,
 			Handler:     promptEditHandler,
 		},

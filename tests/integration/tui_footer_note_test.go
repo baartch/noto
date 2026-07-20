@@ -37,7 +37,7 @@ func TestFooterNoteIndicator_ShowsOnSave(t *testing.T) {
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		nil,
+		nil, false,
 	)
 
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})

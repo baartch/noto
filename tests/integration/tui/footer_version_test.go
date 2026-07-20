@@ -30,6 +30,7 @@ func TestFooterIncludesVersion(t *testing.T) {
 		func(string) error { return nil },
 		func(string) error { return nil },
 		nil,
+		false,
 	)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	model := updated.(tui.Model)

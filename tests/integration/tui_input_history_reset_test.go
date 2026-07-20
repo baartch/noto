@@ -25,7 +25,7 @@ func TestInputHistoryWindow_ClearsAfterSend(t *testing.T) {
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		[]string{"one", "two", "three", "four", "five", "six"},
+		[]string{"one", "two", "three", "four", "five", "six"}, false,
 	)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = updated.(tui.Model)

@@ -27,7 +27,7 @@ func TestStartupHistoryFailure_DoesNotBlockInputFlow(t *testing.T) {
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		nil,
+		nil, false,
 	)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = updated.(tui.Model)

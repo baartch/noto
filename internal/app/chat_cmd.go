@@ -468,7 +468,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			}
 
 			startupMessages, startupHistoryErr := loadStartupConversationMessages(ctx, profileDB, p.ID)
-			return tui.ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, tokenStatus, extractorFallback, embeddingModelMissing, providerFn, listModelsFn, listEmbeddingsFn, modelSelectedFn, embeddingModelSelectedFn, extractorModelSelectedFn, tui.DefaultSettingsMenu(), inputHistory, startupMessages, startupHistoryErr)
+			return tui.ProfileSwitched(profileName, activeModel, extractorModel, embeddingModel, cacheStatus, tokenStatus, extractorFallback, embeddingModelMissing, providerFn, listModelsFn, listEmbeddingsFn, modelSelectedFn, embeddingModelSelectedFn, extractorModelSelectedFn, tui.DefaultSettingsMenu(), inputHistory, startupMessages, startupHistoryErr, providerCfg == nil || decryptedKey == "")
 		}
 	}
 	listBackupsFn := func(ctx context.Context) ([]string, error) {
@@ -498,6 +498,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 		listBackupsFn, backupSelectedFn,
 		extractorModelSelectedFn,
 		inputHistory,
+		providerCfg == nil || decryptedKey == "",
 	)
 	m.SetStartupConversationHistory(startupMessages, startupHistoryErr)
 	prog = tea.NewProgram(m)

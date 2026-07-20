@@ -29,7 +29,7 @@ func newProfileSwitchModel() tui.Model {
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		nil,
+		nil, false,
 	)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return updated.(tui.Model)
@@ -71,6 +71,7 @@ func TestProfileSwitch_ReplacesVisibleConversationHistory(t *testing.T) {
 		nil,
 		profileMessages("B", 2),
 		nil,
+		false,
 	)
 	updated, _ := m.Update(msg)
 	m = updated.(tui.Model)

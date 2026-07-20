@@ -30,7 +30,7 @@ func newStartupIntegrationModel() tui.Model {
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		nil,
+		nil, false,
 	)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return updated.(tui.Model)
@@ -82,6 +82,7 @@ func TestTUIProfileSwitch_UsesProvidedStartupMessages(t *testing.T) {
 		nil,
 		makeStartupMessages(3),
 		nil,
+		false,
 	)
 	updated, _ := m.Update(msg)
 	m = updated.(tui.Model)

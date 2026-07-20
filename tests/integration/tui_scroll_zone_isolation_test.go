@@ -27,7 +27,7 @@ func newIsolationModel() tui.Model {
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		[]string{"u1", "u2", "u3", "u4", "u5", "u6"},
+		[]string{"u1", "u2", "u3", "u4", "u5", "u6"}, false,
 	)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = updated.(tui.Model)

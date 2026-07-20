@@ -25,7 +25,7 @@ func newInputHistoryModel(hist []string) tui.Model {
 		nil,
 		func(string) error { return nil },
 		func(string) error { return nil },
-		hist,
+		hist, false,
 	)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return updated.(tui.Model)

@@ -45,6 +45,7 @@ func newTestModel(listModels func(context.Context) ([]provider.ModelInfo, error)
 		func(string) error { return nil },
 		func(string) error { return nil },
 		nil,
+		false,
 	)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return updated.(nototui.Model)
@@ -55,4 +56,37 @@ func runCmd(cmd tea.Cmd) tea.Msg {
 		return nil
 	}
 	return cmd()
+}
+
+func newTestModelWithSetup(needsSetup bool) nototui.Model {
+	registry := commands.NewRegistry()
+	dispatcher := chat.NewDispatcher(registry)
+	execCtx := &commands.ExecContext{}
+
+	m := nototui.New(
+		"Profile",
+		"",
+		"",
+		"",
+		"ctx:n/a",
+		"tokens: n/a",
+		false,
+		false,
+		dispatcher,
+		execCtx,
+		nil,
+		nil,
+		nil,
+		func(string) error { return nil },
+		func(string) error { return nil },
+		nil,
+		func(string) tea.Cmd { return nil },
+		nil,
+		func(string) error { return nil },
+		func(string) error { return nil },
+		nil,
+		needsSetup,
+	)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	return updated.(nototui.Model)
 }
