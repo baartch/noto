@@ -20,7 +20,7 @@ Noto reads the following environment variables.
 
 | Variable | Description |
 |---|---|
-| `EDITOR` | External editor for editing prompts (`/edit prompt`). Falls back to `VISUAL`, then `vi`. |
+| `EDITOR` | External editor for editing prompts (`/prompt edit` or `Ctrl+E`). Falls back to `VISUAL`, then `vi`. |
 | `VISUAL` | Fallback editor when `EDITOR` is not set. |
 
 ## Debugging

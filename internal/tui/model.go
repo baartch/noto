@@ -337,6 +337,7 @@ type keyMap struct {
 	profileNew    key.Binding
 	profileRename key.Binding
 	profileDelete key.Binding
+	editPrompt    key.Binding
 }
 
 type helpKeyMap struct {
@@ -437,6 +438,7 @@ func New(
 		profileNew:    key.NewBinding(key.WithKeys("ctrl+n"), key.WithHelp("ctrl+n", "new profile")),
 		profileRename: key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "rename profile")),
 		profileDelete: key.NewBinding(key.WithKeys("ctrl+k"), key.WithHelp("ctrl+k", "delete profile")),
+		editPrompt:    key.NewBinding(key.WithKeys("ctrl+e"), key.WithHelp("ctrl+e", "edit prompt")),
 	}
 	helpModel := help.New()
 	helpModel.Styles.ShortKey = helpShortStyle
@@ -450,6 +452,7 @@ func New(
 			keys.openModel,
 			keys.toggleSidebar,
 			keys.clearInput,
+			keys.editPrompt,
 			key.NewBinding(key.WithKeys("wheel"), key.WithHelp("wheel", "scroll messages/input by cursor zone")),
 			key.NewBinding(key.WithKeys("pgup/pgdn"), key.WithHelp("pgup/pgdn", "scroll messages")),
 			key.NewBinding(key.WithKeys("end"), key.WithHelp("end", "jump to latest message")),
@@ -716,6 +719,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.openModel):
 			return m.openPicker(pickerKindModel, cmds)
+
+		case key.Matches(msg, m.keys.editPrompt):
+			return m.handleEditPrompt(cmds)
 
 		case key.Matches(msg, m.keys.toggleHelp):
 			m.help.ShowAll = !m.help.ShowAll
@@ -2316,6 +2322,19 @@ func (m *Model) syncActiveProfile() tea.Cmd {
 	}
 	m.err = nil
 	return m.switchToProfile(active)
+}
+
+func (m *Model) handleEditPrompt(cmds []tea.Cmd) (tea.Model, tea.Cmd) {
+	result := m.dispatcher.Dispatch("/prompt edit", m.execCtx)
+	if result.IsSlash {
+		if result.Err != nil {
+			if openErr, ok := commands.AsErrOpenEditor(result.Err); ok {
+				return m, m.openEditor(openErr.Path, openErr.OnSave, cmds)
+			}
+			m.err = result.Err
+		}
+	}
+	return m, tea.Batch(cmds...)
 }
 
 func (m *Model) handleProfileDeleteRequest() (tea.Model, tea.Cmd) {
