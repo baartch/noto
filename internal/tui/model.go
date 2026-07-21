@@ -305,6 +305,11 @@ type Model struct {
 	embeddingModel         string
 
 	sidebar *sidebarModel
+
+	// select mode
+	selectMode   bool
+	selectCursor int
+	selectFocus  selectFocus
 }
 
 type conversationHistoryWindow struct {
@@ -338,7 +343,15 @@ type keyMap struct {
 	profileRename key.Binding
 	profileDelete key.Binding
 	editPrompt    key.Binding
+	enterSelect   key.Binding
 }
+
+type selectFocus int
+
+const (
+	selectFocusChat selectFocus = iota
+	selectFocusSidebar
+)
 
 type helpKeyMap struct {
 	primary   []key.Binding
@@ -421,11 +434,11 @@ func New(
 		key.WithHelp("alt+enter", "insert newline"),
 	)
 	ti.KeyMap.WordForward = key.NewBinding(
-		key.WithKeys("alt+right", "alt+f", "ctrl+right"),
+		key.WithKeys("ctrl+right"),
 		key.WithHelp("ctrl+right", "word forward"),
 	)
 	ti.KeyMap.WordBackward = key.NewBinding(
-		key.WithKeys("alt+left", "alt+b", "ctrl+left"),
+		key.WithKeys("ctrl+left"),
 		key.WithHelp("ctrl+left", "word backward"),
 	)
 	keys := keyMap{
@@ -439,6 +452,7 @@ func New(
 		profileRename: key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "rename profile")),
 		profileDelete: key.NewBinding(key.WithKeys("ctrl+k"), key.WithHelp("ctrl+k", "delete profile")),
 		editPrompt:    key.NewBinding(key.WithKeys("ctrl+e"), key.WithHelp("ctrl+e", "edit prompt")),
+		enterSelect:   key.NewBinding(key.WithKeys("ctrl+a"), key.WithHelp("ctrl+a", "select mode")),
 	}
 	helpModel := help.New()
 	helpModel.Styles.ShortKey = helpShortStyle
@@ -448,6 +462,7 @@ func New(
 	helpKeys := helpKeyMap{
 		primary: []key.Binding{keys.toggleHelp},
 		secondary: []key.Binding{
+			keys.enterSelect,
 			keys.openSettings,
 			keys.openModel,
 			keys.toggleSidebar,
@@ -2234,6 +2249,14 @@ func (m *Model) updateListHelp() {
 	escBack := key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back/close"))
 
 	shortHelp := func() []key.Binding {
+		if m.selectMode {
+			return []key.Binding{
+				key.NewBinding(key.WithKeys("↑/↓"), key.WithHelp("↑/↓", "move selection")),
+				key.NewBinding(key.WithKeys("alt+←/→"), key.WithHelp("alt+←/→", "switch focus")),
+				key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "copy")),
+				key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "exit select")),
+			}
+		}
 		if m.picker != nil {
 			return []key.Binding{enterSelect, escBack}
 		}
