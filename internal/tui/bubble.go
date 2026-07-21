@@ -57,15 +57,26 @@ func renderUserBubble(content, authorName string, ts time.Time, termWidth int, s
 	bubbleW = min(bubbleW, termWidth-2)
 	innerW := bubbleW - 4 // subtract horizontal padding (2 each side)
 
+	bubbleBg := userBubbleBg
+	bubbleFg := userBubbleFg
+	if selected {
+		bubbleBg = lipgloss.Color("18")
+		bubbleFg = lipgloss.Color("255")
+	}
+
 	wrapped := wordWrap(content, innerW)
 	bubble := lipgloss.NewStyle().
-		Background(userBubbleBg).
-		Foreground(userBubbleFg).
+		Background(bubbleBg).
+		Foreground(bubbleFg).
 		Padding(0, 2).
 		Width(bubbleW).
 		Render(wrapped)
 
-	label := userLabelStyle.Render(authorName) +
+	labelStyle := userLabelStyle
+	if selected {
+		labelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true)
+	}
+	label := labelStyle.Render(authorName) +
 		"  " + userTimeStyle.Render(ts.Format("15:04"))
 
 	// Right-align: pad = space to push bubble to the right edge.
@@ -74,11 +85,7 @@ func renderUserBubble(content, authorName string, ts time.Time, termWidth int, s
 	pad := strings.Repeat(" ", leftPad)
 
 	paddedBubble := padLines(bubble, pad)
-	result := pad + label + "\n" + paddedBubble
-	if selected {
-		return selectBgStyle.Width(termWidth).Render(result)
-	}
-	return result
+	return pad + label + "\n" + paddedBubble
 }
 
 // renderAssistantBubble renders a left-aligned assistant message with markdown.
@@ -89,26 +96,33 @@ func renderAssistantBubble(content, modelName string, ts time.Time, termWidth in
 	lines := strings.Split(rendered, "\n")
 	var sb strings.Builder
 	borderStyle := assistantBorderStyle
+	if selected {
+		borderStyle = lipgloss.NewStyle().
+			BorderLeft(true).
+			BorderStyle(lipgloss.ThickBorder()).
+			BorderForeground(lipgloss.Color("18")).
+			PaddingLeft(1)
+	}
 
 	// Indent wrapped lines to align with the first line.
 	inner := alignWrappedLines(lines, "  ")
 	boxed := borderStyle.Render(inner)
 
+	marker := ""
+	if selected {
+		marker = "► "
+	}
 	modelLabel := ""
 	if modelName != "" {
 		modelLabel = "  " + modelLabelStyle.Render("["+modelName+"]")
 	}
-	label := asstLabelStyle.Render("Noto") +
+	label := asstLabelStyle.Render(marker+"Noto") +
 		modelLabel +
 		"  " + asstTimeStyle.Render(ts.Format("15:04"))
 
 	sb.WriteString(label + "\n")
 	sb.WriteString(boxed)
-	result := sb.String()
-	if selected {
-		return selectBgStyle.Width(termWidth).Render(result)
-	}
-	return result
+	return sb.String()
 }
 
 // renderCommandLine renders inline command output (dimmed, no bubble).

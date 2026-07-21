@@ -779,7 +779,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case key.Matches(msg, m.keys.enterSelect):
 			m.selectMode = true
-			m.selectCursor = 0
+			m.selectCursor = max(0, len(m.messages)-1)
 			m.selectFocus = selectFocusChat
 			m.syncSelectState()
 			m.input.Blur()

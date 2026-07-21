@@ -53,6 +53,10 @@ func TestSelectMode_ToggleOnOff(t *testing.T) {
 	if !m.selectMode {
 		t.Fatal("expected selectMode=true after ctrl+a")
 	}
+	// Cursor should start at the last message.
+	if m.selectCursor != 0 {
+		t.Fatalf("expected cursor 0 (last msg), got %d", m.selectCursor)
+	}
 
 	// Exit select mode.
 	updated, _ = m.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
@@ -82,29 +86,9 @@ func TestSelectMode_CursorMovement(t *testing.T) {
 	updated, _ := m.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
 	m = updated.(Model)
 
-	if m.selectCursor != 0 {
-		t.Fatalf("expected cursor 0, got %d", m.selectCursor)
-	}
-
-	// Move down.
-	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	m = updated.(Model)
-	if m.selectCursor != 1 {
-		t.Fatalf("expected cursor 1 after down, got %d", m.selectCursor)
-	}
-
-	// Move down again.
-	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	m = updated.(Model)
+	// Cursor starts at last message.
 	if m.selectCursor != 2 {
-		t.Fatalf("expected cursor 2 after down, got %d", m.selectCursor)
-	}
-
-	// Move down again — should clamp.
-	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	m = updated.(Model)
-	if m.selectCursor != 2 {
-		t.Fatalf("expected cursor 2 (clamped), got %d", m.selectCursor)
+		t.Fatalf("expected cursor 2 (last msg), got %d", m.selectCursor)
 	}
 
 	// Move up.
@@ -113,6 +97,27 @@ func TestSelectMode_CursorMovement(t *testing.T) {
 	if m.selectCursor != 1 {
 		t.Fatalf("expected cursor 1 after up, got %d", m.selectCursor)
 	}
+
+	// Move up again.
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	m = updated.(Model)
+	if m.selectCursor != 0 {
+		t.Fatalf("expected cursor 0 after up, got %d", m.selectCursor)
+	}
+
+	// Move up again — should clamp.
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	m = updated.(Model)
+	if m.selectCursor != 0 {
+		t.Fatalf("expected cursor 0 (clamped), got %d", m.selectCursor)
+	}
+
+	// Move down.
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m = updated.(Model)
+	if m.selectCursor != 1 {
+		t.Fatalf("expected cursor 1 after down, got %d", m.selectCursor)
+	}
 }
 
 func TestSelectMode_CursorBoundsClamp(t *testing.T) {
@@ -120,11 +125,16 @@ func TestSelectMode_CursorBoundsClamp(t *testing.T) {
 	updated, _ := m.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
 	m = updated.(Model)
 
-	// Up from 0 should stay at 0.
-	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	// Cursor starts at last message (index 0 for single message).
+	if m.selectCursor != 0 {
+		t.Fatalf("expected cursor 0, got %d", m.selectCursor)
+	}
+
+	// Down from last should stay.
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	m = updated.(Model)
 	if m.selectCursor != 0 {
-		t.Fatalf("expected cursor 0 (clamped up), got %d", m.selectCursor)
+		t.Fatalf("expected cursor 0 (clamped down), got %d", m.selectCursor)
 	}
 }
 
@@ -138,6 +148,10 @@ func TestSelectMode_FocusSwitch(t *testing.T) {
 
 	if m.selectFocus != selectFocusChat {
 		t.Fatal("expected initial focus on chat")
+	}
+	// Cursor starts at last message.
+	if m.selectCursor != 1 {
+		t.Fatalf("expected cursor 1 (last msg), got %d", m.selectCursor)
 	}
 
 	// Alt+Right to switch to sidebar.
@@ -249,9 +263,13 @@ func TestSelectMode_RenderHighlight(t *testing.T) {
 	m = updated.(Model)
 
 	rendered := m.renderHistory()
-	// The selected entry should contain the selectBgStyle background color (xterm 18).
-	if !strings.Contains(rendered, "48;5;18") {
-		t.Fatalf("expected selection highlight background in rendered history, got:\n%s", rendered)
+	// The selected assistant bubble should have the selection border color (38;5;18 foreground).
+	if !strings.Contains(rendered, "38;5;18") {
+		t.Fatalf("expected selection border color in rendered history, got:\n%s", rendered)
+	}
+	// Should also have the ► selection marker.
+	if !strings.Contains(rendered, "►") {
+		t.Fatalf("expected selection marker in rendered history, got:\n%s", rendered)
 	}
 }
 
@@ -291,14 +309,19 @@ func TestSelectMode_NormalKeyPressIgnored(t *testing.T) {
 	updated, _ := m.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
 	m = updated.(Model)
 
+	// Cursor starts at last message.
+	if m.selectCursor != 1 {
+		t.Fatalf("expected cursor 1 (last msg), got %d", m.selectCursor)
+	}
+
 	// Any regular key should be consumed (not cause side effects).
 	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(Model)
 	if !m.selectMode {
 		t.Fatal("expected selectMode to remain true after consuming key")
 	}
-	if m.selectCursor != 0 {
-		t.Fatal("expected cursor to remain 0")
+	if m.selectCursor != 1 {
+		t.Fatal("expected cursor to remain at last msg")
 	}
 }
 
@@ -370,9 +393,15 @@ func TestSelectMode_BubbleSelectedParam(t *testing.T) {
 	if normal == selected {
 		t.Fatal("expected selected rendering to differ from normal")
 	}
+	// Selected user bubble uses the selection background color (xterm 18).
 	if !strings.Contains(selected, "48;5;18") {
 		t.Fatal("expected selection background in selected bubble")
 	}
+	// Normal user bubble uses the standard background (xterm 25).
+	if !strings.Contains(normal, "48;5;25") {
+		t.Fatal("expected standard background in normal bubble")
+	}
+	// Normal bubble should NOT have the selection background.
 	if strings.Contains(normal, "48;5;18") {
 		t.Fatal("unexpected selection background in normal bubble")
 	}
@@ -386,8 +415,16 @@ func TestSelectMode_AssistantBubbleSelectedParam(t *testing.T) {
 	if normal == selected {
 		t.Fatal("expected selected rendering to differ from normal")
 	}
-	if !strings.Contains(selected, "48;5;18") {
-		t.Fatal("expected selection background in selected assistant bubble")
+	// Selected assistant bubble has a ► marker.
+	if !strings.Contains(selected, "►") {
+		t.Fatal("expected selection marker in selected assistant bubble")
+	}
+	if strings.Contains(normal, "►") {
+		t.Fatal("unexpected selection marker in normal assistant bubble")
+	}
+	// Selected assistant bubble uses selection border color (xterm 18 foreground).
+	if !strings.Contains(selected, "38;5;18") {
+		t.Fatal("expected selection border color in selected assistant bubble")
 	}
 }
 
