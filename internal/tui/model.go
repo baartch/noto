@@ -629,13 +629,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch {
 			case key.Matches(msg, m.keys.enterSelect):
 				m.selectMode = false
+				m.syncSelectState()
 				return m, m.input.Focus()
 			case msg.Key().Code == tea.KeyEsc:
 				m.selectMode = false
+				m.syncSelectState()
 				return m, m.input.Focus()
 			case msg.String() == "ctrl+c":
 				cmd := m.copySelectionToClipboard()
 				m.selectMode = false
+				m.syncSelectState()
 				return m, cmd
 			case msg.Key().Code == tea.KeyUp:
 				m.moveSelectCursor(-1)
@@ -649,12 +652,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.sidebar != nil && m.sidebar.open {
 					m.selectFocus = selectFocusChat
 					m.selectCursor = min(m.selectCursor, max(0, len(m.chatEntries())-1))
+					m.syncSelectState()
 				}
 				return m, nil
 			case msg.Key().Mod.Contains(tea.ModAlt) && msg.Key().Code == tea.KeyRight:
 				if m.sidebar != nil && m.sidebar.open {
 					m.selectFocus = selectFocusSidebar
 					m.selectCursor = min(m.selectCursor, max(0, len(m.sidebarEntries())-1))
+					m.syncSelectState()
 				}
 				return m, nil
 			}
@@ -773,6 +778,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selectMode = true
 			m.selectCursor = 0
 			m.selectFocus = selectFocusChat
+			m.syncSelectState()
 			m.input.Blur()
 			return m, nil
 
@@ -2753,11 +2759,14 @@ func (m *Model) renderHistory() string {
 		}
 		switch msg.role {
 		case "user":
-			sb.WriteString(renderUserBubble(msg.content, "You", ts, termWidth))
+			sel := m.selectMode && m.selectFocus == selectFocusChat && i == m.selectCursor
+			sb.WriteString(renderUserBubble(msg.content, "You", ts, termWidth, sel))
 		case "assistant":
-			sb.WriteString(renderAssistantBubble(msg.content, m.activeModel, ts, termWidth))
+			sel := m.selectMode && m.selectFocus == selectFocusChat && i == m.selectCursor
+			sb.WriteString(renderAssistantBubble(msg.content, m.activeModel, ts, termWidth, sel))
 		case "pending":
-			sb.WriteString(renderAssistantBubble(msg.content, m.activeModel, ts, termWidth))
+			sel := m.selectMode && m.selectFocus == selectFocusChat && i == m.selectCursor
+			sb.WriteString(renderAssistantBubble(msg.content, m.activeModel, ts, termWidth, sel))
 		case "command":
 			sb.WriteString(renderCommandLine(msg.content))
 		}
@@ -2816,6 +2825,16 @@ func (m *Model) moveSelectCursor(delta int) {
 		maxIdx = 0
 	}
 	m.selectCursor = max(0, min(maxIdx, m.selectCursor+delta))
+	m.syncSelectState()
+}
+
+// syncSelectState pushes the current selection state to the sidebar model.
+func (m *Model) syncSelectState() {
+	if m.sidebar == nil {
+		return
+	}
+	m.sidebar.selectActive = m.selectMode && m.selectFocus == selectFocusSidebar
+	m.sidebar.selectCursor = m.selectCursor
 }
 
 // scrollViewportToSelection scrolls the relevant viewport so the selected entry is visible.
@@ -2825,6 +2844,7 @@ func (m *Model) scrollViewportToSelection() {
 		return
 	}
 	if m.sidebar != nil && m.sidebar.open {
+		m.syncSelectState()
 		m.sidebar.viewport.SetContent(m.sidebar.renderContent())
 	}
 }

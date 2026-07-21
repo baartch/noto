@@ -46,7 +46,7 @@ func renderMarkdown(content string, maxWidth int) string {
 }
 
 // renderUserBubble renders a right-aligned user message bubble.
-func renderUserBubble(content, authorName string, ts time.Time, termWidth int) string {
+func renderUserBubble(content, authorName string, ts time.Time, termWidth int, selected bool) string {
 	if termWidth < 20 {
 		termWidth = 80
 	}
@@ -74,11 +74,15 @@ func renderUserBubble(content, authorName string, ts time.Time, termWidth int) s
 	pad := strings.Repeat(" ", leftPad)
 
 	paddedBubble := padLines(bubble, pad)
-	return pad + label + "\n" + paddedBubble
+	result := pad + label + "\n" + paddedBubble
+	if selected {
+		return selectBgStyle.Width(termWidth).Render(result)
+	}
+	return result
 }
 
 // renderAssistantBubble renders a left-aligned assistant message with markdown.
-func renderAssistantBubble(content, modelName string, ts time.Time, termWidth int) string {
+func renderAssistantBubble(content, modelName string, ts time.Time, termWidth int, selected bool) string {
 	rendered := renderMarkdown(content, termWidth)
 
 	// Wrap rendered markdown in a subtle left border.
@@ -100,7 +104,11 @@ func renderAssistantBubble(content, modelName string, ts time.Time, termWidth in
 
 	sb.WriteString(label + "\n")
 	sb.WriteString(boxed)
-	return sb.String()
+	result := sb.String()
+	if selected {
+		return selectBgStyle.Width(termWidth).Render(result)
+	}
+	return result
 }
 
 // renderCommandLine renders inline command output (dimmed, no bubble).
