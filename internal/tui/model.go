@@ -17,6 +17,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/atotto/clipboard"
 
 	"noto/internal/cache"
 	"noto/internal/chat"
@@ -128,6 +129,7 @@ type editorFinishedMsg struct {
 type statsUpdatedMsg struct{ formatted string }
 type cacheStatusUpdatedMsg struct{ formatted string }
 type updateNoticeMsg struct{ formatted string }
+type selectionCopiedMsg struct{ ok bool }
 
 type profilesAction interface {
 	Label() string
@@ -518,8 +520,8 @@ func New(
 		historyErr:             "",
 		sidebar: func() *sidebarModel {
 			if execCtx == nil || execCtx.DB == nil {
-				return nil
-			}
+	return nil
+}
 			return newSidebar(36,
 				store.NewMemoryNoteRepo(execCtx.DB),
 				store.NewMemorySummaryRepo(execCtx.DB),
@@ -621,6 +623,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.picker != nil {
 			return m.updatePicker(msg, cmds)
 		}
+
+		// ---- select mode ---------------------------------------------------------
+		if m.selectMode {
+			switch {
+			case key.Matches(msg, m.keys.enterSelect):
+				m.selectMode = false
+				return m, m.input.Focus()
+			case msg.Key().Code == tea.KeyEsc:
+				m.selectMode = false
+				return m, m.input.Focus()
+			case msg.String() == "ctrl+c":
+				cmd := m.copySelectionToClipboard()
+				m.selectMode = false
+				return m, cmd
+			case msg.Key().Code == tea.KeyUp:
+				m.moveSelectCursor(-1)
+				m.scrollViewportToSelection()
+				return m, nil
+			case msg.Key().Code == tea.KeyDown:
+				m.moveSelectCursor(1)
+				m.scrollViewportToSelection()
+				return m, nil
+			case msg.Key().Mod.Contains(tea.ModAlt) && msg.Key().Code == tea.KeyLeft:
+				if m.sidebar != nil && m.sidebar.open {
+					m.selectFocus = selectFocusChat
+					m.selectCursor = min(m.selectCursor, max(0, len(m.chatEntries())-1))
+				}
+				return m, nil
+			case msg.Key().Mod.Contains(tea.ModAlt) && msg.Key().Code == tea.KeyRight:
+				if m.sidebar != nil && m.sidebar.open {
+					m.selectFocus = selectFocusSidebar
+					m.selectCursor = min(m.selectCursor, max(0, len(m.sidebarEntries())-1))
+				}
+				return m, nil
+			}
+			return m, nil
+		}
+
 		if m.settingsOpen && m.settingsEditing {
 			// ctrl+h toggles help even while editing
 			if key.Matches(msg, m.keys.toggleHelp) {
@@ -727,6 +767,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.clearInput):
 			m.input.SetValue("")
 			m.clearSuggestions()
+			return m, nil
+
+		case key.Matches(msg, m.keys.enterSelect):
+			m.selectMode = true
+			m.selectCursor = 0
+			m.selectFocus = selectFocusChat
+			m.input.Blur()
 			return m, nil
 
 		case key.Matches(msg, m.keys.quit):
@@ -915,6 +962,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clearNotesIndicatorMsg:
 		m.notesIndicator = ""
+
+	case selectionCopiedMsg:
+		if msg.ok {
+			m.notesIndicator = "📋 copied"
+			cmds = append(cmds, tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
+				return clearNotesIndicatorMsg{}
+			}))
+		}
 
 	// ---- sidebar ------------------------------------------------------------
 	case sidebarBatchMsg:
@@ -2746,4 +2801,54 @@ func (m *Model) sidebarEntries() []string {
 		return entries
 	}
 	return nil
+}
+
+// moveSelectCursor adjusts the selection cursor by delta, clamped to valid range.
+func (m *Model) moveSelectCursor(delta int) {
+	var entries []string
+	if m.selectFocus == selectFocusChat {
+		entries = m.chatEntries()
+	} else {
+		entries = m.sidebarEntries()
+	}
+	maxIdx := len(entries) - 1
+	if maxIdx < 0 {
+		maxIdx = 0
+	}
+	m.selectCursor = max(0, min(maxIdx, m.selectCursor+delta))
+}
+
+// scrollViewportToSelection scrolls the relevant viewport so the selected entry is visible.
+func (m *Model) scrollViewportToSelection() {
+	if m.selectFocus == selectFocusChat {
+		m.syncViewport()
+		return
+	}
+	if m.sidebar != nil && m.sidebar.open {
+		m.sidebar.viewport.SetContent(m.sidebar.renderContent())
+	}
+}
+
+// copySelectionToClipboard copies the selected entry content to the system clipboard.
+func (m *Model) copySelectionToClipboard() tea.Cmd {
+	var content string
+	if m.selectFocus == selectFocusChat {
+		entries := m.chatEntries()
+		if m.selectCursor < len(entries) {
+			content = entries[m.selectCursor]
+		}
+	} else {
+		entries := m.sidebarEntries()
+		if m.selectCursor < len(entries) {
+			content = entries[m.selectCursor]
+		}
+	}
+	if content == "" {
+		return nil
+	}
+	text := content
+	return func() tea.Msg {
+		_ = clipboard.WriteAll(text)
+		return selectionCopiedMsg{ok: true}
+	}
 }
