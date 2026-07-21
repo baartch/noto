@@ -69,5 +69,5 @@ var (
 	sidebarEmpty       = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
 	// Select mode styles
-	selectBgStyle = lipgloss.NewStyle().Background(lipgloss.Color("17")).Foreground(lipgloss.Color("252"))
+	selectBgStyle = lipgloss.NewStyle().Background(lipgloss.Color("18")).Foreground(lipgloss.Color("255"))
 )

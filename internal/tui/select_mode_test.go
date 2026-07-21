@@ -249,8 +249,8 @@ func TestSelectMode_RenderHighlight(t *testing.T) {
 	m = updated.(Model)
 
 	rendered := m.renderHistory()
-	// The selected entry should contain the selectBgStyle background color (xterm 17).
-	if !strings.Contains(rendered, "48;5;17") {
+	// The selected entry should contain the selectBgStyle background color (xterm 18).
+	if !strings.Contains(rendered, "48;5;18") {
 		t.Fatalf("expected selection highlight background in rendered history, got:\n%s", rendered)
 	}
 }
@@ -258,8 +258,31 @@ func TestSelectMode_RenderHighlight(t *testing.T) {
 func TestSelectMode_RenderNoHighlightWhenNormal(t *testing.T) {
 	m := newSelectTestModel("hello world")
 	rendered := m.renderHistory()
-	if strings.Contains(rendered, "48;5;17") {
+	if strings.Contains(rendered, "48;5;18") {
 		t.Fatalf("unexpected selection highlight in normal mode")
+	}
+}
+
+func TestSelectMode_CtrlHTogglesHelp(t *testing.T) {
+	m := newSelectTestModel("msg")
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
+	m = updated.(Model)
+	if !m.selectMode {
+		t.Fatal("expected selectMode=true")
+	}
+
+	// ctrl+h should toggle help.
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'h', Mod: tea.ModCtrl})
+	m = updated.(Model)
+	if !m.help.ShowAll {
+		t.Fatal("expected help.ShowAll=true after ctrl+h in select mode")
+	}
+
+	// ctrl+h again should toggle off.
+	updated, _ = m.Update(tea.KeyPressMsg{Code: 'h', Mod: tea.ModCtrl})
+	m = updated.(Model)
+	if m.help.ShowAll {
+		t.Fatal("expected help.ShowAll=false after second ctrl+h")
 	}
 }
 
@@ -319,7 +342,7 @@ func TestSelectMode_SidebarHighlight(t *testing.T) {
 	content := s.renderContent()
 	// Notes are rendered in reverse: n2 first (displayed position 0), n1 second (displayed position 1).
 	// selectCursor=0 means the first displayed entry (n2) should be highlighted.
-	if !strings.Contains(content, "48;5;17") {
+	if !strings.Contains(content, "48;5;18") {
 		t.Fatalf("expected selection highlight in sidebar content, got:\n%s", content)
 	}
 }
@@ -334,7 +357,7 @@ func TestSelectMode_SidebarHighlightDisabled(t *testing.T) {
 	}
 
 	content := s.renderContent()
-	if strings.Contains(content, "48;5;17") {
+	if strings.Contains(content, "48;5;18") {
 		t.Fatal("unexpected selection highlight when selectActive=false")
 	}
 }
@@ -347,10 +370,10 @@ func TestSelectMode_BubbleSelectedParam(t *testing.T) {
 	if normal == selected {
 		t.Fatal("expected selected rendering to differ from normal")
 	}
-	if !strings.Contains(selected, "48;5;17") {
+	if !strings.Contains(selected, "48;5;18") {
 		t.Fatal("expected selection background in selected bubble")
 	}
-	if strings.Contains(normal, "48;5;17") {
+	if strings.Contains(normal, "48;5;18") {
 		t.Fatal("unexpected selection background in normal bubble")
 	}
 }
@@ -363,7 +386,7 @@ func TestSelectMode_AssistantBubbleSelectedParam(t *testing.T) {
 	if normal == selected {
 		t.Fatal("expected selected rendering to differ from normal")
 	}
-	if !strings.Contains(selected, "48;5;17") {
+	if !strings.Contains(selected, "48;5;18") {
 		t.Fatal("expected selection background in selected assistant bubble")
 	}
 }

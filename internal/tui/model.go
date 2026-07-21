@@ -631,6 +631,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selectMode = false
 				m.syncSelectState()
 				return m, m.input.Focus()
+			case key.Matches(msg, m.keys.toggleHelp):
+				m.help.ShowAll = !m.help.ShowAll
+				return m, nil
 			case msg.Key().Code == tea.KeyEsc:
 				m.selectMode = false
 				m.syncSelectState()
@@ -2837,7 +2840,41 @@ func (m *Model) syncSelectState() {
 // scrollViewportToSelection scrolls the relevant viewport so the selected entry is visible.
 func (m *Model) scrollViewportToSelection() {
 	if m.selectFocus == selectFocusChat {
-		m.syncViewport()
+		// Re-render with selection highlight and scroll to the selected entry.
+		if !m.ready {
+			return
+		}
+		termWidth := m.viewport.Width()
+		if termWidth < 40 {
+			termWidth = m.width
+		}
+		if termWidth < 40 {
+			termWidth = 80
+		}
+		// Count lines above the selected entry to compute the target offset.
+		lineOffset := 0
+		for i := range m.selectCursor {
+			if i >= len(m.messages) {
+				break
+			}
+			msg := m.messages[i]
+			ts := msg.timestamp
+			if ts.IsZero() {
+				ts = time.Now()
+			}
+			var rendered string
+			switch msg.role {
+			case "user":
+				rendered = renderUserBubble(msg.content, "You", ts, termWidth, false)
+			case "assistant", "pending":
+				rendered = renderAssistantBubble(msg.content, m.activeModel, ts, termWidth, false)
+			case "command":
+				rendered = renderCommandLine(msg.content)
+			}
+			lineOffset += lipgloss.Height(rendered) + 1 // +1 for the "\n\n" separator
+		}
+		m.viewport.SetContent(m.renderHistory())
+		m.viewport.SetYOffset(lineOffset)
 		return
 	}
 	if m.sidebar != nil && m.sidebar.open {
