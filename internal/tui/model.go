@@ -1639,8 +1639,8 @@ func (m *Model) renderSuggestions(maxRows int) string {
 
 	var sb strings.Builder
 	if len(list) == 0 {
-		return sb.String()
-	}
+	return sb.String()
+}
 	for i := start; i < end; i++ {
 		s := list[i]
 		line := fmt.Sprintf("  /%s  — %s", s.CommandPath, s.Hint)
@@ -2709,4 +2709,41 @@ func (m *Model) renderHistory() string {
 		sb.WriteString("\n\n")
 	}
 	return sb.String()
+}
+
+// chatEntries returns the raw content of each message for selection.
+func (m *Model) chatEntries() []string {
+	entries := make([]string, 0, len(m.messages))
+	for _, msg := range m.messages {
+		entries = append(entries, msg.content)
+	}
+	return entries
+}
+
+// sidebarEntries returns the content of notes or summaries on the active sidebar tab.
+func (m *Model) sidebarEntries() []string {
+	if m.sidebar == nil {
+		return nil
+	}
+	switch m.sidebar.activeTab {
+	case sidebarTabNotes:
+		entries := make([]string, 0, len(m.sidebar.notes))
+		for _, n := range m.sidebar.notes {
+			entries = append(entries, n.Content)
+		}
+		return entries
+	case sidebarTabWeekly:
+		entries := make([]string, 0, len(m.sidebar.weekly))
+		for _, s := range m.sidebar.weekly {
+			entries = append(entries, s.Content)
+		}
+		return entries
+	case sidebarTabMonthly:
+		entries := make([]string, 0, len(m.sidebar.monthly))
+		for _, s := range m.sidebar.monthly {
+			entries = append(entries, s.Content)
+		}
+		return entries
+	}
+	return nil
 }
