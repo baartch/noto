@@ -520,8 +520,8 @@ func New(
 		historyErr:             "",
 		sidebar: func() *sidebarModel {
 			if execCtx == nil || execCtx.DB == nil {
-	return nil
-}
+				return nil
+			}
 			return newSidebar(36,
 				store.NewMemoryNoteRepo(execCtx.DB),
 				store.NewMemorySummaryRepo(execCtx.DB),
@@ -1700,8 +1700,8 @@ func (m *Model) renderSuggestions(maxRows int) string {
 
 	var sb strings.Builder
 	if len(list) == 0 {
-	return sb.String()
-}
+		return sb.String()
+	}
 	for i := start; i < end; i++ {
 		s := list[i]
 		line := fmt.Sprintf("  /%s  — %s", s.CommandPath, s.Hint)
@@ -2820,10 +2820,7 @@ func (m *Model) moveSelectCursor(delta int) {
 	} else {
 		entries = m.sidebarEntries()
 	}
-	maxIdx := len(entries) - 1
-	if maxIdx < 0 {
-		maxIdx = 0
-	}
+	maxIdx := max(0, len(entries)-1)
 	m.selectCursor = max(0, min(maxIdx, m.selectCursor+delta))
 	m.syncSelectState()
 }
