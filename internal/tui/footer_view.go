@@ -38,6 +38,10 @@ func (m *Model) renderFooter() string {
 		leftParts = append(leftParts, dim.Render("ctx:n/a"))
 	}
 
+	if m.selectMode {
+		leftParts = append(leftParts, blue.Render("[SELECT]"))
+	}
+
 	if m.notesIndicator != "" {
 		leftParts = append(leftParts, green.Render(m.notesIndicator))
 	}

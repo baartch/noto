@@ -9,7 +9,7 @@ import (
 func TestRenderUserBubble_PreservesLineBreaksAndIndentation(t *testing.T) {
 	content := "first line\n  indented second line\n    indented third line"
 
-	rendered := renderUserBubble(content, "You", time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC), 80)
+	rendered := renderUserBubble(content, "You", time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC), 80, false)
 
 	if !strings.Contains(rendered, "first line") {
 		t.Fatalf("expected first line in rendered bubble")

@@ -52,17 +52,27 @@ func (r *MemoryNoteRepo) DB() *DB {
 }
 
 // Create inserts a new memory note.
+// When CreatedAt/UpdatedAt are zero they are defaulted to time.Now().UTC() with
+// sub-second precision so notes inserted in the same batch get distinct,
+// monotonic timestamps that preserve insertion order.
 func (r *MemoryNoteRepo) Create(ctx context.Context, n *MemoryNote) error {
 	var convID any
 	if n.ConversationID != "" {
 		convID = n.ConversationID
 	}
+	now := time.Now().UTC()
+	if n.CreatedAt.IsZero() {
+		n.CreatedAt = now
+	}
+	if n.UpdatedAt.IsZero() {
+		n.UpdatedAt = now
+	}
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO memory_notes
-			(id, profile_id, conversation_id, category, content, importance, source_message_ids)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+			(id, profile_id, conversation_id, category, content, importance, source_message_ids, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, n.ID, n.ProfileID, convID, string(n.Category),
-		n.Content, n.Importance, n.SourceMessageIDs)
+		n.Content, n.Importance, n.SourceMessageIDs, n.CreatedAt, n.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("store: create memory note: %w", err)
 	}
@@ -125,13 +135,15 @@ func (r *MemoryNoteRepo) ListByProfile(ctx context.Context, profileID string) ([
 }
 
 // ListByProfilePaginated returns memory notes with pagination, ordered by created_at DESC.
+// rowid DESC breaks ties on identical created_at values (e.g. legacy batches written
+// with second-precision timestamps) so the most recently inserted note comes first.
 func (r *MemoryNoteRepo) ListByProfilePaginated(ctx context.Context, profileID string, limit, offset int) ([]*MemoryNote, bool, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, profile_id, COALESCE(conversation_id,''), category, content, importance,
 		       source_message_ids, created_at, updated_at
 		FROM memory_notes
 		WHERE profile_id = ?
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, rowid DESC
 		LIMIT ? OFFSET ?
 	`, profileID, limit, offset)
 	if err != nil {

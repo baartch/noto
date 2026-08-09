@@ -17,6 +17,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/atotto/clipboard"
 
 	"noto/internal/cache"
 	"noto/internal/chat"
@@ -128,6 +129,7 @@ type editorFinishedMsg struct {
 type statsUpdatedMsg struct{ formatted string }
 type cacheStatusUpdatedMsg struct{ formatted string }
 type updateNoticeMsg struct{ formatted string }
+type selectionCopiedMsg struct{ ok bool }
 
 type profilesAction interface {
 	Label() string
@@ -305,6 +307,11 @@ type Model struct {
 	embeddingModel         string
 
 	sidebar *sidebarModel
+
+	// select mode
+	selectMode   bool
+	selectCursor int
+	selectFocus  selectFocus
 }
 
 type conversationHistoryWindow struct {
@@ -338,7 +345,15 @@ type keyMap struct {
 	profileRename key.Binding
 	profileDelete key.Binding
 	editPrompt    key.Binding
+	enterSelect   key.Binding
 }
+
+type selectFocus int
+
+const (
+	selectFocusChat selectFocus = iota
+	selectFocusSidebar
+)
 
 type helpKeyMap struct {
 	primary   []key.Binding
@@ -421,11 +436,11 @@ func New(
 		key.WithHelp("alt+enter", "insert newline"),
 	)
 	ti.KeyMap.WordForward = key.NewBinding(
-		key.WithKeys("alt+right", "alt+f", "ctrl+right"),
+		key.WithKeys("ctrl+right"),
 		key.WithHelp("ctrl+right", "word forward"),
 	)
 	ti.KeyMap.WordBackward = key.NewBinding(
-		key.WithKeys("alt+left", "alt+b", "ctrl+left"),
+		key.WithKeys("ctrl+left"),
 		key.WithHelp("ctrl+left", "word backward"),
 	)
 	keys := keyMap{
@@ -439,6 +454,7 @@ func New(
 		profileRename: key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "rename profile")),
 		profileDelete: key.NewBinding(key.WithKeys("ctrl+k"), key.WithHelp("ctrl+k", "delete profile")),
 		editPrompt:    key.NewBinding(key.WithKeys("ctrl+e"), key.WithHelp("ctrl+e", "edit prompt")),
+		enterSelect:   key.NewBinding(key.WithKeys("ctrl+a"), key.WithHelp("ctrl+a", "select mode")),
 	}
 	helpModel := help.New()
 	helpModel.Styles.ShortKey = helpShortStyle
@@ -448,6 +464,7 @@ func New(
 	helpKeys := helpKeyMap{
 		primary: []key.Binding{keys.toggleHelp},
 		secondary: []key.Binding{
+			keys.enterSelect,
 			keys.openSettings,
 			keys.openModel,
 			keys.toggleSidebar,
@@ -606,6 +623,55 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.picker != nil {
 			return m.updatePicker(msg, cmds)
 		}
+
+		// ---- select mode ---------------------------------------------------------
+		if m.selectMode {
+			switch {
+			case key.Matches(msg, m.keys.enterSelect):
+				m.selectMode = false
+				m.syncSelectState()
+				m.viewport.SetContent(m.renderHistory())
+				return m, m.input.Focus()
+			case key.Matches(msg, m.keys.toggleHelp):
+				m.help.ShowAll = !m.help.ShowAll
+				return m, nil
+			case msg.Key().Code == tea.KeyEsc:
+				m.selectMode = false
+				m.syncSelectState()
+				m.viewport.SetContent(m.renderHistory())
+				return m, m.input.Focus()
+			case msg.String() == "ctrl+c":
+				cmd := m.copySelectionToClipboard()
+				m.selectMode = false
+				m.syncSelectState()
+				m.viewport.SetContent(m.renderHistory())
+				return m, cmd
+			case msg.Key().Code == tea.KeyUp:
+				m.moveSelectCursor(-1)
+				m.scrollViewportToSelection()
+				return m, nil
+			case msg.Key().Code == tea.KeyDown:
+				m.moveSelectCursor(1)
+				m.scrollViewportToSelection()
+				return m, nil
+			case msg.Key().Mod.Contains(tea.ModAlt) && msg.Key().Code == tea.KeyLeft:
+				if m.sidebar != nil && m.sidebar.open {
+					m.selectFocus = selectFocusChat
+					m.selectCursor = min(m.selectCursor, max(0, len(m.chatEntries())-1))
+					m.syncSelectState()
+				}
+				return m, nil
+			case msg.Key().Mod.Contains(tea.ModAlt) && msg.Key().Code == tea.KeyRight:
+				if m.sidebar != nil && m.sidebar.open {
+					m.selectFocus = selectFocusSidebar
+					m.selectCursor = min(m.selectCursor, max(0, len(m.sidebarEntries())-1))
+					m.syncSelectState()
+				}
+				return m, nil
+			}
+			return m, nil
+		}
+
 		if m.settingsOpen && m.settingsEditing {
 			// ctrl+h toggles help even while editing
 			if key.Matches(msg, m.keys.toggleHelp) {
@@ -712,6 +778,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.clearInput):
 			m.input.SetValue("")
 			m.clearSuggestions()
+			return m, nil
+
+		case key.Matches(msg, m.keys.enterSelect):
+			m.selectMode = true
+			m.selectCursor = max(0, len(m.messages)-1)
+			m.selectFocus = selectFocusChat
+			m.syncSelectState()
+			m.input.Blur()
+			m.viewport.SetContent(m.renderHistory())
 			return m, nil
 
 		case key.Matches(msg, m.keys.quit):
@@ -900,6 +975,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clearNotesIndicatorMsg:
 		m.notesIndicator = ""
+
+	case selectionCopiedMsg:
+		if msg.ok {
+			m.notesIndicator = "📋 copied"
+			cmds = append(cmds, tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
+				return clearNotesIndicatorMsg{}
+			}))
+		}
 
 	// ---- sidebar ------------------------------------------------------------
 	case sidebarBatchMsg:
@@ -2234,6 +2317,14 @@ func (m *Model) updateListHelp() {
 	escBack := key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back/close"))
 
 	shortHelp := func() []key.Binding {
+		if m.selectMode {
+			return []key.Binding{
+				key.NewBinding(key.WithKeys("↑/↓"), key.WithHelp("↑/↓", "move selection")),
+				key.NewBinding(key.WithKeys("alt+←/→"), key.WithHelp("alt+←/→", "switch focus")),
+				key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "copy")),
+				key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "exit select")),
+			}
+		}
 		if m.picker != nil {
 			return []key.Binding{enterSelect, escBack}
 		}
@@ -2675,15 +2766,147 @@ func (m *Model) renderHistory() string {
 		}
 		switch msg.role {
 		case "user":
-			sb.WriteString(renderUserBubble(msg.content, "You", ts, termWidth))
+			sel := m.selectMode && m.selectFocus == selectFocusChat && i == m.selectCursor
+			sb.WriteString(renderUserBubble(msg.content, "You", ts, termWidth, sel))
 		case "assistant":
-			sb.WriteString(renderAssistantBubble(msg.content, m.activeModel, ts, termWidth))
+			sel := m.selectMode && m.selectFocus == selectFocusChat && i == m.selectCursor
+			sb.WriteString(renderAssistantBubble(msg.content, m.activeModel, ts, termWidth, sel))
 		case "pending":
-			sb.WriteString(renderAssistantBubble(msg.content, m.activeModel, ts, termWidth))
+			sel := m.selectMode && m.selectFocus == selectFocusChat && i == m.selectCursor
+			sb.WriteString(renderAssistantBubble(msg.content, m.activeModel, ts, termWidth, sel))
 		case "command":
 			sb.WriteString(renderCommandLine(msg.content))
 		}
 		sb.WriteString("\n\n")
 	}
 	return sb.String()
+}
+
+// chatEntries returns the raw content of each message for selection.
+func (m *Model) chatEntries() []string {
+	entries := make([]string, 0, len(m.messages))
+	for _, msg := range m.messages {
+		entries = append(entries, msg.content)
+	}
+	return entries
+}
+
+// sidebarEntries returns the content of notes or summaries on the active sidebar tab.
+func (m *Model) sidebarEntries() []string {
+	if m.sidebar == nil {
+		return nil
+	}
+	switch m.sidebar.activeTab {
+	case sidebarTabNotes:
+		entries := make([]string, 0, len(m.sidebar.notes))
+		for _, n := range m.sidebar.notes {
+			entries = append(entries, n.Content)
+		}
+		return entries
+	case sidebarTabWeekly:
+		entries := make([]string, 0, len(m.sidebar.weekly))
+		for _, s := range m.sidebar.weekly {
+			entries = append(entries, s.Content)
+		}
+		return entries
+	case sidebarTabMonthly:
+		entries := make([]string, 0, len(m.sidebar.monthly))
+		for _, s := range m.sidebar.monthly {
+			entries = append(entries, s.Content)
+		}
+		return entries
+	}
+	return nil
+}
+
+// moveSelectCursor adjusts the selection cursor by delta, clamped to valid range.
+func (m *Model) moveSelectCursor(delta int) {
+	var entries []string
+	if m.selectFocus == selectFocusChat {
+		entries = m.chatEntries()
+	} else {
+		entries = m.sidebarEntries()
+	}
+	maxIdx := max(0, len(entries)-1)
+	m.selectCursor = max(0, min(maxIdx, m.selectCursor+delta))
+	m.syncSelectState()
+}
+
+// syncSelectState pushes the current selection state to the sidebar model.
+func (m *Model) syncSelectState() {
+	if m.sidebar == nil {
+		return
+	}
+	m.sidebar.selectActive = m.selectMode && m.selectFocus == selectFocusSidebar
+	m.sidebar.selectCursor = m.selectCursor
+}
+
+// scrollViewportToSelection scrolls the relevant viewport so the selected entry is visible.
+func (m *Model) scrollViewportToSelection() {
+	if m.selectFocus == selectFocusChat {
+		// Re-render with selection highlight and scroll to the selected entry.
+		if !m.ready {
+			return
+		}
+		termWidth := m.viewport.Width()
+		if termWidth < 40 {
+			termWidth = m.width
+		}
+		if termWidth < 40 {
+			termWidth = 80
+		}
+		// Count lines above the selected entry to compute the target offset.
+		lineOffset := 0
+		for i := range m.selectCursor {
+			if i >= len(m.messages) {
+				break
+			}
+			msg := m.messages[i]
+			ts := msg.timestamp
+			if ts.IsZero() {
+				ts = time.Now()
+			}
+			var rendered string
+			switch msg.role {
+			case "user":
+				rendered = renderUserBubble(msg.content, "You", ts, termWidth, false)
+			case "assistant", "pending":
+				rendered = renderAssistantBubble(msg.content, m.activeModel, ts, termWidth, false)
+			case "command":
+				rendered = renderCommandLine(msg.content)
+			}
+			lineOffset += lipgloss.Height(rendered) + 1 // +1 for the "\n\n" separator
+		}
+		m.viewport.SetContent(m.renderHistory())
+		m.viewport.SetYOffset(lineOffset)
+		return
+	}
+	if m.sidebar != nil && m.sidebar.open {
+		m.syncSelectState()
+		m.sidebar.viewport.SetContent(m.sidebar.renderContent())
+	}
+}
+
+// copySelectionToClipboard copies the selected entry content to the system clipboard.
+func (m *Model) copySelectionToClipboard() tea.Cmd {
+	var content string
+	if m.selectFocus == selectFocusChat {
+		entries := m.chatEntries()
+		if m.selectCursor < len(entries) {
+			content = entries[m.selectCursor]
+		}
+	} else {
+		entries := m.sidebarEntries()
+		if m.selectCursor < len(entries) {
+			content = entries[m.selectCursor]
+		}
+	}
+	if content == "" {
+		return nil
+	}
+	text := content
+	return func() tea.Msg {
+		_ = clipboard.WriteAll(text)
+		return selectionCopiedMsg{ok: true}
+	}
 }

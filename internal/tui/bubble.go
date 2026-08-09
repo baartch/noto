@@ -17,7 +17,7 @@ type mdRenderer struct {
 
 var cachedRenderer mdRenderer
 
-func renderMarkdown(content string, maxWidth int) string {
+func renderMarkdown(content string, maxWidth int, selected bool) string {
 	// Clamp to a readable width.
 	w := maxWidth - 6 // subtract bubble padding
 	w = max(w, 40)
@@ -42,11 +42,29 @@ func renderMarkdown(content string, maxWidth int) string {
 		return content
 	}
 	// glamour adds a trailing newline — trim to one.
-	return strings.TrimRight(out, "\n")
+	out = strings.TrimRight(out, "\n")
+
+	// When selected, inject the selection background (xterm 18) into the ANSI
+	// stream.  Glamour resets styles after every token (\x1b[m), which kills
+	// any background applied at the outer lipgloss layer.  Re-applying the
+	// background after every reset keeps it solid throughout the text.
+	if selected {
+		const bg = "\x1b[48;5;18m"
+		const reset = "\x1b[m"
+		out = bg + strings.ReplaceAll(out, reset, reset+bg)
+		// The replacement appended bg after the final reset; strip it and
+		// end with a clean reset so the outer style can take over.
+		out = strings.TrimSuffix(out, bg)
+		if !strings.HasSuffix(out, reset) {
+			out += reset
+		}
+	}
+
+	return out
 }
 
 // renderUserBubble renders a right-aligned user message bubble.
-func renderUserBubble(content, authorName string, ts time.Time, termWidth int) string {
+func renderUserBubble(content, authorName string, ts time.Time, termWidth int, selected bool) string {
 	if termWidth < 20 {
 		termWidth = 80
 	}
@@ -57,15 +75,30 @@ func renderUserBubble(content, authorName string, ts time.Time, termWidth int) s
 	bubbleW = min(bubbleW, termWidth-2)
 	innerW := bubbleW - 4 // subtract horizontal padding (2 each side)
 
+	bubbleBg := userBubbleBg
+	bubbleFg := userBubbleFg
+	if selected {
+		bubbleBg = lipgloss.Color("18")
+		bubbleFg = lipgloss.Color("255")
+	}
+
 	wrapped := wordWrap(content, innerW)
 	bubble := lipgloss.NewStyle().
-		Background(userBubbleBg).
-		Foreground(userBubbleFg).
+		Background(bubbleBg).
+		Foreground(bubbleFg).
 		Padding(0, 2).
 		Width(bubbleW).
 		Render(wrapped)
 
-	label := userLabelStyle.Render(authorName) +
+	labelStyle := userLabelStyle
+	if selected {
+		labelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true)
+	}
+	name := authorName
+	if selected {
+		name = "► " + authorName
+	}
+	label := labelStyle.Render(name) +
 		"  " + userTimeStyle.Render(ts.Format("15:04"))
 
 	// Right-align: pad = space to push bubble to the right edge.
@@ -78,23 +111,37 @@ func renderUserBubble(content, authorName string, ts time.Time, termWidth int) s
 }
 
 // renderAssistantBubble renders a left-aligned assistant message with markdown.
-func renderAssistantBubble(content, modelName string, ts time.Time, termWidth int) string {
-	rendered := renderMarkdown(content, termWidth)
+func renderAssistantBubble(content, modelName string, ts time.Time, termWidth int, selected bool) string {
+	rendered := renderMarkdown(content, termWidth, selected)
 
 	// Wrap rendered markdown in a subtle left border.
 	lines := strings.Split(rendered, "\n")
 	var sb strings.Builder
 	borderStyle := assistantBorderStyle
+	if selected {
+		borderStyle = lipgloss.NewStyle().
+			BorderLeft(true).
+			BorderStyle(lipgloss.ThickBorder()).
+			BorderForeground(lipgloss.Color("18")). // invisible on same-color bg, preserves geometry
+			PaddingLeft(1).
+			Background(lipgloss.Color("18")).
+			Foreground(lipgloss.Color("255")).
+			Width(max(termWidth-4, 1))
+	}
 
 	// Indent wrapped lines to align with the first line.
 	inner := alignWrappedLines(lines, "  ")
 	boxed := borderStyle.Render(inner)
 
+	marker := ""
+	if selected {
+		marker = "► "
+	}
 	modelLabel := ""
 	if modelName != "" {
 		modelLabel = "  " + modelLabelStyle.Render("["+modelName+"]")
 	}
-	label := asstLabelStyle.Render("Noto") +
+	label := asstLabelStyle.Render(marker+"Noto") +
 		modelLabel +
 		"  " + asstTimeStyle.Render(ts.Format("15:04"))
 

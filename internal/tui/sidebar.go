@@ -58,6 +58,10 @@ type sidebarModel struct {
 
 	animState      noteAnimState
 	highlightState noteHighlightState
+
+	// select mode state (set by parent Model)
+	selectCursor int
+	selectActive bool
 }
 
 func newSidebar(width int, noteRepo *store.MemoryNoteRepo, summaryRepo *store.MemorySummaryRepo, profileID string) *sidebarModel {
@@ -141,7 +145,8 @@ func (s *sidebarModel) renderNoteList() string {
 	var sb strings.Builder
 	innerW := max(s.width-4, 10)
 	var prevRendered bool
-	for _, n := range slices.Backward(s.notes) {
+	noteCount := len(s.notes)
+	for idx, n := range slices.Backward(s.notes) {
 		p := s.noteFadeProgress(n.ID)
 		if p <= 0.0 && s.animState.active {
 			continue
@@ -152,6 +157,10 @@ func (s *sidebarModel) renderNoteList() string {
 		if prevRendered {
 			sb.WriteString("\n")
 		}
+
+		// Map reverse-iteration index to selection cursor:
+		// idx is the slice index; displayed order is reversed, so displayed position = noteCount-1-idx
+		isSelected := s.selectActive && (noteCount-1-idx) == s.selectCursor
 
 		hp := s.highlightProgress(n.ID)
 		switch {
@@ -176,9 +185,15 @@ func (s *sidebarModel) renderNoteList() string {
 				metaStyle.Render(meta) + "\n" + body,
 			))
 		default:
-			sb.WriteString(sidebarEntryBorder.Width(s.width - 2).Render(
-				sidebarMetaStyle.Render(meta) + "\n" + body,
-			))
+			if isSelected {
+				sb.WriteString(selectBgStyle.Width(s.width-2).Padding(0, 1).Render(
+					sidebarMetaStyle.Render(meta) + "\n" + body,
+				))
+			} else {
+				sb.WriteString(sidebarEntryBorder.Width(s.width - 2).Render(
+					sidebarMetaStyle.Render(meta) + "\n" + body,
+				))
+			}
 		}
 		sb.WriteString("\n")
 		prevRendered = true
@@ -194,6 +209,7 @@ func (s *sidebarModel) renderSummaryList(list []*store.MemorySummary) string {
 	var sb strings.Builder
 	innerW := max(s.width-4, 10)
 	isMonthly := s.activeTab == sidebarTabMonthly
+	listLen := len(list)
 	for i, sm := range slices.Backward(list) {
 		var meta string
 		if isMonthly {
@@ -203,9 +219,17 @@ func (s *sidebarModel) renderSummaryList(list []*store.MemorySummary) string {
 				sm.PeriodStart.Format("2006-01-02"), sm.PeriodEnd.Format("2006-01-02"))
 		}
 		body := wordWrap(sm.Content, innerW)
-		rendered := sidebarEntryBorder.Width(s.width - 2).Render(
-			sidebarMetaStyle.Render(meta) + "\n" + body,
-		)
+		isSelected := s.selectActive && (listLen-1-i) == s.selectCursor
+		var rendered string
+		if isSelected {
+			rendered = selectBgStyle.Width(s.width-2).Padding(0, 1).Render(
+				sidebarMetaStyle.Render(meta) + "\n" + body,
+			)
+		} else {
+			rendered = sidebarEntryBorder.Width(s.width - 2).Render(
+				sidebarMetaStyle.Render(meta) + "\n" + body,
+			)
+		}
 		sb.WriteString(rendered)
 		sb.WriteString("\n")
 		if i > 0 {

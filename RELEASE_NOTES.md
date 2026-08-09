@@ -1,5 +1,12 @@
 # Release notes
 
+## 0.11.0
+
+August 9, 2026
+
+- Add SELECT/copy mode
+- Fix: wrong order of notes when multiple are added
+
 ## 0.10.0
 
 July 9, 2026
