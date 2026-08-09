@@ -630,6 +630,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case key.Matches(msg, m.keys.enterSelect):
 				m.selectMode = false
 				m.syncSelectState()
+				m.viewport.SetContent(m.renderHistory())
 				return m, m.input.Focus()
 			case key.Matches(msg, m.keys.toggleHelp):
 				m.help.ShowAll = !m.help.ShowAll
@@ -637,11 +638,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case msg.Key().Code == tea.KeyEsc:
 				m.selectMode = false
 				m.syncSelectState()
+				m.viewport.SetContent(m.renderHistory())
 				return m, m.input.Focus()
 			case msg.String() == "ctrl+c":
 				cmd := m.copySelectionToClipboard()
 				m.selectMode = false
 				m.syncSelectState()
+				m.viewport.SetContent(m.renderHistory())
 				return m, cmd
 			case msg.Key().Code == tea.KeyUp:
 				m.moveSelectCursor(-1)
@@ -783,6 +786,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selectFocus = selectFocusChat
 			m.syncSelectState()
 			m.input.Blur()
+			m.viewport.SetContent(m.renderHistory())
 			return m, nil
 
 		case key.Matches(msg, m.keys.quit):

@@ -281,6 +281,37 @@ func TestSelectMode_RenderNoHighlightWhenNormal(t *testing.T) {
 	}
 }
 
+func TestSelectMode_EntryRefreshesViewport(t *testing.T) {
+	m := newSelectTestModel("hello world")
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
+	m = updated.(Model)
+
+	view := m.viewport.View()
+	if !strings.Contains(view, "►") {
+		t.Fatalf("expected selection marker in viewport after entering select mode")
+	}
+	if !strings.Contains(view, "48;5;18") {
+		t.Fatalf("expected selection background in viewport after entering select mode")
+	}
+}
+
+func TestSelectMode_ExitClearsViewportHighlight(t *testing.T) {
+	m := newSelectTestModel("hello world")
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
+	m = updated.(Model)
+
+	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEsc})
+	m = updated.(Model)
+
+	view := m.viewport.View()
+	if strings.Contains(view, "►") {
+		t.Fatalf("unexpected selection marker in viewport after exit, got:\n%s", view)
+	}
+	if strings.Contains(view, "48;5;18") {
+		t.Fatalf("unexpected selection background in viewport after exit, got:\n%s", view)
+	}
+}
+
 func TestSelectMode_CtrlHTogglesHelp(t *testing.T) {
 	m := newSelectTestModel("msg")
 	updated, _ := m.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
