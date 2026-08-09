@@ -186,7 +186,7 @@ func (s *sidebarModel) renderNoteList() string {
 			))
 		default:
 			if isSelected {
-				sb.WriteString(selectBgStyle.Width(s.width - 2).Padding(0, 1).Render(
+				sb.WriteString(selectBgStyle.Width(s.width-2).Padding(0, 1).Render(
 					sidebarMetaStyle.Render(meta) + "\n" + body,
 				))
 			} else {
@@ -222,7 +222,7 @@ func (s *sidebarModel) renderSummaryList(list []*store.MemorySummary) string {
 		isSelected := s.selectActive && (listLen-1-i) == s.selectCursor
 		var rendered string
 		if isSelected {
-			rendered = selectBgStyle.Width(s.width - 2).Padding(0, 1).Render(
+			rendered = selectBgStyle.Width(s.width-2).Padding(0, 1).Render(
 				sidebarMetaStyle.Render(meta) + "\n" + body,
 			)
 		} else {
