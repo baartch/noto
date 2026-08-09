@@ -76,7 +76,11 @@ func renderUserBubble(content, authorName string, ts time.Time, termWidth int, s
 	if selected {
 		labelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true)
 	}
-	label := labelStyle.Render(authorName) +
+	name := authorName
+	if selected {
+		name = "► " + authorName
+	}
+	label := labelStyle.Render(name) +
 		"  " + userTimeStyle.Render(ts.Format("15:04"))
 
 	// Right-align: pad = space to push bubble to the right edge.
@@ -100,8 +104,11 @@ func renderAssistantBubble(content, modelName string, ts time.Time, termWidth in
 		borderStyle = lipgloss.NewStyle().
 			BorderLeft(true).
 			BorderStyle(lipgloss.ThickBorder()).
-			BorderForeground(lipgloss.Color("18")).
-			PaddingLeft(1)
+			BorderForeground(lipgloss.Color("18")). // invisible on same-color bg, preserves geometry
+			PaddingLeft(1).
+			Background(lipgloss.Color("18")).
+			Foreground(lipgloss.Color("255")).
+			Width(max(termWidth-4, 1))
 	}
 
 	// Indent wrapped lines to align with the first line.

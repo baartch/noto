@@ -263,9 +263,9 @@ func TestSelectMode_RenderHighlight(t *testing.T) {
 	m = updated.(Model)
 
 	rendered := m.renderHistory()
-	// The selected assistant bubble should have the selection border color (38;5;18 foreground).
-	if !strings.Contains(rendered, "38;5;18") {
-		t.Fatalf("expected selection border color in rendered history, got:\n%s", rendered)
+	// The selected assistant bubble should have the selection background (48;5;18).
+	if !strings.Contains(rendered, "48;5;18") {
+		t.Fatalf("expected selection background in rendered history, got:\n%s", rendered)
 	}
 	// Should also have the ► selection marker.
 	if !strings.Contains(rendered, "►") {
@@ -405,6 +405,13 @@ func TestSelectMode_BubbleSelectedParam(t *testing.T) {
 	if strings.Contains(normal, "48;5;18") {
 		t.Fatal("unexpected selection background in normal bubble")
 	}
+	// Selected user bubble has a ► marker before the name.
+	if !strings.Contains(selected, "►") {
+		t.Fatal("expected selection marker in selected user bubble")
+	}
+	if strings.Contains(normal, "►") {
+		t.Fatal("unexpected selection marker in normal user bubble")
+	}
 }
 
 func TestSelectMode_AssistantBubbleSelectedParam(t *testing.T) {
@@ -422,9 +429,12 @@ func TestSelectMode_AssistantBubbleSelectedParam(t *testing.T) {
 	if strings.Contains(normal, "►") {
 		t.Fatal("unexpected selection marker in normal assistant bubble")
 	}
-	// Selected assistant bubble uses selection border color (xterm 18 foreground).
-	if !strings.Contains(selected, "38;5;18") {
-		t.Fatal("expected selection border color in selected assistant bubble")
+	// Selected assistant bubble uses the selection background color (xterm 18).
+	if !strings.Contains(selected, "48;5;18") {
+		t.Fatal("expected selection background in selected assistant bubble")
+	}
+	if strings.Contains(normal, "48;5;18") {
+		t.Fatal("unexpected selection background in normal assistant bubble")
 	}
 }
 
