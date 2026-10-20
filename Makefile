@@ -1,4 +1,4 @@
-.PHONY: all build test lint fmt vet tidy clean get web-build web-test
+.PHONY: all build test lint fmt vet tidy clean get web-build web-test web-run
 
 BINARY := noto
 CMD     := ./cmd/noto
@@ -25,6 +25,10 @@ web-build:
 ## web-test: run web UI state tests (requires Bun)
 web-test:
 	cd internal/web/ui && bun test state.test.js
+
+## run: run the binary directly
+run-web:
+	go run $(CMD) web
 
 ## test-integration: run integration tests
 test-integration:

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { clearSubmittedDraft, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, sendWithAttempt } from "./state.js";
+import { clearSubmittedDraft, createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
+import * as clipboardHelpers from "./state.js";
 
 describe("chat UI state", () => {
 	test("empty submits are rejected and uncertain failures reuse the same request ID", async () => {
@@ -41,6 +42,32 @@ describe("chat UI state", () => {
 		expect(mergeOlderMessages(current, older).map((item) => item.id)).toEqual(["m1", "m2", "m3"]);
 	});
 
+	test("notes and summaries are sorted oldest-first so newest stays at the bottom", () => {
+		const notes = [
+			{ id: "new", created_at: "2026-10-20T10:00:00Z" },
+			{ id: "old", created_at: "2026-10-18T10:00:00Z" },
+		];
+		const summaries = [
+			{ id: "new", period_start: "2026-10-01T00:00:00Z" },
+			{ id: "old", period_start: "2026-09-01T00:00:00Z" },
+		];
+		expect(sortMemoryOldestFirst(notes, "daily").map((item) => item.id)).toEqual(["old", "new"]);
+		expect(sortMemoryOldestFirst(summaries, "weekly").map((item) => item.id)).toEqual(["old", "new"]);
+	});
+
+	test("new chat text is represented immediately as a safe optimistic user message", () => {
+		const pending = createPendingUserMessage({ requestID: "r1", content: "<b>hello</b>" }, new Date("2026-10-20T12:00:00Z"));
+		expect(pending).toEqual({
+			id: "pending:r1", role: "user", content: "<b>hello</b>", created_at: "2026-10-20T12:00:00.000Z", optimistic: true,
+		});
+	});
+
+	test("chat scroll helper pins the viewport to the bottom", () => {
+		const viewport = { scrollTop: 0, scrollHeight: 720 };
+		scrollToBottom(viewport);
+		expect(viewport.scrollTop).toBe(720);
+	});
+
 	test("a newer draft typed while a send is in flight is not cleared", () => {
 		expect(clearSubmittedDraft("sent text", "sent text")).toBe("");
 		expect(clearSubmittedDraft("new draft", "sent text")).toBe("new draft");
@@ -80,6 +107,30 @@ describe("chat UI state", () => {
 		});
 		expect(expired).toBe(null);
 		expect(calls).toBe(3);
+	});
+
+	test("copy writes formatted HTML and plain text clipboard formats", async () => {
+		const copy = clipboardHelpers.copyRichTextToClipboard;
+		expect(typeof copy).toBe("function");
+		let copiedItems;
+		class TestClipboardItem {
+			constructor(items) { this.items = items; }
+		}
+		const clipboard = { write: async (items) => { copiedItems = items; } };
+
+		await copy(clipboard, "<p><strong>formatted</strong></p>", "formatted", TestClipboardItem);
+		expect(await copiedItems[0].items["text/html"].text()).toBe("<p><strong>formatted</strong></p>");
+		expect(await copiedItems[0].items["text/plain"].text()).toBe("formatted");
+	});
+
+	test("copy falls back to plain text when rich clipboard is unavailable", async () => {
+		const copy = clipboardHelpers.copyRichTextToClipboard;
+		expect(typeof copy).toBe("function");
+		let copiedText;
+		const clipboard = { writeText: async (text) => { copiedText = text; } };
+
+		await copy(clipboard, "<p>formatted</p>", "formatted", null);
+		expect(copiedText).toBe("formatted");
 	});
 
 	test("polling stops after its signal is aborted", async () => {
