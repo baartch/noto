@@ -21,6 +21,21 @@ func TestConfiguredSessionRequiresProvider(t *testing.T) {
 	}
 }
 
+func TestConfiguredSessionAllowsUnsetModelForTUISettings(t *testing.T) {
+	t.Setenv("NOTO_APP_DIR", t.TempDir())
+	profile := &store.Profile{ID: "profile-no-model", Slug: "profile-no-model", Name: "No Model"}
+	db, err := openProfileDB(profile.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	session, err := newConfiguredSession(context.Background(), db, profile, "system prompt", &store.ProviderConfig{Endpoint: "http://127.0.0.1:1"}, "test-secret", sessionCallbacks{})
+	if err != nil {
+		t.Fatalf("newConfiguredSession with unset model: %v", err)
+	}
+	session.Close(context.Background())
+}
+
 func TestConfiguredSessionUsesProfileProviderAndPrompt(t *testing.T) {
 	t.Setenv("NOTO_APP_DIR", t.TempDir())
 	profile := &store.Profile{ID: "profile-test", Slug: "profile-test", Name: "Test"}

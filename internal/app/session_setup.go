@@ -33,7 +33,7 @@ func newConfiguredSession(
 	apiKey string,
 	callbacks sessionCallbacks,
 ) (*chatpkg.Session, error) {
-	if providerCfg == nil || strings.TrimSpace(apiKey) == "" || strings.TrimSpace(providerCfg.EffectiveModel()) == "" {
+	if providerCfg == nil || strings.TrimSpace(apiKey) == "" {
 		return nil, errProviderSetupRequired
 	}
 	if db == nil || profile == nil || profile.ID == "" || profile.Slug == "" {
