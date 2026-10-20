@@ -9,12 +9,16 @@ import (
 	"time"
 )
 
+// ReferenceFileStatus identifies a reference catalog row's indexing state.
 type ReferenceFileStatus string
 
 const (
+	// ReferenceFilePending means the source changed and its description is being refreshed.
 	ReferenceFilePending ReferenceFileStatus = "pending"
-	ReferenceFileReady   ReferenceFileStatus = "ready"
-	ReferenceFileFailed  ReferenceFileStatus = "failed"
+	// ReferenceFileReady means the stored description matches the source fingerprint.
+	ReferenceFileReady ReferenceFileStatus = "ready"
+	// ReferenceFileFailed means the source could not be read or described.
+	ReferenceFileFailed ReferenceFileStatus = "failed"
 )
 
 // ReferenceFile is catalog metadata only; source text is never persisted here.
@@ -27,10 +31,13 @@ type ReferenceFile struct {
 	IndexedAt                                *time.Time
 }
 
+// ReferenceFileRepo manages the profile-local reference-file catalog.
 type ReferenceFileRepo struct{ db *DB }
 
+// NewReferenceFileRepo creates a repository for reference-file metadata.
 func NewReferenceFileRepo(db *DB) *ReferenceFileRepo { return &ReferenceFileRepo{db: db} }
 
+// List returns a profile's catalog in deterministic relative-path order.
 func (r *ReferenceFileRepo) List(ctx context.Context, profileID string) ([]ReferenceFile, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, profile_id, relative_path, media_type, fingerprint, summary_fingerprint,
@@ -40,7 +47,7 @@ func (r *ReferenceFileRepo) List(ctx context.Context, profileID string) ([]Refer
 	if err != nil {
 		return nil, fmt.Errorf("store: list reference files: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var files []ReferenceFile
 	for rows.Next() {
@@ -64,6 +71,7 @@ func (r *ReferenceFileRepo) DeletePath(ctx context.Context, profileID, relativeP
 	return nil
 }
 
+// Upsert inserts metadata or updates the row for the same profile-relative path.
 func (r *ReferenceFileRepo) Upsert(ctx context.Context, file ReferenceFile) error {
 	if file.ID == "" || file.ProfileID == "" || file.RelativePath == "" {
 		return errors.New("store: reference file requires id, profile, and relative path")

@@ -16,15 +16,18 @@ import (
 	"noto/internal/store"
 )
 
+// Diagnostic describes a bounded, user-visible reference indexing or selection issue.
 type Diagnostic struct {
 	FileID, RelativePath, Code, Message string
 }
 
+// Model carries the configured extractor adapter and its context limit.
 type Model struct {
 	Adapter    provider.Adapter
 	ContextMax int
 }
 
+// Options configures one profile-local reference-file service.
 type Options struct {
 	Root, ProfileID string
 	Repo            *store.ReferenceFileRepo
@@ -33,10 +36,12 @@ type Options struct {
 	OnUsage         func(provider.Usage)
 }
 
+// Attachment is a temporary source snapshot selected for one chat turn.
 type Attachment struct {
 	ID, RelativePath, Fingerprint, Text string
 }
 
+// Input contains the current turn and bounded context used for file selection.
 type Input struct {
 	UserMessage        string
 	RecentUserMessages []string
@@ -44,6 +49,7 @@ type Input struct {
 	ContextMax         int
 }
 
+// Turn contains the stable catalog and temporary references prepared for a chat request.
 type Turn struct {
 	Catalog     string
 	Attachments []Attachment
@@ -51,6 +57,7 @@ type Turn struct {
 	Degraded    bool
 }
 
+// Service indexes a profile's reference files and holds temporary topic context.
 type Service struct {
 	opts   Options
 	root   *os.Root
@@ -63,6 +70,7 @@ type Service struct {
 	active map[string]Attachment
 }
 
+// NewService opens a rooted profile files directory and initializes empty session context.
 func NewService(opts Options) (*Service, error) {
 	if opts.Root == "" || opts.ProfileID == "" || opts.Repo == nil {
 		return nil, errors.New("reference: root, profile, and catalog are required")

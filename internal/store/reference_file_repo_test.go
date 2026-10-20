@@ -4,6 +4,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -137,5 +138,48 @@ func TestReferenceFileRepoDeletePathIsProfileScoped(t *testing.T) {
 	files, err = repo.List(ctx, "p2")
 	if err != nil || len(files) != 1 || files[0].ID != "two" {
 		t.Fatalf("other profile row changed: %#v, %v", files, err)
+	}
+}
+
+func TestReferenceMigrationPreservesExistingMessages(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "existing.db")
+	legacy, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := legacy.ExecContext(ctx, `CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT (datetime('now')))`); err != nil {
+		t.Fatal(err)
+	}
+	for _, migration := range []string{"0001_init.sql", "0002_extractor_model.sql", "0002_system_prompts.sql", "0003_memory_timeline.sql"} {
+		contents, err := profileMigrationsFS.ReadFile("migrations/profile/" + migration)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := legacy.ExecContext(ctx, string(contents)); err != nil {
+			t.Fatalf("apply legacy migration %s: %v", migration, err)
+		}
+		if _, err := legacy.ExecContext(ctx, `INSERT INTO schema_migrations (version) VALUES (?)`, migration[:len(migration)-4]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := legacy.ExecContext(ctx, `INSERT INTO conversations (id, profile_id, status) VALUES ('conv-old', 'p', 'archived')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.ExecContext(ctx, `INSERT INTO messages (id, conversation_id, role, content) VALUES ('msg-old', 'conv-old', 'assistant', 'existing reply')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := OpenForTesting(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	messages, err := NewMessageRepo(db).ListByConversation(context.Background(), "conv-old")
+	if err != nil || len(messages) != 1 || messages[0].Content != "existing reply" || messages[0].ReferenceInfluenced {
+		t.Fatalf("existing message after provenance migration = %#v, %v", messages, err)
 	}
 }

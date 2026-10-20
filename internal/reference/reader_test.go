@@ -90,12 +90,25 @@ func TestReferenceRootSecurityAndLimits(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(rootDir, "link.txt")); err != nil {
 		t.Skipf("symlink unavailable: %v", err)
 	}
+	if err := os.Mkdir(filepath.Join(rootDir, "nested"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(rootDir, "nested", "link.txt")); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(rootDir, "too-large.txt"), bytes.Repeat([]byte("x"), MaxFileBytes+1), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"link.txt", "too-large.txt", "../outside.txt", "a\\..\\outside.txt"} {
+	if err := os.WriteFile(filepath.Join(rootDir, "too-large-text.txt"), bytes.Repeat([]byte("x"), MaxExtractedText+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"link.txt", "nested/link.txt", "too-large.txt", "too-large-text.txt", "../outside.txt", "a\\..\\outside.txt"} {
 		_, err := Read(context.Background(), root, path)
-		if err == nil {
+		if path == "too-large-text.txt" {
+			if err != ErrTooLarge {
+				t.Errorf("Read(%q) error = %v, want ErrTooLarge", path, err)
+			}
+		} else if err == nil {
 			t.Errorf("Read(%q) unexpectedly succeeded", path)
 		}
 	}
@@ -120,7 +133,7 @@ func minimalPDF(text string, includeText bool) []byte {
 	}
 	var b bytes.Buffer
 	b.WriteString("%PDF-1.4\n")
-	offsets := []int{0}
+	offsets := make([]int, 1, len(objects)+1)
 	for i, obj := range objects {
 		offsets = append(offsets, b.Len())
 		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, obj)

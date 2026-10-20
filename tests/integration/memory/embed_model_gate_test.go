@@ -57,6 +57,7 @@ func TestEmbeddingsModelRequiredForRetrieval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSession: %v", err)
 	}
+	defer sess.Close(ctx)
 	if !sess.EmbeddingModelMissingActive() {
 		t.Fatalf("expected missing embedding model")
 	}

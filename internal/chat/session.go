@@ -688,9 +688,10 @@ func (s *Session) SetExtractorModel(model string) {
 // CacheStatus returns a short label for the footer showing current context state.
 func (s *Session) CacheStatus() string {
 	status := ""
-	if s.cacheStale && s.cacheReval {
+	switch {
+	case s.cacheStale && s.cacheReval:
 		status = "ctx:swr"
-	} else if s.cacheHit {
+	case s.cacheHit:
 		switch s.cacheTier {
 		case "l1":
 			status = "ctx:l1-hit"
@@ -699,9 +700,9 @@ func (s *Session) CacheStatus() string {
 		default:
 			status = "ctx:hit"
 		}
-	} else if s.cacheMiss == "" || s.cacheMiss == "not_found" {
+	case s.cacheMiss == "" || s.cacheMiss == "not_found":
 		status = "ctx:rebuild"
-	} else {
+	default:
 		status = "ctx:miss(" + s.cacheMiss + ")"
 	}
 	if s.referenceWarning {

@@ -30,6 +30,21 @@ Then start a chat session:
 noto
 ```
 
+## Profile reference files
+
+Place reference documents directly in a profile's `files/` directory; there is no upload command:
+
+```text
+~/.noto/profiles/<profile>/files/artist/identity.pdf
+~/.noto/profiles/<profile>/files/press/voice.md
+```
+
+Noto indexes **PDF (selectable text only), TXT, and MD** files on startup and profile changes, then chooses relevant files automatically for each chat turn. Scanned PDFs/OCR and images are not supported. Nested directories are scanned; symlinks are ignored. New files become available after the next startup or profile activation.
+
+File contents are sent to your configured provider when indexed and when selected for a chat turn. Only a short file description is stored in the profile database; loaded text is temporary and is cleared on topic changes, restarts, and profile switches. Chat replies remain in history, but replies influenced by reference files are not automatically saved as memory notes. Provider-side prompt caching depends on the provider and does not guarantee deletion from its retention systems.
+
+See the [operations runbook](docs/operations.md#profile-reference-files) for limits and failure behavior.
+
 ## Version and updates
 
 - Print current version:

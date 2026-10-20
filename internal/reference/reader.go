@@ -71,7 +71,7 @@ func Read(ctx context.Context, root *os.Root, relativePath string) (Document, er
 	if err != nil {
 		return Document{}, fmt.Errorf("%w: %w", ErrUnreadable, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	opened, err := f.Stat()
 	if err != nil {
 		return Document{}, fmt.Errorf("%w: %v", ErrUnreadable, err)
@@ -123,7 +123,7 @@ func Read(ctx context.Context, root *os.Root, relativePath string) (Document, er
 	}, nil
 }
 
-func readBounded(ctx context.Context, r io.Reader, max int64) ([]byte, error) {
+func readBounded(ctx context.Context, r io.Reader, limit int64) ([]byte, error) {
 	var out bytes.Buffer
 	buf := make([]byte, 32*1024)
 	for {
@@ -132,7 +132,7 @@ func readBounded(ctx context.Context, r io.Reader, max int64) ([]byte, error) {
 		}
 		n, err := r.Read(buf)
 		if n > 0 {
-			if int64(out.Len()+n) > max {
+			if int64(out.Len()+n) > limit {
 				return nil, ErrTooLarge
 			}
 			_, _ = out.Write(buf[:n])

@@ -143,7 +143,7 @@ func (s *Service) enumerate(ctx context.Context) ([]scannedFile, error) {
 		if err != nil {
 			return fmt.Errorf("reference: enumerate directory: %w", err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		for {
 			entries, readErr := f.ReadDir(128)
 			for _, entry := range entries {

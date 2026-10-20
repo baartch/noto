@@ -54,7 +54,7 @@ func (s *Service) Prepare(parent context.Context, input Input) (Turn, error) {
 	}
 
 	turn := Turn{}
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := range 2 {
 		files, err := s.opts.Repo.List(ctx, s.opts.ProfileID)
 		if err != nil {
 			return turn, err
@@ -214,7 +214,7 @@ func (s *Service) selectFiles(ctx context.Context, model Model, input Input, cat
 		return selectionDecision{}, errors.New("reference selection input exceeds the extractor context budget")
 	}
 	var lastErr error
-	for attempt := 0; attempt < 2; attempt++ {
+	for attempt := range 2 {
 		callCtx, cancel := context.WithTimeout(ctx, summaryCallTimeout)
 		resp, callErr := model.Adapter.Complete(callCtx, provider.CompletionRequest{
 			MaxTokens:   maxSelectionOutputTokens,
