@@ -1,6 +1,6 @@
 # Noto
 
-Noto is a local-first terminal chatbot with profile-scoped memory and a consistent TUI experience.
+Noto is a local-first chatbot with profile-scoped memory, available in both the terminal UI and a localhost browser UI.
 
 ## Getting started
 
@@ -29,6 +29,14 @@ Then start a chat session:
 ```bash
 noto
 ```
+
+Or start the browser workspace:
+
+```bash
+noto web
+```
+
+Open the printed `http://127.0.0.1:8080` address. The web UI uses the active profile's existing provider, conversation history, notes, and weekly/monthly summaries. Provider setup must be completed in the terminal first. See the [web GUI operations notes](docs/operations.md#web-gui) for localhost, lifecycle, and build details.
 
 ## Profile reference files
 

@@ -361,13 +361,13 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 		}
 		resp, err = s.adapter.Complete(ctx, provider.CompletionRequest{Model: req.Model, Messages: followup, Temperature: req.Temperature, Tools: req.Tools})
 		if err != nil {
-			s.logger.Errorf("provider follow-up call failed: %v", err)
+			s.logger.Errorf("provider follow-up call failed (error type=%T)", err)
 		} else {
 			s.logger.Infof("tools: follow-up provider call completed after tool execution")
 		}
 	}
 	if err != nil {
-		s.logger.Errorf("provider call failed: %v", err)
+		s.logger.Errorf("provider call failed (error type=%T)", err)
 		return nil, fmt.Errorf("session: provider call: %w", err)
 	}
 
@@ -417,6 +417,13 @@ func (s *Session) Stats() provider.Stats {
 	s.statsMu.Lock()
 	defer s.statsMu.Unlock()
 	return s.stats
+}
+
+// PendingNotes returns the number of asynchronous note extractions in flight.
+func (s *Session) PendingNotes() int {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	return s.pendingNotes
 }
 
 // extractAsync runs note extraction and calls onNotes when done.
@@ -546,7 +553,7 @@ func (s *Session) extractAsync(userMsg, assistantMsg string, sourceIDs []string)
 	}
 	result, err := extractor.ExtractTurn(ctx, s.profileID, s.profileSlug, s.conversationID, sourceIDs, userMsg, assistantMsg)
 	if err != nil {
-		s.logger.Errorf("memory extraction failed: %v", err)
+		s.logger.Errorf("memory extraction failed (error type=%T)", err)
 		s.markNotesDone(0)
 		return
 	}

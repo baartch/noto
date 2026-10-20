@@ -147,57 +147,28 @@ func runChat(cmd *cobra.Command, _ []string) error {
 		systemPrompt, bootstrapWarning := loadSystemPrompt(ctx, profileDB, activeProfile)
 		promptBootstrapWarning = promptBootstrapWarning || bootstrapWarning
 
-		convRepo := store.NewConversationRepo(profileDB)
-		msgRepo := store.NewMessageRepo(profileDB)
-		noteRepo := store.NewMemoryNoteRepo(profileDB)
-		logger, _ := observe.NewFileLogger("")
-
-		sess, err = chatpkg.NewSession(
-			ctx,
-			activeProfile.ID,
-			activeProfile.Slug,
-			systemPrompt,
-			profileDB,
-			convRepo, msgRepo, noteRepo,
-			provider.NewOpenAICompatible(provider.Config{
-				ProviderType: "openai_compatible",
-				Endpoint:     adapterCfg.Endpoint,
-				Model:        activeModel,
-				APIKey:       adapterCfg.APIKey,
-			}),
-			func() provider.Adapter {
-				if extractorFallback {
-					return nil
-				}
-				return provider.NewOpenAICompatible(provider.Config{
-					ProviderType: "openai_compatible",
-					Endpoint:     adapterCfg.Endpoint,
-					Model:        extractorModel,
-					APIKey:       adapterCfg.APIKey,
-				})
-			}(),
-			logger,
-			func(saved, updated int) {
+		sess, err = newConfiguredSession(ctx, profileDB, activeProfile, systemPrompt, providerCfg, decryptedKey, sessionCallbacks{
+			OnNotes: func(saved, updated int) {
 				if prog != nil {
 					prog.Send(tui.NotesSaved(saved, updated))
 				}
 			},
-			func() {
+			OnNotesSaving: func() {
 				if prog != nil {
 					prog.Send(tui.NotesSaving())
 				}
 			},
-			func(status string) {
+			OnContextStatus: func(status string) {
 				if prog != nil {
 					prog.Send(tui.CacheStatusUpdated(status))
 				}
 			},
-			func(stats provider.Stats) {
+			OnStats: func(stats provider.Stats) {
 				if prog != nil {
 					prog.Send(tui.StatsUpdated(stats.Format()))
 				}
 			},
-		)
+		})
 		if err != nil {
 			return fmt.Errorf("chat: start session: %w", err)
 		}
