@@ -13,6 +13,7 @@ import (
 	"noto/internal/store"
 )
 
+// NewHandler returns the same-origin API and embedded asset handler for one server origin.
 func NewHandler(service *Service, origin string) http.Handler {
 	expectedHost := ""
 	if parsed, err := url.Parse(origin); err == nil && parsed.Scheme == "http" && parsed.Hostname() == "127.0.0.1" && parsed.User == nil {
@@ -103,8 +104,7 @@ func handleMessagePost(w http.ResponseWriter, r *http.Request, service *Service)
 		Content   string `json:"content"`
 	}
 	if err := decoder.Decode(&request); err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			writeAPIError(w, http.StatusRequestEntityTooLarge, "body_too_large", "message request exceeds 64 KiB")
 			return
 		}

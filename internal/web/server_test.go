@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -134,7 +135,7 @@ func TestAPISecurityAndSendErrors(t *testing.T) {
 	db := newWebTestDB(t)
 	profile := &store.Profile{ID: "p1", Name: "Artist", Slug: "artist"}
 	session := &testChatSession{send: func(context.Context, string) (*chat.SendResult, error) {
-		return nil, fmt.Errorf("upstream rejected key secret-value")
+		return nil, errors.New("upstream rejected key secret-value")
 	}}
 	h := NewHandler(NewService(db, profile, session, "model", false), testOrigin)
 

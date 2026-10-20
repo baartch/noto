@@ -29,7 +29,7 @@ func TestWebCommandRegistered(t *testing.T) {
 }
 
 func TestWebLoopbackOnly(t *testing.T) {
-	listener, err := listenWeb(0)
+	listener, err := listenWeb(context.Background(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,11 @@ func TestWebStartupPrintsActualPortAndServesReadOnlyWithoutProvider(t *testing.T
 		t.Fatalf("startup output %q did not contain actual port: %v", line, err)
 	}
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	response, err := http.Get(baseURL + "/api/state")
+	getRequest, err := http.NewRequestWithContext(context.Background(), http.MethodGet, baseURL+"/api/state", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(getRequest)
 	if err != nil {
 		t.Fatalf("GET state: %v", err)
 	}
@@ -74,7 +78,7 @@ func TestWebStartupPrintsActualPortAndServesReadOnlyWithoutProvider(t *testing.T
 	if response.StatusCode != http.StatusOK || !state.SetupRequired {
 		t.Fatalf("state status/setup = %d/%t", response.StatusCode, state.SetupRequired)
 	}
-	request, err := http.NewRequest(http.MethodPost, baseURL+"/api/messages", strings.NewReader(`{"request_id":"no-provider","content":"hello"}`))
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/api/messages", strings.NewReader(`{"request_id":"no-provider","content":"hello"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +109,7 @@ func TestWebStartupPrintsActualPortAndServesReadOnlyWithoutProvider(t *testing.T
 func TestWebPortConflictCreatesNoProfileDatabase(t *testing.T) {
 	appDir := t.TempDir()
 	t.Setenv("NOTO_APP_DIR", appDir)
-	occupied, err := listenWeb(0)
+	occupied, err := listenWeb(context.Background(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}

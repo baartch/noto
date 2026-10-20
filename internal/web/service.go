@@ -24,11 +24,15 @@ const (
 )
 
 var (
+	// ErrProviderSetupRequired indicates that browser chat is unavailable until a provider is configured.
 	ErrProviderSetupRequired = errors.New("web: provider setup required")
-	ErrSendInProgress        = errors.New("web: another message is in progress")
-	ErrRequestIDConflict     = errors.New("web: request ID reused with different content")
-	ErrServiceStopped        = errors.New("web: service is stopping")
-	requestIDPattern         = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+	// ErrSendInProgress indicates that another turn is currently mutating the chat session.
+	ErrSendInProgress = errors.New("web: another message is in progress")
+	// ErrRequestIDConflict indicates that an idempotency key was reused for different content.
+	ErrRequestIDConflict = errors.New("web: request ID reused with different content")
+	// ErrServiceStopped indicates that the web service is shutting down.
+	ErrServiceStopped = errors.New("web: service is stopping")
+	requestIDPattern  = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 )
 
 // ChatSession is the subset of the shared chat session used by the web layer.
@@ -66,6 +70,7 @@ type Service struct {
 	serviceCancel context.CancelFunc
 }
 
+// NewService creates an API service bound to one profile and its existing chat session.
 func NewService(db *store.DB, profile *store.Profile, session ChatSession, model string, setupRequired bool) *Service {
 	serviceCtx, serviceCancel := context.WithCancel(context.Background())
 	s := &Service{
@@ -84,6 +89,7 @@ func NewService(db *store.DB, profile *store.Profile, session ChatSession, model
 	return s
 }
 
+// State returns browser-safe status for the active profile and session.
 func (s *Service) State() StateDTO {
 	s.mu.Lock()
 	sending := s.sending
@@ -98,6 +104,7 @@ func (s *Service) State() StateDTO {
 	return state
 }
 
+// Messages returns one chronological page from this profile's persisted history.
 func (s *Service) Messages(ctx context.Context, cursor *store.MessageHistoryCursor, limit int) (MessagePageDTO, error) {
 	if s.messageRepo == nil || s.profile == nil {
 		return MessagePageDTO{}, errors.New("web: message storage unavailable")
@@ -125,6 +132,7 @@ func (s *Service) Messages(ctx context.Context, cursor *store.MessageHistoryCurs
 	return out, nil
 }
 
+// Memory returns profile notes or existing weekly/monthly summary artifacts.
 func (s *Service) Memory(ctx context.Context, tab string, offset, limit int) (MemoryPageDTO, error) {
 	if s.profile == nil || s.noteRepo == nil || s.summaryRepo == nil {
 		return MemoryPageDTO{}, errors.New("web: memory storage unavailable")
@@ -173,6 +181,7 @@ func (s *Service) Memory(ctx context.Context, tab string, offset, limit int) (Me
 	return out, nil
 }
 
+// Send serializes chat turns and deduplicates request IDs for this server process.
 func (s *Service) Send(ctx context.Context, requestID, content string) (SendResponseDTO, error) {
 	if !requestIDPattern.MatchString(requestID) || strings.TrimSpace(content) == "" {
 		return SendResponseDTO{}, errors.New("web: invalid message request")

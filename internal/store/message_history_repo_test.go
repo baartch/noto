@@ -38,7 +38,7 @@ func TestHistoryCursorSameTimestampAcrossConversations(t *testing.T) {
 
 	var cursor *MessageHistoryCursor
 	var got []string
-	for pageNumber := 0; pageNumber < 4; pageNumber++ {
+	for pageNumber := range 4 {
 		page, err := messages.ListHistoryByProfile(ctx, "p1", cursor, 3)
 		if err != nil {
 			t.Fatalf("ListHistoryByProfile page %d: %v", pageNumber, err)
@@ -80,7 +80,7 @@ func TestHistoryCursorEmptyAndExactPages(t *testing.T) {
 	if err := NewConversationRepo(db).Create(ctx, &Conversation{ID: "c1", ProfileID: "p1", Status: ConversationArchived}); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		createHistoryTestMessage(t, db, repo, string(rune('a'+i)), "c1", RoleUser, time.Date(2026, 1, 2, 3, 4, i, 0, time.UTC))
 	}
 	first, err := repo.ListHistoryByProfile(ctx, "p1", nil, 3)
@@ -134,7 +134,7 @@ func createHistoryTestMessage(t *testing.T, db *DB, repo *MessageRepo, id, conve
 	if err := repo.Create(context.Background(), &Message{ID: id, ConversationID: conversationID, Role: role, Content: id}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.DB.ExecContext(context.Background(), `UPDATE messages SET created_at = ? WHERE id = ?`, createdAt.UTC(), id); err != nil {
+	if _, err := db.ExecContext(context.Background(), `UPDATE messages SET created_at = ? WHERE id = ?`, createdAt.UTC(), id); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -36,26 +36,30 @@ func webCmd() *cobra.Command {
 	return command
 }
 
-func listenWeb(port int) (net.Listener, error) {
+func listenWeb(ctx context.Context, port int) (net.Listener, error) {
 	if port < 0 || port > 65535 {
-		return nil, fmt.Errorf("web: port must be between 0 and 65535")
+		return nil, errors.New("web: port must be between 0 and 65535")
 	}
-	return net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	var listenerConfig net.ListenConfig
+	return listenerConfig.Listen(ctx, "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 }
 
 func runWeb(cmd *cobra.Command, port int) error {
-	listener, err := listenWeb(port)
-	if err != nil {
-		return fmt.Errorf("web: listen on localhost: %w", err)
-	}
-	defer listener.Close()
-
 	parentCtx := cmd.Context()
 	if parentCtx == nil {
 		parentCtx = context.Background()
 	}
 	ctx, stopSignals := signal.NotifyContext(parentCtx, os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
+	listener, err := listenWeb(ctx, port)
+	if err != nil {
+		return fmt.Errorf("web: listen on localhost: %w", err)
+	}
+	defer func() {
+		if closeErr := listener.Close(); closeErr != nil && !errors.Is(closeErr, net.ErrClosed) {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "noto web: close listener: %v\n", closeErr)
+		}
+	}()
 
 	profileSvc := profile.NewService(nil)
 	startup, err := NewStartupFlow(profileSvc).Resolve(
@@ -83,7 +87,7 @@ func runWeb(cmd *cobra.Command, port int) error {
 		}
 		if profileDB != nil {
 			if closeErr := profileDB.Close(); closeErr != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "noto web: close profile database: %v\n", closeErr)
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "noto web: close profile database: %v\n", closeErr)
 			}
 		}
 	}()
