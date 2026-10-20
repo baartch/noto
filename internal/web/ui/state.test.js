@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { clearSubmittedDraft, createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
+import * as clipboardHelpers from "./state.js";
 
 describe("chat UI state", () => {
 	test("empty submits are rejected and uncertain failures reuse the same request ID", async () => {
@@ -106,6 +107,30 @@ describe("chat UI state", () => {
 		});
 		expect(expired).toBe(null);
 		expect(calls).toBe(3);
+	});
+
+	test("copy writes formatted HTML and plain text clipboard formats", async () => {
+		const copy = clipboardHelpers.copyRichTextToClipboard;
+		expect(typeof copy).toBe("function");
+		let copiedItems;
+		class TestClipboardItem {
+			constructor(items) { this.items = items; }
+		}
+		const clipboard = { write: async (items) => { copiedItems = items; } };
+
+		await copy(clipboard, "<p><strong>formatted</strong></p>", "formatted", TestClipboardItem);
+		expect(await copiedItems[0].items["text/html"].text()).toBe("<p><strong>formatted</strong></p>");
+		expect(await copiedItems[0].items["text/plain"].text()).toBe("formatted");
+	});
+
+	test("copy falls back to plain text when rich clipboard is unavailable", async () => {
+		const copy = clipboardHelpers.copyRichTextToClipboard;
+		expect(typeof copy).toBe("function");
+		let copiedText;
+		const clipboard = { writeText: async (text) => { copiedText = text; } };
+
+		await copy(clipboard, "<p>formatted</p>", "formatted", null);
+		expect(copiedText).toBe("formatted");
 	});
 
 	test("polling stops after its signal is aborted", async () => {

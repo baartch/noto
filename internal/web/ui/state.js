@@ -95,6 +95,18 @@ export function scrollToBottom(element) {
 	element.scrollTop = element.scrollHeight;
 }
 
+export async function copyRichTextToClipboard(clipboard, html, text, ClipboardItemType = globalThis.ClipboardItem) {
+	if (typeof clipboard?.write === "function" && typeof ClipboardItemType === "function") {
+		const item = new ClipboardItemType({
+			"text/html": new Blob([html], { type: "text/html" }),
+			"text/plain": new Blob([text], { type: "text/plain" }),
+		});
+		await clipboard.write([item]);
+		return;
+	}
+	await clipboard.writeText(text);
+}
+
 export async function pollUntil(fetchState, isReady, { maxAttempts, intervalMs = 1000, sleepFn = sleep, signal }) {
 	for (let attempt = 0; attempt < maxAttempts; attempt++) {
 		if (signal?.aborted) return null;

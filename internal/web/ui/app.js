@@ -2,15 +2,16 @@ import {
 	ArrowUp,
 	Bot,
 	ChevronDown,
+	Copy,
 	LoaderCircle,
 	MessagesSquare,
 	NotebookPen,
 	Sparkles,
 	createIcons,
 } from "lucide";
-import { clearSubmittedDraft, createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
+import { clearSubmittedDraft, copyRichTextToClipboard, createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
 
-const icons = { ArrowUp, Bot, ChevronDown, LoaderCircle, MessagesSquare, NotebookPen, Sparkles };
+const icons = { ArrowUp, Bot, ChevronDown, Copy, LoaderCircle, MessagesSquare, NotebookPen, Sparkles };
 const $ = (selector) => document.querySelector(selector);
 const ui = {
 	profile: $("#profile-name"),
@@ -186,9 +187,29 @@ function messageElement(message) {
 	body.className = "markdown-body break-words text-sm leading-6 text-ink";
 	if (message.optimistic) body.textContent = message.content;
 	else body.innerHTML = message.content_html || "";
-	bubble.append(meta, body);
+	const copyButton = document.createElement("button");
+	copyButton.type = "button";
+	copyButton.className = "grid size-6 place-items-center rounded text-muted hover:text-ink focus-visible:ring-2 focus-visible:ring-focus";
+	copyButton.setAttribute("aria-label", "Copy message");
+	copyButton.title = "Copy message";
+	copyButton.innerHTML = '<i data-lucide="copy" class="size-2.5" aria-hidden="true"></i>';
+	copyButton.addEventListener("click", () => void copyMessageContent(body, copyButton));
+	const actions = document.createElement("div");
+	actions.className = "mt-1 flex justify-end";
+	actions.append(copyButton);
+	bubble.append(meta, body, actions);
 	row.append(bubble);
 	return row;
+}
+
+async function copyMessageContent(body, button) {
+	try {
+		await copyRichTextToClipboard(navigator.clipboard, body.innerHTML, body.innerText);
+		button.title = "Copied";
+		button.setAttribute("aria-label", "Message copied");
+	} catch {
+		showStatus(ui.chatStatus, "Could not copy message to clipboard.", "error");
+	}
 }
 
 function thinkingElement() {
