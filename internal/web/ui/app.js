@@ -175,13 +175,13 @@ function messageElement(message) {
 	const bubble = document.createElement("div");
 	bubble.className = `max-w-[92%] rounded-2xl border px-4 py-3 sm:max-w-[82%] ${isUser ? "border-accent/30 bg-active" : "border-line bg-panel"}`;
 	const meta = document.createElement("div");
-	meta.className = "mb-2 flex items-center justify-between gap-5 font-mono text-[10px] uppercase tracking-wide text-muted";
+	meta.className = "mb-2 flex items-center justify-start gap-2 font-mono text-[10px] uppercase tracking-wide text-muted";
 	const name = document.createElement("span");
 	name.textContent = isUser ? "You" : "Noto";
 	const timestamp = document.createElement("time");
 	timestamp.dateTime = message.created_at || "";
 	timestamp.textContent = formatDate(message.created_at, { hour: "2-digit", minute: "2-digit" });
-	meta.append(name, timestamp);
+	meta.append(name, document.createTextNode("·"), timestamp);
 	const body = document.createElement("div");
 	body.className = "markdown-body break-words text-sm leading-6 text-ink";
 	if (message.optimistic) body.textContent = message.content;
