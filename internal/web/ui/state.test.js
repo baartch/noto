@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { clearSubmittedDraft, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, sendWithAttempt } from "./state.js";
+import { clearSubmittedDraft, createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
 
 describe("chat UI state", () => {
 	test("empty submits are rejected and uncertain failures reuse the same request ID", async () => {
@@ -39,6 +39,32 @@ describe("chat UI state", () => {
 			{ id: "m2", created_at: "2026-01-02T00:00:00Z" },
 		];
 		expect(mergeOlderMessages(current, older).map((item) => item.id)).toEqual(["m1", "m2", "m3"]);
+	});
+
+	test("notes and summaries are sorted oldest-first so newest stays at the bottom", () => {
+		const notes = [
+			{ id: "new", created_at: "2026-10-20T10:00:00Z" },
+			{ id: "old", created_at: "2026-10-18T10:00:00Z" },
+		];
+		const summaries = [
+			{ id: "new", period_start: "2026-10-01T00:00:00Z" },
+			{ id: "old", period_start: "2026-09-01T00:00:00Z" },
+		];
+		expect(sortMemoryOldestFirst(notes, "daily").map((item) => item.id)).toEqual(["old", "new"]);
+		expect(sortMemoryOldestFirst(summaries, "weekly").map((item) => item.id)).toEqual(["old", "new"]);
+	});
+
+	test("new chat text is represented immediately as a safe optimistic user message", () => {
+		const pending = createPendingUserMessage({ requestID: "r1", content: "<b>hello</b>" }, new Date("2026-10-20T12:00:00Z"));
+		expect(pending).toEqual({
+			id: "pending:r1", role: "user", content: "<b>hello</b>", created_at: "2026-10-20T12:00:00.000Z", optimistic: true,
+		});
+	});
+
+	test("chat scroll helper pins the viewport to the bottom", () => {
+		const viewport = { scrollTop: 0, scrollHeight: 720 };
+		scrollToBottom(viewport);
+		expect(viewport.scrollTop).toBe(720);
 	});
 
 	test("a newer draft typed while a send is in flight is not cleared", () => {

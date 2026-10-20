@@ -8,7 +8,7 @@ import {
 	Sparkles,
 	createIcons,
 } from "lucide";
-import { clearSubmittedDraft, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, sendWithAttempt } from "./state.js";
+import { clearSubmittedDraft, createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
 
 const icons = { ArrowUp, Bot, ChevronDown, LoaderCircle, MessagesSquare, NotebookPen, Sparkles };
 const $ = (selector) => document.querySelector(selector);
@@ -41,6 +41,7 @@ const state = {
 	sending: false,
 	pendingNotes: 0,
 	messages: [],
+	pendingUserMessage: null,
 	nextCursor: null,
 	loadingOlder: false,
 	memoryTab: "daily",
@@ -142,7 +143,8 @@ function renderMessages({ scrollToBottom = false } = {}) {
 		olderButton.addEventListener("click", loadOlderMessages);
 		ui.messageList.append(olderButton);
 	}
-	if (state.messages.length === 0) {
+	const visibleMessages = state.pendingUserMessage ? [...state.messages, state.pendingUserMessage] : state.messages;
+	if (visibleMessages.length === 0) {
 		const empty = document.createElement("div");
 		empty.className = "m-auto max-w-sm py-16 text-center";
 		empty.innerHTML = '<div class="mx-auto mb-4 grid size-12 place-items-center rounded-2xl border border-line bg-raised text-accent"><i data-lucide="sparkles" class="size-5" aria-hidden="true"></i></div><h2 class="font-medium">Start with what’s on your mind</h2><p class="mt-2 text-sm text-muted">Noto will use your saved memory to keep the conversation connected.</p>';
@@ -150,21 +152,21 @@ function renderMessages({ scrollToBottom = false } = {}) {
 	}
 	let previousDate = "";
 	let previousConversation = "";
-	for (const message of state.messages) {
+	for (const message of visibleMessages) {
 		const dateKey = new Date(message.created_at).toLocaleDateString();
-		if (dateKey !== previousDate || message.conversation_id !== previousConversation) {
+		if (dateKey !== previousDate || (message.conversation_id && message.conversation_id !== previousConversation)) {
 			const separator = document.createElement("div");
 			separator.className = "flex items-center gap-3 py-1 text-[11px] text-muted";
 			separator.innerHTML = '<span class="h-px flex-1 bg-line"></span><span class="font-mono">' + escapeHTML(formatDate(message.created_at)) + '</span><span class="h-px flex-1 bg-line"></span>';
 			ui.messageList.append(separator);
 			previousDate = dateKey;
-			previousConversation = message.conversation_id;
+			previousConversation = message.conversation_id || previousConversation;
 		}
 		ui.messageList.append(messageElement(message));
 	}
 	if (state.sending) ui.messageList.append(thinkingElement());
 	createIcons({ icons });
-	if (shouldStick) ui.messageScroll.scrollTop = ui.messageScroll.scrollHeight;
+	if (shouldStick) scrollToBottom(ui.messageScroll);
 }
 
 function messageElement(message) {
@@ -184,7 +186,8 @@ function messageElement(message) {
 	meta.append(name, timestamp);
 	const body = document.createElement("div");
 	body.className = "markdown-body break-words text-sm leading-6 text-ink";
-	body.innerHTML = message.content_html || "";
+	if (message.optimistic) body.textContent = message.content;
+	else body.innerHTML = message.content_html || "";
 	bubble.append(meta, body);
 	row.append(bubble);
 	return row;
@@ -292,15 +295,19 @@ async function loadMemory(tab = state.memoryTab, { offset = 0, append = false } 
 	state.memoryRequest = controller;
 	state.memoryTab = tab;
 	state.memoryOffset = offset;
+	const previousHeight = ui.memoryScroll.scrollHeight;
+	const previousTop = ui.memoryScroll.scrollTop;
 	if (!append) showStatus(ui.memoryStatus, "Loading memory…");
 	updateMemoryTabs();
 	try {
 		const query = new URLSearchParams({ tab, offset: String(offset), limit: "50" });
 		const page = await api(`/api/memory?${query}`, { signal: controller.signal });
 		if (controller.signal.aborted || state.memoryRequest !== controller) return;
-		state.memoryItems = append ? [...state.memoryItems, ...page.items] : page.items;
+		state.memoryItems = sortMemoryOldestFirst(append ? [...state.memoryItems, ...page.items] : page.items, tab);
 		state.memoryNextOffset = page.next_offset;
 		renderMemory();
+		if (append) ui.memoryScroll.scrollTop = previousTop + (ui.memoryScroll.scrollHeight - previousHeight);
+		else scrollToBottom(ui.memoryScroll);
 		showStatus(ui.memoryStatus, "");
 	} catch (error) {
 		if (error.name !== "AbortError") showStatus(ui.memoryStatus, `Could not load memory: ${error.message}`, "error");
@@ -342,6 +349,7 @@ async function pollServerTurn() {
 		});
 		if (!controller.signal.aborted && settled) {
 			renderState(settled);
+			state.pendingUserMessage = null;
 			await loadMessages();
 			if (settled.pending_notes > 0) void pollMemoryExtraction();
 			else await loadMemory(state.memoryTab);
@@ -385,10 +393,14 @@ async function sendMessage() {
 	state.sending = true;
 	showStatus(ui.chatStatus, "");
 	updateSendControls();
-	renderMessages({ scrollToBottom: true });
 	const result = await sendWithAttempt(content, state.sendAttempt, async (attempt) => {
 		state.sendAttempt = attempt;
 		saveSendAttempt(attemptStorage, attempt);
+		state.pendingUserMessage = {
+			...createPendingUserMessage(attempt),
+			conversation_id: state.messages.at(-1)?.conversation_id || "",
+		};
+		renderMessages({ scrollToBottom: true });
 		return api("/api/messages", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -399,18 +411,23 @@ async function sendMessage() {
 	state.sendAttempt = result.attempt;
 	saveSendAttempt(attemptStorage, result.attempt);
 	if (result.error) {
+		if (!result.attempt) state.pendingUserMessage = null;
 		updateSendControls();
 		showStatus(ui.chatStatus, `${result.error.message}. Your draft is kept; it was not sent again automatically.`, "error");
-		if (result.error.status === 502) await loadMessages();
 		try {
 			const serverState = await refreshState();
 			if (serverState.sending) void pollServerTurn();
+			else {
+				state.pendingUserMessage = null;
+				await loadMessages();
+			}
 		} catch {
 			// Keep the draft and request ID so a manual retry cannot duplicate an accepted turn.
 		}
 		renderMessages({ scrollToBottom: true });
 		return;
 	}
+	state.pendingUserMessage = null;
 	ui.messageInput.value = clearSubmittedDraft(ui.messageInput.value, content);
 	state.sendAttempt = null;
 	updateSendControls();
