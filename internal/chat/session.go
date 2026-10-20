@@ -13,6 +13,7 @@ import (
 	"noto/internal/memory"
 	"noto/internal/observe"
 	"noto/internal/provider"
+	"noto/internal/reference"
 	"noto/internal/store"
 	"noto/internal/vector"
 	vecfile "noto/internal/vector/file"
@@ -46,24 +47,29 @@ type Session struct {
 	cacheReval     bool
 	cacheMiss      string
 
-	convRepo          *store.ConversationRepo
-	msgRepo           *store.MessageRepo
-	noteRepo          *store.MemoryNoteRepo
-	cacheRepo         *store.ContextCacheRepo
-	adapter           provider.Adapter
-	retrieval         *memory.Retrieval
-	extractor         *memory.Extractor
-	extractorAdapter  provider.Adapter
-	logger            observe.Logger
-	baseSystemPrompt  string
-	db                *store.DB
-	vectorIndexPath   string
-	vectorIndex       vector.Index
-	extractorFallback bool
-	embeddingModel    string
-	missingEmbedding  bool
-	toolsEnabled      bool
-	modelContextMax   int
+	convRepo            *store.ConversationRepo
+	msgRepo             *store.MessageRepo
+	noteRepo            *store.MemoryNoteRepo
+	cacheRepo           *store.ContextCacheRepo
+	adapter             provider.Adapter
+	retrieval           *memory.Retrieval
+	extractor           *memory.Extractor
+	extractorAdapter    provider.Adapter
+	logger              observe.Logger
+	baseSystemPrompt    string
+	db                  *store.DB
+	vectorIndexPath     string
+	vectorIndex         vector.Index
+	extractorFallback   bool
+	embeddingModel      string
+	missingEmbedding    bool
+	toolsEnabled        bool
+	modelContextMax     int
+	referenceContextMax int
+	references          *reference.Service
+	referenceWarning    bool
+	adapterMu           sync.RWMutex
+	statsMu             sync.Mutex
 
 	backupStop   chan struct{}
 	pendingNotes int
@@ -190,6 +196,30 @@ func NewSession(
 		embeddingModel:    embeddingModel,
 		missingEmbedding:  embeddingModel == "",
 	}
+	if profileSlug != "" && db != nil {
+		filesDir, pathErr := config.ProfileFilesDir(profileSlug)
+		if pathErr != nil {
+			s.referenceWarning = true
+			logger.Infof("reference files directory unavailable: %v", pathErr)
+		} else {
+			refs, refErr := reference.NewService(reference.Options{
+				Root: filesDir, ProfileID: profileID, Repo: store.NewReferenceFileRepo(db),
+				Model:   func() reference.Model { return s.referenceModel() },
+				OnUsage: s.recordAuxUsage,
+			})
+			if refErr != nil {
+				s.referenceWarning = true
+				logger.Infof("reference files unavailable: %v", refErr)
+			} else {
+				s.references = refs
+				diagnostics, scanErr := refs.Scan(ctx)
+				if scanErr != nil || len(diagnostics) > 0 {
+					s.referenceWarning = true
+					logger.Infof("reference file scan completed with issues: files=%d err=%v", len(diagnostics), scanErr)
+				}
+			}
+		}
+	}
 	if s.onContextStatus != nil {
 		s.onContextStatus(s.CacheStatus())
 	}
@@ -266,19 +296,40 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 			s.logger.Infof("context retrieval (turn): tier=%s hit=%t stale=%t revalidate=%t miss_reason=%s", rc.CacheTier, rc.CacheHit, rc.ServedStale, rc.RevalidationStarted, rc.MissReason)
 		}
 	}
+	var referenceTurn reference.Turn
+	if s.references != nil {
+		baseMessages := []provider.Message{{Role: "system", Content: systemPrompt}}
+		recentUsers := make([]string, 0, 4)
+		for i, message := range s.history {
+			if i == len(s.history)-1 && message.Role == store.RoleUser {
+				continue
+			}
+			baseMessages = append(baseMessages, provider.Message{Role: string(message.Role), Content: message.Content})
+			if message.Role == store.RoleUser {
+				recentUsers = append(recentUsers, message.Content)
+			}
+		}
+		prepared, prepareErr := s.references.Prepare(ctx, reference.Input{
+			UserMessage: userMsg, RecentUserMessages: recentUsers,
+			BaseMessages: baseMessages, ContextMax: s.modelContextMaxSnapshot(),
+		})
+		referenceTurn = prepared
+		if prepareErr != nil {
+			if ctx.Err() != nil {
+				return nil, prepareErr
+			}
+			s.logger.Infof("reference preparation failed: %v", prepareErr)
+			referenceTurn.Degraded = true
+			referenceTurn.Diagnostics = append(referenceTurn.Diagnostics, reference.Diagnostic{Code: "reference_unavailable", Message: "reference files were not provided"})
+		}
+	}
+	if s.references != nil {
+		s.setReferenceWarning(referenceTurn.Degraded || len(referenceTurn.Diagnostics) > 0)
+	}
 	if s.onContextStatus != nil {
 		s.onContextStatus(s.CacheStatus())
 	}
-	msgs := make([]provider.Message, 0, len(s.history)+1)
-	msgs = append(msgs, provider.Message{Role: "system", Content: systemPrompt})
-	for i, m := range s.history {
-		content := m.Content
-		// Use injected message for the most recent user message
-		if m.Role == store.RoleUser && i == len(s.history)-1 {
-			content = injectedMsg
-		}
-		msgs = append(msgs, provider.Message{Role: string(m.Role), Content: content})
-	}
+	msgs := buildReferenceMessages(systemPrompt, referenceTurn.Catalog, s.history, referenceTurn.Attachments, injectedMsg, referenceNotice(referenceTurn.Diagnostics))
 
 	req := provider.CompletionRequest{
 		Messages:    msgs,
@@ -321,39 +372,52 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	}
 
 	latency := time.Since(start).Milliseconds()
+	influenced := referenceInfluenced(s.history, referenceTurn.Catalog, referenceTurn.Attachments)
 
 	// Persist assistant message.
 	asstMsgRec := &store.Message{
-		ID:             fmt.Sprintf("msg-%x", time.Now().UnixNano()),
-		ConversationID: s.conversationID,
-		Role:           store.RoleAssistant,
-		Content:        resp.Content,
-		Provider:       s.adapter.ProviderType(),
-		Model:          resp.Model,
+		ID:                  fmt.Sprintf("msg-%x", time.Now().UnixNano()),
+		ConversationID:      s.conversationID,
+		Role:                store.RoleAssistant,
+		Content:             resp.Content,
+		Provider:            s.adapter.ProviderType(),
+		Model:               resp.Model,
+		ReferenceInfluenced: influenced,
 	}
 	if err := s.msgRepo.Create(ctx, asstMsgRec); err != nil {
 		return nil, fmt.Errorf("session: persist assistant message: %w", err)
 	}
 	s.history = append(s.history, asstMsgRec)
 
-	if resp.ContextMax == 0 && s.modelContextMax > 0 {
-		resp.ContextMax = s.modelContextMax
+	if resp.ContextMax == 0 {
+		if contextMax := s.modelContextMaxSnapshot(); contextMax > 0 {
+			resp.ContextMax = contextMax
+		}
 	}
 
 	// Accumulate token/cost stats.
+	s.statsMu.Lock()
 	s.stats.AddCompletion(resp)
+	stats := s.stats
+	s.statsMu.Unlock()
 	if s.onStats != nil {
-		s.onStats(s.stats)
+		s.onStats(stats)
 	}
 
-	// Fire background extraction — never blocks the reply.
-	go s.extractAsync(userMsg, resp.Content)
+	// Capture immutable turn inputs before launching extraction, so later turns cannot change provenance or source IDs.
+	sourceIDs, extractionUser, extractionAssistant := memoryExtractionInput(userMsgRec.ID, asstMsgRec.ID, userMsg, resp.Content, influenced)
+	s.markNotesPending()
+	go s.extractAsync(extractionUser, extractionAssistant, sourceIDs)
 
 	return &SendResult{Reply: resp.Content, LatencyMs: latency}, nil
 }
 
 // Stats returns a snapshot of current session usage stats.
-func (s *Session) Stats() provider.Stats { return s.stats }
+func (s *Session) Stats() provider.Stats {
+	s.statsMu.Lock()
+	defer s.statsMu.Unlock()
+	return s.stats
+}
 
 // extractAsync runs note extraction and calls onNotes when done.
 func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote) error {
@@ -447,8 +511,7 @@ func (s *Session) ensureVectorCompaction(ctx context.Context) error {
 	return rebuilder.Rebuild(ctx, records)
 }
 
-func (s *Session) extractAsync(userMsg, assistantMsg string) {
-	s.markNotesPending()
+func (s *Session) extractAsync(userMsg, assistantMsg string, sourceIDs []string) {
 	if s.onNotesSaving != nil {
 		s.onNotesSaving()
 	}
@@ -456,10 +519,13 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 	defer cancel()
 
 	extractor := s.extractor
+	s.adapterMu.RLock()
+	extractorAdapter := s.extractorAdapter
+	s.adapterMu.RUnlock()
 	var embedder provider.Adapter
-	if s.extractorAdapter != nil {
-		extractor = memory.NewExtractor(s.noteRepo, s.extractorAdapter, s.cacheRepo)
-		embedder = s.extractorAdapter
+	if extractorAdapter != nil {
+		extractor = memory.NewExtractor(s.noteRepo, extractorAdapter, s.cacheRepo)
+		embedder = extractorAdapter
 	} else if s.adapter != nil {
 		extractor = memory.NewExtractor(s.noteRepo, s.adapter, s.cacheRepo)
 		embedder = s.adapter
@@ -478,7 +544,6 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 			extractor.WithNoteMaxAgeDays(settings.DedupMaxAgeDays)
 		}
 	}
-	sourceIDs := []string{s.history[len(s.history)-2].ID, s.history[len(s.history)-1].ID}
 	result, err := extractor.ExtractTurn(ctx, s.profileID, s.profileSlug, s.conversationID, sourceIDs, userMsg, assistantMsg)
 	if err != nil {
 		s.logger.Errorf("memory extraction failed: %v", err)
@@ -519,9 +584,64 @@ func (s *Session) SetToolsEnabled(enabled bool) {
 
 // SetModelContextMax updates the known context window size for the active model.
 func (s *Session) SetModelContextMax(contextMax int) {
+	s.adapterMu.Lock()
 	s.modelContextMax = contextMax
+	fallback := s.extractorFallback
+	if fallback {
+		s.referenceContextMax = contextMax
+	}
+	s.adapterMu.Unlock()
 	if contextMax > 0 {
+		s.statsMu.Lock()
 		s.stats.ContextMax = contextMax
+		stats := s.stats
+		s.statsMu.Unlock()
+		if s.onStats != nil {
+			s.onStats(stats)
+		}
+	}
+}
+
+// SetReferenceModelContextMax updates the known window for extractor/selector calls.
+func (s *Session) SetReferenceModelContextMax(contextMax int) {
+	s.adapterMu.Lock()
+	s.referenceContextMax = contextMax
+	s.adapterMu.Unlock()
+}
+
+// SetExtractorAdapter replaces the adapter used for extraction and reference-file decisions.
+func (s *Session) SetExtractorAdapter(adapter provider.Adapter) {
+	s.adapterMu.Lock()
+	s.extractorAdapter = adapter
+	s.extractorFallback = adapter == nil
+	if adapter == nil {
+		s.referenceContextMax = s.modelContextMax
+	} else {
+		s.referenceContextMax = 0
+	}
+	s.adapterMu.Unlock()
+}
+
+func (s *Session) referenceModel() reference.Model {
+	s.adapterMu.RLock()
+	defer s.adapterMu.RUnlock()
+	adapter, contextMax := s.extractorAdapter, s.referenceContextMax
+	if adapter == nil {
+		adapter, contextMax = s.adapter, s.modelContextMax
+	}
+	return reference.Model{Adapter: adapter, ContextMax: contextMax}
+}
+
+func (s *Session) modelContextMaxSnapshot() int {
+	s.adapterMu.RLock()
+	defer s.adapterMu.RUnlock()
+	return s.modelContextMax
+}
+
+func (s *Session) setReferenceWarning(warning bool) {
+	s.referenceWarning = warning
+	if s.onContextStatus != nil {
+		s.onContextStatus(s.CacheStatus())
 	}
 }
 
@@ -554,39 +674,47 @@ func (s *Session) SetEmbeddingModel(model string) {
 
 // SetExtractorModel updates the model used for note extraction.
 func (s *Session) SetExtractorModel(model string) {
-	if s.extractorAdapter == nil {
-		s.extractorFallback = false
+	s.adapterMu.RLock()
+	adapter := s.extractorAdapter
+	s.adapterMu.RUnlock()
+	if adapter == nil {
 		return
 	}
-	if a, ok := s.extractorAdapter.(interface{ SetModel(string) }); ok {
+	if a, ok := adapter.(interface{ SetModel(string) }); ok {
 		a.SetModel(model)
 	}
-	s.extractorFallback = false
 }
 
 // CacheStatus returns a short label for the footer showing current context state.
 func (s *Session) CacheStatus() string {
-	if s.cacheStale && s.cacheReval {
-		return "ctx:swr"
-	}
-	if s.cacheHit {
+	status := ""
+	switch {
+	case s.cacheStale && s.cacheReval:
+		status = "ctx:swr"
+	case s.cacheHit:
 		switch s.cacheTier {
 		case "l1":
-			return "ctx:l1-hit"
+			status = "ctx:l1-hit"
 		case "l2":
-			return "ctx:l2-hit"
+			status = "ctx:l2-hit"
 		default:
-			return "ctx:hit"
+			status = "ctx:hit"
 		}
+	case s.cacheMiss == "" || s.cacheMiss == "not_found":
+		status = "ctx:rebuild"
+	default:
+		status = "ctx:miss(" + s.cacheMiss + ")"
 	}
-	if s.cacheMiss == "" || s.cacheMiss == "not_found" {
-		return "ctx:rebuild"
+	if s.referenceWarning {
+		return status + " files!"
 	}
-	return "ctx:miss(" + s.cacheMiss + ")"
+	return status
 }
 
 // ExtractorFallbackActive reports whether extraction is using the main model.
 func (s *Session) ExtractorFallbackActive() bool {
+	s.adapterMu.RLock()
+	defer s.adapterMu.RUnlock()
 	return s.extractorFallback
 }
 
@@ -602,6 +730,12 @@ func (s *Session) EmbeddingModel() string {
 
 // Close archives the conversation and snapshots backups.
 func (s *Session) Close(ctx context.Context) {
+	if s.references != nil {
+		if err := s.references.Close(); err != nil {
+			s.logger.Infof("reference service close failed: %v", err)
+		}
+		s.references = nil
+	}
 	if s.profileSlug != "" {
 		s.stopBackupTicker()
 		if err := backup.Snapshot(s.profileSlug); err != nil {
@@ -630,9 +764,12 @@ func (u *usageReportingEmbedder) Embed(ctx context.Context, req provider.Embeddi
 }
 
 func (s *Session) recordAuxUsage(usage provider.Usage) {
+	s.statsMu.Lock()
 	s.stats.AddUsage(usage)
+	stats := s.stats
+	s.statsMu.Unlock()
 	if s.onStats != nil {
-		s.onStats(s.stats)
+		s.onStats(stats)
 	}
 }
 

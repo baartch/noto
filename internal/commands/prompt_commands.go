@@ -21,11 +21,7 @@ func (e *ErrOpenEditor) Error() string { return "open-editor:" + e.Path }
 
 // AsErrOpenEditor unwraps err as *ErrOpenEditor if it is one.
 func AsErrOpenEditor(err error) (*ErrOpenEditor, bool) {
-	var e *ErrOpenEditor
-	if errors.As(err, &e) {
-		return e, true
-	}
-	return nil, false
+	return errors.AsType[*ErrOpenEditor](err)
 }
 
 // RegisterPromptCommands registers all prompt-related commands into r.

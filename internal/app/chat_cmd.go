@@ -221,18 +221,10 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			return provider.ListModels(callCtx, adapterCfg)
 		}
 		if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
-			for _, mi := range models {
-				if mi.ID == activeModel && sess != nil {
-					sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
-					ctxMax := mi.ContextLength
-					if ctxMax == 0 {
-						ctxMax = mi.TopProviderContext
-					}
-					sess.SetModelContextMax(ctxMax)
-					if prog != nil {
-						prog.Send(tui.StatsUpdated(sess.Stats().Format()))
-					}
-					break
+			if sess != nil {
+				applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
+				if prog != nil {
+					prog.Send(tui.StatsUpdated(sess.Stats().Format()))
 				}
 			}
 		}
@@ -247,16 +239,11 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			}
 			activeModel = modelID
 			if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
-				for _, mi := range models {
-					if mi.ID == modelID && sess != nil {
-						sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
-						ctxMax := mi.ContextLength
-						if ctxMax == 0 {
-							ctxMax = mi.TopProviderContext
-						}
-						sess.SetModelContextMax(ctxMax)
-						break
-					}
+				if extractorFallback {
+					extractorModel = modelID
+				}
+				if sess != nil {
+					applySessionModelMetadata(sess, models, modelID, extractorModel, extractorFallback)
 				}
 			}
 			return nil
@@ -276,10 +263,24 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			if err := cfgRepo.SetExtractorModel(ctx, activeProfile.ID, modelID); err != nil {
 				return err
 			}
-			extractorModel = modelID
-			extractorFallback = false
-			if sess != nil {
-				sess.SetExtractorModel(modelID)
+			if modelID == "" {
+				extractorModel = activeModel
+				extractorFallback = true
+				if sess != nil {
+					sess.SetExtractorAdapter(nil)
+				}
+			} else {
+				extractorModel = modelID
+				extractorFallback = false
+				if sess != nil {
+					sess.SetExtractorAdapter(provider.NewOpenAICompatible(provider.Config{
+						ProviderType: "openai_compatible", Endpoint: adapterCfg.Endpoint,
+						Model: modelID, APIKey: adapterCfg.APIKey,
+					}))
+				}
+			}
+			if models, err := provider.ListModels(ctx, adapterCfg); err == nil && sess != nil {
+				applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
 			}
 			return nil
 		}
@@ -329,6 +330,10 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			if providerCfg != nil && decryptedKey != "" {
 				activeModel = providerCfg.EffectiveModel()
 				extractorModel = providerCfg.EffectiveExtractorModel()
+				extractorFallback = providerCfg.ExtractorModel == ""
+				if extractorFallback {
+					extractorModel = activeModel
+				}
 				adapterCfg := provider.Config{
 					ProviderType: "openai_compatible",
 					Endpoint:     providerCfg.Endpoint,
@@ -354,12 +359,17 @@ func runChat(cmd *cobra.Command, _ []string) error {
 						Model:        activeModel,
 						APIKey:       adapterCfg.APIKey,
 					}),
-					provider.NewOpenAICompatible(provider.Config{
-						ProviderType: "openai_compatible",
-						Endpoint:     adapterCfg.Endpoint,
-						Model:        extractorModel,
-						APIKey:       adapterCfg.APIKey,
-					}),
+					func() provider.Adapter {
+						if extractorFallback {
+							return nil
+						}
+						return provider.NewOpenAICompatible(provider.Config{
+							ProviderType: "openai_compatible",
+							Endpoint:     adapterCfg.Endpoint,
+							Model:        extractorModel,
+							APIKey:       adapterCfg.APIKey,
+						})
+					}(),
 					logger,
 					func(saved, updated int) {
 						if prog != nil {
@@ -404,18 +414,10 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					return provider.ListModels(callCtx, adapterCfg)
 				}
 				if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
-					for _, mi := range models {
-						if mi.ID == activeModel && sess != nil {
-							sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
-							ctxMax := mi.ContextLength
-							if ctxMax == 0 {
-								ctxMax = mi.TopProviderContext
-							}
-							sess.SetModelContextMax(ctxMax)
-							if prog != nil {
-								prog.Send(tui.StatsUpdated(sess.Stats().Format()))
-							}
-							break
+					if sess != nil {
+						applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
+						if prog != nil {
+							prog.Send(tui.StatsUpdated(sess.Stats().Format()))
 						}
 					}
 				}
@@ -429,17 +431,12 @@ func runChat(cmd *cobra.Command, _ []string) error {
 						return err
 					}
 					activeModel = modelID
+					if extractorFallback {
+						extractorModel = modelID
+					}
 					if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
-						for _, mi := range models {
-							if mi.ID == modelID && sess != nil {
-								sess.SetToolsEnabled(mi.ToolSupport.SupportsTools)
-								ctxMax := mi.ContextLength
-								if ctxMax == 0 {
-									ctxMax = mi.TopProviderContext
-								}
-								sess.SetModelContextMax(ctxMax)
-								break
-							}
+						if sess != nil {
+							applySessionModelMetadata(sess, models, modelID, extractorModel, extractorFallback)
 						}
 					}
 					return nil
@@ -459,9 +456,24 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					if err := cfgRepo.SetExtractorModel(ctx, p.ID, modelID); err != nil {
 						return err
 					}
-					extractorModel = modelID
-					if sess != nil {
-						sess.SetExtractorModel(modelID)
+					if modelID == "" {
+						extractorModel = activeModel
+						extractorFallback = true
+						if sess != nil {
+							sess.SetExtractorAdapter(nil)
+						}
+					} else {
+						extractorModel = modelID
+						extractorFallback = false
+						if sess != nil {
+							sess.SetExtractorAdapter(provider.NewOpenAICompatible(provider.Config{
+								ProviderType: "openai_compatible", Endpoint: adapterCfg.Endpoint,
+								Model: modelID, APIKey: adapterCfg.APIKey,
+							}))
+						}
+					}
+					if models, err := provider.ListModels(ctx, adapterCfg); err == nil && sess != nil {
+						applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
 					}
 					return nil
 				}
@@ -572,4 +584,44 @@ func loadProviderConfig(ctx context.Context, db *store.DB, profileID string) (*s
 		return nil, ""
 	}
 	return cfg, decrypted
+}
+
+func resolveSessionModelMetadata(models []provider.ModelInfo, activeModel, extractorModel string, extractorFallback bool) (mainContext, referenceContext int, supportsTools, activeFound bool) {
+	for _, model := range models {
+		if model.ID == activeModel {
+			mainContext = model.ContextLength
+			if mainContext == 0 {
+				mainContext = model.TopProviderContext
+			}
+			supportsTools = model.ToolSupport.SupportsTools
+			activeFound = true
+			break
+		}
+	}
+	if extractorFallback {
+		return mainContext, mainContext, supportsTools, activeFound
+	}
+	for _, model := range models {
+		if model.ID == extractorModel {
+			referenceContext = model.ContextLength
+			if referenceContext == 0 {
+				referenceContext = model.TopProviderContext
+			}
+			break
+		}
+	}
+	return mainContext, referenceContext, supportsTools, activeFound
+}
+
+func applySessionModelMetadata(sess *chatpkg.Session, models []provider.ModelInfo, activeModel, extractorModel string, extractorFallback bool) {
+	mainContext, referenceContext, supportsTools, activeFound := resolveSessionModelMetadata(models, activeModel, extractorModel, extractorFallback)
+	if mainContext > 0 {
+		sess.SetModelContextMax(mainContext)
+	}
+	if extractorFallback || referenceContext > 0 {
+		sess.SetReferenceModelContextMax(referenceContext)
+	}
+	if activeFound {
+		sess.SetToolsEnabled(supportsTools)
+	}
 }

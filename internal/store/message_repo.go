@@ -30,6 +30,7 @@ type Message struct {
 	Provider              string
 	Model                 string
 	CreatedAt             time.Time
+	ReferenceInfluenced   bool
 }
 
 // MessageRepo manages CRUD operations for messages.
@@ -45,9 +46,9 @@ func NewMessageRepo(db *DB) *MessageRepo {
 // Create inserts a new message.
 func (r *MessageRepo) Create(ctx context.Context, m *Message) error {
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO messages (id, conversation_id, role, content, provider, model)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, m.ID, m.ConversationID, string(m.Role), m.Content, m.Provider, m.Model)
+		INSERT INTO messages (id, conversation_id, role, content, provider, model, reference_influenced)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, m.ID, m.ConversationID, string(m.Role), m.Content, m.Provider, m.Model, m.ReferenceInfluenced)
 	if err != nil {
 		return fmt.Errorf("store: create message: %w", err)
 	}
@@ -57,7 +58,7 @@ func (r *MessageRepo) Create(ctx context.Context, m *Message) error {
 // ListByConversation returns all messages for a conversation in chronological order.
 func (r *MessageRepo) ListByConversation(ctx context.Context, conversationID string) ([]*Message, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, conversation_id, role, content, provider, model, created_at
+		SELECT id, conversation_id, role, content, provider, model, created_at, reference_influenced
 		FROM messages WHERE conversation_id = ?
 		ORDER BY created_at ASC
 	`, conversationID)
@@ -74,7 +75,7 @@ func (r *MessageRepo) ListByConversation(ctx context.Context, conversationID str
 		var role string
 		err := rows.Scan(
 			&m.ID, &m.ConversationID, &role, &m.Content,
-			&m.Provider, &m.Model, &m.CreatedAt,
+			&m.Provider, &m.Model, &m.CreatedAt, &m.ReferenceInfluenced,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("store: scan message: %w", err)
@@ -102,7 +103,7 @@ func (r *MessageRepo) ListRecentByConversation(ctx context.Context, conversation
 		return []*Message{}, nil
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, conversation_id, role, content, provider, model, created_at
+		SELECT id, conversation_id, role, content, provider, model, created_at, reference_influenced
 		FROM messages
 		WHERE conversation_id = ?
 		ORDER BY created_at DESC
@@ -119,7 +120,7 @@ func (r *MessageRepo) ListRecentByConversation(ctx context.Context, conversation
 	for rows.Next() {
 		m := &Message{}
 		var role string
-		if err := rows.Scan(&m.ID, &m.ConversationID, &role, &m.Content, &m.Provider, &m.Model, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ConversationID, &role, &m.Content, &m.Provider, &m.Model, &m.CreatedAt, &m.ReferenceInfluenced); err != nil {
 			return nil, fmt.Errorf("store: scan recent by conversation: %w", err)
 		}
 		m.Role = MessageRole(role)
@@ -141,7 +142,7 @@ func (r *MessageRepo) ListOlderByConversationBefore(ctx context.Context, convers
 		return []*Message{}, nil
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, conversation_id, role, content, provider, model, created_at
+		SELECT id, conversation_id, role, content, provider, model, created_at, reference_influenced
 		FROM messages
 		WHERE conversation_id = ? AND created_at < ?
 		ORDER BY created_at DESC
@@ -158,7 +159,7 @@ func (r *MessageRepo) ListOlderByConversationBefore(ctx context.Context, convers
 	for rows.Next() {
 		m := &Message{}
 		var role string
-		if err := rows.Scan(&m.ID, &m.ConversationID, &role, &m.Content, &m.Provider, &m.Model, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ConversationID, &role, &m.Content, &m.Provider, &m.Model, &m.CreatedAt, &m.ReferenceInfluenced); err != nil {
 			return nil, fmt.Errorf("store: scan older by conversation: %w", err)
 		}
 		m.Role = MessageRole(role)
@@ -180,7 +181,7 @@ func (r *MessageRepo) ListRecentByProfile(ctx context.Context, profileID string,
 		return []*Message{}, nil
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT m.id, m.conversation_id, c.started_at, m.role, m.content, m.provider, m.model, m.created_at
+		SELECT m.id, m.conversation_id, c.started_at, m.role, m.content, m.provider, m.model, m.created_at, m.reference_influenced
 		FROM messages m
 		JOIN conversations c ON m.conversation_id = c.id
 		WHERE c.profile_id = ?
@@ -198,7 +199,7 @@ func (r *MessageRepo) ListRecentByProfile(ctx context.Context, profileID string,
 	for rows.Next() {
 		m := &Message{}
 		var role string
-		if err := rows.Scan(&m.ID, &m.ConversationID, &m.ConversationStartedAt, &role, &m.Content, &m.Provider, &m.Model, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.ConversationStartedAt, &role, &m.Content, &m.Provider, &m.Model, &m.CreatedAt, &m.ReferenceInfluenced); err != nil {
 			return nil, fmt.Errorf("store: scan recent by profile: %w", err)
 		}
 		m.Role = MessageRole(role)
@@ -219,7 +220,7 @@ func (r *MessageRepo) ListOlderByProfileBefore(ctx context.Context, profileID st
 		return []*Message{}, nil
 	}
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT m.id, m.conversation_id, c.started_at, m.role, m.content, m.provider, m.model, m.created_at
+		SELECT m.id, m.conversation_id, c.started_at, m.role, m.content, m.provider, m.model, m.created_at, m.reference_influenced
 		FROM messages m
 		JOIN conversations c ON m.conversation_id = c.id
 		WHERE c.profile_id = ? AND m.created_at < ?
@@ -237,7 +238,7 @@ func (r *MessageRepo) ListOlderByProfileBefore(ctx context.Context, profileID st
 	for rows.Next() {
 		m := &Message{}
 		var role string
-		if err := rows.Scan(&m.ID, &m.ConversationID, &m.ConversationStartedAt, &role, &m.Content, &m.Provider, &m.Model, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.ConversationStartedAt, &role, &m.Content, &m.Provider, &m.Model, &m.CreatedAt, &m.ReferenceInfluenced); err != nil {
 			return nil, fmt.Errorf("store: scan older by profile: %w", err)
 		}
 		m.Role = MessageRole(role)

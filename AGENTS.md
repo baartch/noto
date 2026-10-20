@@ -53,11 +53,8 @@ shell commands, and other important information, read:
 <!-- SPECKIT END -->
 
 <!-- lean-ctx -->
-
 ## lean-ctx
 
 lean-ctx is active — the MCP tools replace native equivalents.
 Full rules: LEAN-CTX.md (open on demand — do not auto-load).
-**ALWAYS** use lean-ctx commits whenever possible.
-
 <!-- /lean-ctx -->
