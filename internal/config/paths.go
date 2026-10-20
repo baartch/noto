@@ -25,6 +25,9 @@ const (
 	// PromptsDirName is the subdirectory within each profile for prompt files.
 	PromptsDirName = "prompts"
 
+	// FilesDirName is the user-managed reference-file directory within each profile.
+	FilesDirName = "files"
+
 	// SystemPromptName is the default system prompt filename.
 	SystemPromptName = "system.md"
 
@@ -104,6 +107,15 @@ func ProfilePromptsDir(slug string) (string, error) {
 	return filepath.Join(dir, PromptsDirName), nil
 }
 
+// ProfileFilesDir returns the absolute path to a profile's user-managed reference files.
+func ProfileFilesDir(slug string) (string, error) {
+	dir, err := ProfileDir(slug)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, FilesDirName), nil
+}
+
 // ProfileSystemPromptPath returns the absolute path to the system prompt file for a profile.
 func ProfileSystemPromptPath(slug string) (string, error) {
 	dir, err := ProfilePromptsDir(slug)
@@ -137,6 +149,7 @@ func EnsureAppDirs(slug string) error {
 		ProfileDir,
 		ProfileBackupsDir,
 		ProfilePromptsDir,
+		ProfileFilesDir,
 	}
 	for _, fn := range dirs {
 		path, err := fn(slug)
