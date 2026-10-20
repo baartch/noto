@@ -8,6 +8,21 @@ import (
 	"noto/internal/store"
 )
 
+func TestSessionPendingNotesSnapshot(t *testing.T) {
+	s := &Session{}
+	if got := s.PendingNotes(); got != 0 {
+		t.Fatalf("initial PendingNotes() = %d, want 0", got)
+	}
+	s.markNotesPending()
+	if got := s.PendingNotes(); got != 1 {
+		t.Fatalf("PendingNotes() after pending = %d, want 1", got)
+	}
+	s.markNotesDone(1)
+	if got := s.PendingNotes(); got != 0 {
+		t.Fatalf("PendingNotes() after completion = %d, want 0", got)
+	}
+}
+
 func TestReferenceInfluencePropagatesFromCatalogAttachmentsAndHistory(t *testing.T) {
 	markedHistory := []*store.Message{{Role: store.RoleAssistant, ReferenceInfluenced: true}}
 	cases := []struct {

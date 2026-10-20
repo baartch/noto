@@ -419,6 +419,13 @@ func (s *Session) Stats() provider.Stats {
 	return s.stats
 }
 
+// PendingNotes returns the number of asynchronous note extractions in flight.
+func (s *Session) PendingNotes() int {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	return s.pendingNotes
+}
+
 // extractAsync runs note extraction and calls onNotes when done.
 func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote) error {
 	if s.vectorIndex == nil || s.adapter == nil {
