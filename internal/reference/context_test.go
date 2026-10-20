@@ -135,6 +135,13 @@ func TestReferencePrepareCatalogOverflowDisablesSelection(t *testing.T) {
 	}
 }
 
+func TestFormatCatalogWithNoFilesIsEmpty(t *testing.T) {
+	catalog, encoded, err := formatCatalog(nil)
+	if err != nil || catalog != "" || len(encoded) != 0 {
+		t.Fatalf("empty catalog = %q (%q), %v", catalog, encoded, err)
+	}
+}
+
 func TestReferencePrepareRefreshesChangedFileBeforeUse(t *testing.T) {
 	root := t.TempDir()
 	filename := filepath.Join(root, "guide.txt")

@@ -372,15 +372,17 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	}
 
 	latency := time.Since(start).Milliseconds()
+	influenced := referenceInfluenced(s.history, referenceTurn.Catalog, referenceTurn.Attachments)
 
 	// Persist assistant message.
 	asstMsgRec := &store.Message{
-		ID:             fmt.Sprintf("msg-%x", time.Now().UnixNano()),
-		ConversationID: s.conversationID,
-		Role:           store.RoleAssistant,
-		Content:        resp.Content,
-		Provider:       s.adapter.ProviderType(),
-		Model:          resp.Model,
+		ID:                  fmt.Sprintf("msg-%x", time.Now().UnixNano()),
+		ConversationID:      s.conversationID,
+		Role:                store.RoleAssistant,
+		Content:             resp.Content,
+		Provider:            s.adapter.ProviderType(),
+		Model:               resp.Model,
+		ReferenceInfluenced: influenced,
 	}
 	if err := s.msgRepo.Create(ctx, asstMsgRec); err != nil {
 		return nil, fmt.Errorf("session: persist assistant message: %w", err)
@@ -402,8 +404,10 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 		s.onStats(stats)
 	}
 
-	// Fire background extraction — never blocks the reply.
-	go s.extractAsync(userMsg, resp.Content)
+	// Capture immutable turn inputs before launching extraction, so later turns cannot change provenance or source IDs.
+	sourceIDs, extractionUser, extractionAssistant := memoryExtractionInput(userMsgRec.ID, asstMsgRec.ID, userMsg, resp.Content, influenced)
+	s.markNotesPending()
+	go s.extractAsync(extractionUser, extractionAssistant, sourceIDs)
 
 	return &SendResult{Reply: resp.Content, LatencyMs: latency}, nil
 }
@@ -507,8 +511,7 @@ func (s *Session) ensureVectorCompaction(ctx context.Context) error {
 	return rebuilder.Rebuild(ctx, records)
 }
 
-func (s *Session) extractAsync(userMsg, assistantMsg string) {
-	s.markNotesPending()
+func (s *Session) extractAsync(userMsg, assistantMsg string, sourceIDs []string) {
 	if s.onNotesSaving != nil {
 		s.onNotesSaving()
 	}
@@ -541,7 +544,6 @@ func (s *Session) extractAsync(userMsg, assistantMsg string) {
 			extractor.WithNoteMaxAgeDays(settings.DedupMaxAgeDays)
 		}
 	}
-	sourceIDs := []string{s.history[len(s.history)-2].ID, s.history[len(s.history)-1].ID}
 	result, err := extractor.ExtractTurn(ctx, s.profileID, s.profileSlug, s.conversationID, sourceIDs, userMsg, assistantMsg)
 	if err != nil {
 		s.logger.Errorf("memory extraction failed: %v", err)

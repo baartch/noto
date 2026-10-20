@@ -299,6 +299,9 @@ func readyReferenceFiles(files []store.ReferenceFile) map[string]store.Reference
 }
 
 func formatCatalog(files []store.ReferenceFile) (string, []byte, error) {
+	if len(files) == 0 {
+		return "", nil, nil
+	}
 	entries := make([]catalogEntry, 0, len(files))
 	sort.Slice(files, func(i, j int) bool { return files[i].RelativePath < files[j].RelativePath })
 	for _, file := range files {

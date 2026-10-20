@@ -173,6 +173,17 @@ func TestSessionSendKeepsReferenceTextTemporaryAndAtRequestTail(t *testing.T) {
 			t.Fatal("background memory extractor did not complete")
 		}
 	}
+	selectorRequests := selectorAdapter.snapshot()
+	for _, message := range selectorRequests[0].Messages {
+		if strings.Contains(message.Content, body) {
+			t.Fatal("reference selector received raw document content")
+		}
+	}
+	for _, message := range selectorRequests[1].Messages {
+		if strings.Contains(message.Content, body) || strings.Contains(message.Content, "Here is your bio.") {
+			t.Fatal("reference-influenced assistant text reached memory extraction")
+		}
+	}
 	requests := mainAdapter.snapshot()
 	if len(requests) != 1 {
 		t.Fatalf("main provider call count = %d", len(requests))
@@ -207,6 +218,9 @@ func TestSessionSendKeepsReferenceTextTemporaryAndAtRequestTail(t *testing.T) {
 		if strings.Contains(message.Content, body) {
 			t.Fatal("raw document text persisted as chat history")
 		}
+	}
+	if len(stored) != 2 || !stored[1].ReferenceInfluenced {
+		t.Fatalf("assistant provenance was not persisted: %#v", stored)
 	}
 	if session.Stats().TokensIn < 12 {
 		t.Fatalf("selector usage was not accumulated: %#v", session.Stats())

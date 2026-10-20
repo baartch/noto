@@ -75,3 +75,22 @@ func referenceNotice(diagnostics []reference.Diagnostic) string {
 	}
 	return "Reference access was unavailable for this turn (" + strings.Join(codes, ", ") + "); no file contents were provided."
 }
+
+func referenceInfluenced(history []*store.Message, catalog string, attachments []reference.Attachment) bool {
+	if catalog != "" || len(attachments) > 0 {
+		return true
+	}
+	for _, message := range history {
+		if message != nil && message.Role == store.RoleAssistant && message.ReferenceInfluenced {
+			return true
+		}
+	}
+	return false
+}
+
+func memoryExtractionInput(userID, assistantID, userMessage, assistantMessage string, influenced bool) ([]string, string, string) {
+	if influenced {
+		return []string{userID}, userMessage, ""
+	}
+	return []string{userID, assistantID}, userMessage, assistantMessage
+}
