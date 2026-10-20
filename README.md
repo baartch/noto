@@ -1,6 +1,13 @@
 # Noto
 
-Noto is a local-first chatbot with profile-scoped memory, available in both the terminal UI and a localhost browser UI.
+Noto is a chatbot that creates notes—locally on your system. These notes are available at any time, and the more you chat with Noto, the better he gets to know you and the topics that interest you. The idea behind Noto’s development is to use it as a coach and mentor. It helps you develop strategies and reminds you of relevant things. Since it takes notes about you and your progress (whatever topic you’re currently working on), it has a much more comprehensive understanding of the progress you’re making.
+
+Noto has a WebGUI:
+<img width="2666" height="1824" alt="127 0 0 1_8080_" src="https://github.com/user-attachments/assets/efcaf50c-6183-475d-a969-e86240c20e2f" />
+ 
+And Noto has a TUI:
+<img width="1142" height="799" alt="Screenshot_2026-10-20_20-26-41" src="https://github.com/user-attachments/assets/58240bf5-e0aa-47c4-bf56-3d29e74f79f6" />
+
 
 ## Getting started
 
