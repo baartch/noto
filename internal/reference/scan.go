@@ -220,11 +220,28 @@ func boundedError(err error) string {
 	if err == nil {
 		return ""
 	}
-	text := strings.Join(strings.Fields(err.Error()), " ")
-	if len(text) > 512 {
-		text = text[:512]
+	switch {
+	case errors.Is(err, ErrUnsupported):
+		return ErrUnsupported.Error()
+	case errors.Is(err, ErrUnsafePath):
+		return ErrUnsafePath.Error()
+	case errors.Is(err, ErrInvalidText):
+		return ErrInvalidText.Error()
+	case errors.Is(err, ErrNoText):
+		return ErrNoText.Error()
+	case errors.Is(err, ErrTooLarge):
+		return ErrTooLarge.Error()
+	case errors.Is(err, ErrChanged):
+		return ErrChanged.Error()
+	case errors.Is(err, context.Canceled):
+		return "reference: operation canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "reference: operation timed out"
+	case errors.Is(err, ErrUnreadable):
+		return ErrUnreadable.Error()
+	default:
+		return "reference: operation failed"
 	}
-	return text
 }
 
 func diagnostic(file store.ReferenceFile, code string, err error) Diagnostic {

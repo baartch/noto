@@ -87,7 +87,10 @@ func TestReferenceScanSummarizesChangesAndDeletesOrphans(t *testing.T) {
 	if adapter.callCount() != 1 {
 		t.Fatalf("unchanged file triggered summary call; calls=%d", adapter.callCount())
 	}
-	if err := os.WriteFile(filename, []byte("second text"), 0o600); err != nil {
+	if len("first text") != len("other text") {
+		t.Fatal("same-size fixture must preserve source length")
+	}
+	if err := os.WriteFile(filename, []byte("other text"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chtimes(filename, oldInfo.ModTime(), oldInfo.ModTime()); err != nil {
@@ -139,6 +142,35 @@ func TestReferenceScanFailureDoesNotPublishSummary(t *testing.T) {
 	files, err := store.NewReferenceFileRepo(db).List(context.Background(), "p")
 	if err != nil || len(files) != 1 || files[0].Status != store.ReferenceFileFailed || files[0].Summary != "" || files[0].SummaryFingerprint != "" {
 		t.Fatalf("failed file row = %#v, %v", files, err)
+	}
+}
+
+func TestReferenceScanDoesNotPersistProviderErrorBodies(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "guide.txt"), []byte("ordinary guide text"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.OpenForTesting(filepath.Join(t.TempDir(), "profile.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	adapter := &recordingAdapter{err: errors.New("provider rejected request containing SECRET_DOCUMENT_BODY")}
+	service, err := NewService(Options{Root: root, ProfileID: "p", Repo: store.NewReferenceFileRepo(db), Model: func() Model { return Model{Adapter: adapter} }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.Close()
+	diagnostics, err := service.Scan(context.Background())
+	if err != nil || len(diagnostics) != 1 {
+		t.Fatalf("Scan() = %#v, %v", diagnostics, err)
+	}
+	files, err := store.NewReferenceFileRepo(db).List(context.Background(), "p")
+	if err != nil || len(files) != 1 {
+		t.Fatalf("catalog rows = %#v, %v", files, err)
+	}
+	if strings.Contains(files[0].LastError, "SECRET_DOCUMENT_BODY") || strings.Contains(diagnostics[0].Message, "SECRET_DOCUMENT_BODY") {
+		t.Fatalf("provider error leaked into persistent diagnostics: row=%q diagnostic=%q", files[0].LastError, diagnostics[0].Message)
 	}
 }
 

@@ -227,9 +227,55 @@ func TestReferencePrepareRemovesConfirmedDeletedFile(t *testing.T) {
 	if err != nil || !turn.Degraded || len(turn.Attachments) != 0 || len(turn.Diagnostics) == 0 {
 		t.Fatalf("deleted file was not reported unavailable: %#v, %v", turn, err)
 	}
+	if strings.Contains(turn.Catalog, "rf-gone") || strings.Contains(turn.Catalog, "Guide") {
+		t.Fatalf("turn retained stale description for a deleted file: %s", turn.Catalog)
+	}
 	files, err := repo.List(context.Background(), "p")
 	if err != nil || len(files) != 0 {
 		t.Fatalf("confirmed missing file remains cataloged: %#v, %v", files, err)
+	}
+}
+
+func TestReferencePrepareInvalidatesCatalogOnReadFailure(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "unreadable.md"), []byte("body"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.OpenForTesting(filepath.Join(t.TempDir(), "profile.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := store.NewReferenceFileRepo(db)
+	rootHandle, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := Read(context.Background(), rootHandle, "unreadable.md")
+	_ = rootHandle.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Upsert(context.Background(), store.ReferenceFile{ID: "rf-unreadable", ProfileID: "p", RelativePath: "unreadable.md", Fingerprint: doc.Fingerprint, SummaryFingerprint: doc.Fingerprint, Summary: "Stale voice description", Status: store.ReferenceFileReady}); err != nil {
+		t.Fatal(err)
+	}
+	adapter := &recordingAdapter{response: `{"topic":"guide","topic_changed":false,"file_ids":["rf-unreadable"]}`}
+	service, err := NewService(Options{
+		Root: root, ProfileID: "p", Repo: repo,
+		Reader: func(context.Context, *os.Root, string) (Document, error) { return Document{}, ErrUnreadable },
+		Model:  func() Model { return Model{Adapter: adapter} },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.Close()
+	turn, err := service.Prepare(context.Background(), Input{UserMessage: "Use the guide", ContextMax: 8192})
+	if err != nil || !turn.Degraded || strings.Contains(turn.Catalog, "Stale voice description") {
+		t.Fatalf("read failure left stale catalog in turn: %#v, %v", turn, err)
+	}
+	files, err := repo.List(context.Background(), "p")
+	if err != nil || len(files) != 1 || files[0].Status != store.ReferenceFileFailed || files[0].Summary != "" {
+		t.Fatalf("read-failed catalog row = %#v, %v", files, err)
 	}
 }
 
@@ -266,5 +312,41 @@ func TestReferencePrepareRejectsSelectedSetOverContextBudget(t *testing.T) {
 	turn, err := service.Prepare(context.Background(), Input{UserMessage: "Use all of the guide", ContextMax: 8192})
 	if err != nil || !turn.Degraded || len(turn.Attachments) != 0 || len(turn.Diagnostics) == 0 {
 		t.Fatalf("oversized selection was truncated or accepted: %#v, %v", turn, err)
+	}
+}
+
+func TestReferencePrepareBudgetsJSONEscapedAttachmentBytes(t *testing.T) {
+	root := t.TempDir()
+	body := strings.Repeat("\x00", 1800)
+	if err := os.WriteFile(filepath.Join(root, "control.txt"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.OpenForTesting(filepath.Join(t.TempDir(), "profile.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := store.NewReferenceFileRepo(db)
+	rootHandle, err := os.OpenRoot(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := Read(context.Background(), rootHandle, "control.txt")
+	_ = rootHandle.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Upsert(context.Background(), store.ReferenceFile{ID: "rf-control", ProfileID: "p", RelativePath: "control.txt", Fingerprint: doc.Fingerprint, SummaryFingerprint: doc.Fingerprint, Summary: "Control text", Status: store.ReferenceFileReady}); err != nil {
+		t.Fatal(err)
+	}
+	adapter := &recordingAdapter{response: `{"topic":"controls","topic_changed":false,"file_ids":["rf-control"]}`}
+	service, err := NewService(Options{Root: root, ProfileID: "p", Repo: repo, Model: func() Model { return Model{Adapter: adapter} }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer service.Close()
+	turn, err := service.Prepare(context.Background(), Input{UserMessage: "Use the control file", ContextMax: 8192})
+	if err != nil || !turn.Degraded || len(turn.Attachments) != 0 || len(turn.Diagnostics) == 0 {
+		t.Fatalf("JSON-escaped attachment exceeded budget but was sent: %#v, %v", turn, err)
 	}
 }
