@@ -1,5 +1,17 @@
 # Release notes
 
+## 0.13.0
+
+October 20, 2026
+
+- Add web GUI
+
+## 0.12.0
+
+October 20, 2026
+
+- Add local profile files support
+
 ## 0.11.0
 
 August 9, 2026
