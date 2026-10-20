@@ -14,10 +14,11 @@ import (
 )
 
 type recordingAdapter struct {
-	mu       sync.Mutex
-	calls    []provider.CompletionRequest
-	response string
-	err      error
+	mu        sync.Mutex
+	calls     []provider.CompletionRequest
+	response  string
+	responses []string
+	err       error
 }
 
 func (a *recordingAdapter) Complete(_ context.Context, req provider.CompletionRequest) (*provider.CompletionResponse, error) {
@@ -27,7 +28,15 @@ func (a *recordingAdapter) Complete(_ context.Context, req provider.CompletionRe
 	if a.err != nil {
 		return nil, a.err
 	}
-	return &provider.CompletionResponse{Content: a.response, Usage: provider.Usage{PromptTokens: 1, HasUsage: true}}, nil
+	response := a.response
+	if len(a.responses) > 0 {
+		idx := len(a.calls) - 1
+		if idx >= len(a.responses) {
+			idx = len(a.responses) - 1
+		}
+		response = a.responses[idx]
+	}
+	return &provider.CompletionResponse{Content: response, Usage: provider.Usage{PromptTokens: 1, HasUsage: true}}, nil
 }
 func (*recordingAdapter) Embed(context.Context, provider.EmbeddingRequest) (*provider.EmbeddingResponse, error) {
 	return nil, errors.New("not used")
