@@ -15,7 +15,6 @@ const $ = (selector) => document.querySelector(selector);
 const ui = {
 	profile: $("#profile-name"),
 	model: $("#model-name"),
-	headerModel: $("#header-model"),
 	setupBanner: $("#setup-banner"),
 	chatStatus: $("#chat-status"),
 	chatPanel: $("#chat-panel"),
@@ -114,7 +113,6 @@ function renderState(serverState) {
 	state.pendingNotes = Number(serverState.pending_notes || 0);
 	ui.profile.textContent = state.profile;
 	ui.model.textContent = state.model;
-	ui.headerModel.textContent = state.model;
 	ui.setupBanner.classList.toggle("hidden", !state.setupRequired);
 	updateSendControls();
 }

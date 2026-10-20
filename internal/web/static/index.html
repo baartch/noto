@@ -37,17 +37,6 @@
 
 		<main id="workspace" class="grid h-[calc(100dvh-6.25rem)] grid-cols-1 lg:h-[calc(100dvh-3.5rem)] lg:grid-cols-[minmax(0,1fr)_360px]">
 			<section id="chat-panel" class="flex min-h-0 min-w-0 flex-col border-r border-line" aria-label="Chat workspace">
-				<div class="flex h-16 shrink-0 items-center justify-between border-b border-line px-5 sm:px-7">
-					<div class="min-w-0">
-						<h1 class="truncate text-base font-semibold">Workspace</h1>
-						<p class="text-xs text-muted">Your conversation and Noto’s memory, together.</p>
-					</div>
-					<div class="hidden items-center gap-2 rounded-full border border-line bg-raised px-3 py-1.5 text-xs text-muted sm:flex">
-						<i data-lucide="sparkles" class="size-3.5 text-accent" aria-hidden="true"></i>
-						<span id="header-model">Local profile</span>
-					</div>
-				</div>
-
 				<div id="setup-banner" class="mx-4 mt-4 hidden rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100 sm:mx-7" role="status">
 					Noto needs a configured provider before you can chat. Set it up in the terminal, then restart <code>noto web</code>.
 				</div>
