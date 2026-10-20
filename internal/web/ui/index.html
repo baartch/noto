@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="theme-color" content="#0d0715" />
+		<title>Noto — Workspace</title>
+		<link rel="stylesheet" href="/theme.css" />
+		<link rel="stylesheet" href="/app.css" />
+		<script src="/app.js" defer></script>
+	</head>
+	<body class="min-h-dvh overflow-hidden bg-page font-sans text-ink antialiased">
+		<header class="flex h-14 items-center justify-between border-b border-line bg-panel px-4 sm:px-6">
+			<div class="flex min-w-0 items-center gap-3">
+				<div class="grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-raised text-accent">
+					<i data-lucide="bot" class="size-5" aria-hidden="true"></i>
+				</div>
+				<div class="min-w-0">
+					<div class="truncate text-sm font-semibold tracking-wide">Noto</div>
+					<div class="truncate text-xs text-muted">Local profile · <span id="profile-name">Loading…</span></div>
+				</div>
+			</div>
+			<div class="hidden items-center gap-2 text-xs text-muted sm:flex">
+				<span class="size-2 rounded-full bg-emerald-400" aria-hidden="true"></span>
+				<span id="model-name">Checking provider</span>
+			</div>
+		</header>
+
+		<nav class="grid h-11 grid-cols-2 border-b border-line bg-panel px-3 lg:hidden" aria-label="Workspace views">
+			<button id="mobile-chat-tab" class="mobile-tab border-b-2 border-accent text-sm font-medium text-ink" type="button" aria-pressed="true">
+				<i data-lucide="messages-square" class="mr-1.5 inline size-4 align-text-bottom" aria-hidden="true"></i>Workspace
+			</button>
+			<button id="mobile-memory-tab" class="mobile-tab border-b-2 border-transparent text-sm text-muted" type="button" aria-pressed="false">
+				<i data-lucide="notebook-pen" class="mr-1.5 inline size-4 align-text-bottom" aria-hidden="true"></i>Notes
+			</button>
+		</nav>
+
+		<main id="workspace" class="grid h-[calc(100dvh-6.25rem)] grid-cols-1 lg:h-[calc(100dvh-3.5rem)] lg:grid-cols-[minmax(0,1fr)_360px]">
+			<section id="chat-panel" class="flex min-h-0 min-w-0 flex-col border-r border-line" aria-label="Chat workspace">
+				<div class="flex h-16 shrink-0 items-center justify-between border-b border-line px-5 sm:px-7">
+					<div class="min-w-0">
+						<h1 class="truncate text-base font-semibold">Workspace</h1>
+						<p class="text-xs text-muted">Your conversation and Noto’s memory, together.</p>
+					</div>
+					<div class="hidden items-center gap-2 rounded-full border border-line bg-raised px-3 py-1.5 text-xs text-muted sm:flex">
+						<i data-lucide="sparkles" class="size-3.5 text-accent" aria-hidden="true"></i>
+						<span id="header-model">Local profile</span>
+					</div>
+				</div>
+
+				<div id="setup-banner" class="mx-4 mt-4 hidden rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100 sm:mx-7" role="status">
+					Noto needs a configured provider before you can chat. Set it up in the terminal, then restart <code>noto web</code>.
+				</div>
+				<div id="chat-status" class="mx-4 mt-3 hidden text-sm text-muted sm:mx-7" role="status" aria-live="polite"></div>
+
+				<div id="message-scroll" class="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-7">
+					<div id="message-list" class="mx-auto flex max-w-4xl flex-col gap-5"></div>
+				</div>
+
+				<div class="shrink-0 border-t border-line bg-panel/70 px-4 pb-3 pt-3 sm:px-7">
+					<form id="message-form" class="mx-auto max-w-4xl rounded-2xl border border-line bg-composer p-2 shadow-xl shadow-black/15">
+						<label class="sr-only" for="message-input">Message Noto</label>
+						<div class="flex items-end gap-2">
+							<textarea id="message-input" rows="1" maxlength="65536" placeholder="Ask about your work…" class="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-3 text-sm leading-5 text-ink outline-none placeholder:text-muted focus-visible:ring-2 focus-visible:ring-focus" autocomplete="off"></textarea>
+							<button id="send-button" type="submit" class="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" aria-label="Send message">
+								<span id="send-label">Send</span><i data-lucide="arrow-up" class="size-4" aria-hidden="true"></i>
+							</button>
+						</div>
+						<div class="flex items-center justify-between px-3 pb-1 pt-1 text-[11px] text-muted">
+							<span>Enter to send · Shift+Enter for a new line</span>
+							<span id="send-state" aria-live="polite"></span>
+						</div>
+					</form>
+				</div>
+			</section>
+
+			<aside id="memory-panel" class="hidden min-h-0 min-w-0 flex flex-col bg-panel lg:flex" aria-label="Notes and summaries">
+				<div class="shrink-0 border-b border-line px-5 pb-4 pt-5">
+					<div class="flex items-center justify-between">
+						<div>
+							<p class="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">Local memory</p>
+							<h2 class="mt-1 text-lg font-semibold">Notes</h2>
+						</div>
+						<span class="grid size-9 place-items-center rounded-xl bg-raised text-muted">
+							<i data-lucide="notebook-pen" class="size-4" aria-hidden="true"></i>
+						</span>
+					</div>
+					<div class="mt-4 grid grid-cols-3 rounded-xl bg-raised p-1" role="tablist" aria-label="Memory period">
+						<button class="memory-tab rounded-lg bg-active px-2 py-2 text-xs font-medium text-ink" type="button" data-memory-tab="daily" role="tab" aria-selected="true">Daily</button>
+						<button class="memory-tab rounded-lg px-2 py-2 text-xs text-muted hover:text-ink" type="button" data-memory-tab="weekly" role="tab" aria-selected="false">Weekly</button>
+						<button class="memory-tab rounded-lg px-2 py-2 text-xs text-muted hover:text-ink" type="button" data-memory-tab="monthly" role="tab" aria-selected="false">Monthly</button>
+					</div>
+				</div>
+				<div id="memory-status" class="mx-4 mt-3 hidden text-xs text-muted" role="status" aria-live="polite"></div>
+				<div id="memory-scroll" class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+					<div id="memory-list" class="flex flex-col gap-3"></div>
+				</div>
+			</aside>
+		</main>
+	</body>
+</html>

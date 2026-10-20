@@ -61,7 +61,7 @@ func NewHandler(service *Service, origin string) http.Handler {
 				writeAPIError(w, http.StatusNotFound, "not_found", "API route not found")
 				return
 			}
-			http.NotFound(w, r)
+			serveStatic(w, r)
 		}
 	})
 }

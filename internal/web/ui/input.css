@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+@source "./*.js";
+
+@theme inline {
+	--color-page: var(--theme-page);
+	--color-panel: var(--theme-panel);
+	--color-raised: var(--theme-raised);
+	--color-active: var(--theme-active);
+	--color-composer: var(--theme-composer);
+	--color-ink: var(--theme-ink);
+	--color-muted: var(--theme-muted);
+	--color-line: var(--theme-line);
+	--color-accent: var(--theme-accent);
+	--color-accent-hover: var(--theme-accent-hover);
+	--color-focus: var(--theme-focus);
+	--color-danger: var(--theme-danger);
+	--color-warning: var(--theme-warning);
+	--color-code: var(--theme-code);
+	--font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	--font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+html,
+body {
+	height: 100%;
+}
+
+button,
+textarea {
+	font: inherit;
+}
+
+button {
+	cursor: pointer;
+}
+
+button:focus-visible,
+textarea:focus-visible {
+	outline: 2px solid var(--theme-focus);
+	outline-offset: 2px;
+}
+
+.markdown-body :where(p, ul, ol, pre, blockquote) {
+	margin-block: 0.65rem;
+}
+
+.markdown-body :where(ul, ol) {
+	padding-left: 1.4rem;
+}
+
+.markdown-body ul {
+	list-style: disc;
+}
+
+.markdown-body ol {
+	list-style: decimal;
+}
+
+.markdown-body a {
+	color: var(--theme-focus);
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+	word-break: break-word;
+}
+
+.markdown-body pre {
+	max-width: 100%;
+	overflow-x: auto;
+	border: 1px solid var(--theme-line);
+	border-radius: 0.75rem;
+	background: var(--theme-code);
+	padding: 0.8rem;
+	font-family: var(--font-mono);
+	font-size: 0.82rem;
+}
+
+.markdown-body code {
+	font-family: var(--font-mono);
+	font-size: 0.9em;
+}
+
+.markdown-body :not(pre) > code {
+	border-radius: 0.25rem;
+	background: var(--theme-code);
+	padding: 0.1rem 0.3rem;
+}
+
+.markdown-body blockquote {
+	border-left: 2px solid var(--theme-accent);
+	padding-left: 0.85rem;
+	color: var(--theme-muted);
+}
+
+.markdown-body table {
+	display: block;
+	max-width: 100%;
+	overflow-x: auto;
+	border-collapse: collapse;
+}
+
+.markdown-body th,
+.markdown-body td {
+	border: 1px solid var(--theme-line);
+	padding: 0.35rem 0.55rem;
+}
+
+.mobile-tab {
+	transition: color 120ms ease, border-color 120ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		scroll-behavior: auto !important;
+		transition-duration: 0.01ms !important;
+	}
+}

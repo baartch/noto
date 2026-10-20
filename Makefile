@@ -1,4 +1,4 @@
-.PHONY: all build test lint fmt vet tidy clean get
+.PHONY: all build test lint fmt vet tidy clean get web-build web-test
 
 BINARY := noto
 CMD     := ./cmd/noto
@@ -17,6 +17,14 @@ run:
 ## test: run all tests
 test:
 	go test ./...
+
+## web-build: rebuild embedded web assets (requires Bun)
+web-build:
+	cd internal/web/ui && bun install --frozen-lockfile && bun run build
+
+## web-test: run web UI state tests (requires Bun)
+web-test:
+	cd internal/web/ui && bun test state.test.js
 
 ## test-integration: run integration tests
 test-integration:

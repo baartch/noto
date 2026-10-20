@@ -1,0 +1,15 @@
+{
+  "name": "noto-web-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun run build.mjs",
+    "test": "bun test state.test.js"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "esbuild": "0.28.2",
+    "lucide": "1.60.0",
+    "tailwindcss": "4.3.3"
+  }
+}
