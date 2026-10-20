@@ -132,8 +132,8 @@ function formatDate(value, options = { weekday: "short", day: "2-digit", month: 
 	return Number.isNaN(date.valueOf()) ? "Unknown date" : new Intl.DateTimeFormat(undefined, options).format(date);
 }
 
-function renderMessages({ scrollToBottom = false } = {}) {
-	const shouldStick = scrollToBottom || ui.messageScroll.scrollHeight - ui.messageScroll.scrollTop - ui.messageScroll.clientHeight < 80;
+function renderMessages({ scrollToBottom: forceScrollToBottom = false } = {}) {
+	const shouldStick = forceScrollToBottom || ui.messageScroll.scrollHeight - ui.messageScroll.scrollTop - ui.messageScroll.clientHeight < 80;
 	ui.messageList.replaceChildren();
 	if (state.nextCursor) {
 		const olderButton = document.createElement("button");
@@ -233,6 +233,14 @@ function loadOlderMessages() {
 
 function renderMemory() {
 	ui.memoryList.replaceChildren();
+	if (state.memoryNextOffset !== null) {
+		const more = document.createElement("button");
+		more.type = "button";
+		more.className = "mt-1 rounded-lg border border-line px-3 py-2 text-xs text-muted hover:text-ink focus-visible:ring-2 focus-visible:ring-focus";
+		more.textContent = "Load older memory";
+		more.addEventListener("click", loadOlderMemory);
+		ui.memoryList.append(more);
+	}
 	if (state.memoryItems.length === 0) {
 		const empty = document.createElement("p");
 		empty.className = "rounded-xl border border-line bg-raised p-4 text-sm text-muted";
@@ -252,14 +260,6 @@ function renderMemory() {
 			}
 		}
 		ui.memoryList.append(memoryCard(item));
-	}
-	if (state.memoryNextOffset !== null) {
-		const more = document.createElement("button");
-		more.type = "button";
-		more.className = "mt-1 rounded-lg border border-line px-3 py-2 text-xs text-muted hover:text-ink focus-visible:ring-2 focus-visible:ring-focus";
-		more.textContent = "Load older memory";
-		more.addEventListener("click", loadOlderMemory);
-		ui.memoryList.append(more);
 	}
 	createIcons({ icons });
 }
