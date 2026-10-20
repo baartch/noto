@@ -7,12 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"noto/internal/chat"
+	"noto/internal/provider"
 	"noto/internal/store"
 )
 
@@ -240,6 +242,8 @@ func (s *Service) runSend(requestID, content string, record *sendRecord) {
 	}
 	if err == nil {
 		record.result = SendResponseDTO{RequestID: requestID, Reply: ReplyDTO{Content: result.Reply, ContentHTML: RenderMarkdown(result.Reply)}}
+	} else {
+		log.Printf("noto web: chat send failed category=%s error_type=%T", safeSendErrorCategory(err), err)
 	}
 	record.err = err
 
@@ -254,6 +258,21 @@ func (s *Service) runSend(requestID, content string, record *sendRecord) {
 		delete(s.requests, oldest)
 	}
 	s.mu.Unlock()
+}
+
+func safeSendErrorCategory(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case errors.Is(err, provider.ErrInvalidCredentials):
+		return "invalid_credentials"
+	case errors.Is(err, provider.ErrProviderUnavailable):
+		return "provider_unavailable"
+	default:
+		return "chat_error"
+	}
 }
 
 // Stop rejects new messages, cancels provider work, and waits for the active turn.

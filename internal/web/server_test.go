@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -138,6 +138,10 @@ func TestAPISecurityAndSendErrors(t *testing.T) {
 		return nil, errors.New("upstream rejected key secret-value")
 	}}
 	h := NewHandler(NewService(db, profile, session, "model", false), testOrigin)
+	var logOutput strings.Builder
+	previousLog := log.Writer()
+	log.SetOutput(&logOutput)
+	defer log.SetOutput(previousLog)
 
 	if recorder := requestWithHost(h, http.MethodGet, "/api/state", "", "", "attacker.invalid"); recorder.Code != http.StatusMisdirectedRequest {
 		t.Fatalf("foreign Host status = %d, want 421", recorder.Code)
@@ -157,6 +161,9 @@ func TestAPISecurityAndSendErrors(t *testing.T) {
 		t.Fatalf("provider failure status = %d, want 502", recorder.Code)
 	} else if strings.Contains(recorder.Body.String(), "secret-value") || strings.Contains(recorder.Body.String(), "upstream rejected") {
 		t.Fatalf("provider details leaked in error: %s", recorder.Body.String())
+	}
+	if !strings.Contains(logOutput.String(), "category=chat_error") || strings.Contains(logOutput.String(), "secret-value") {
+		t.Fatalf("server error log = %q, want sanitized failure category without provider secret", logOutput.String())
 	}
 	if recorder := request(h, http.MethodPost, "/api/messages", `{"request_id":"r2","content":"   "}`, testOrigin); recorder.Code != http.StatusBadRequest {
 		t.Fatalf("blank message status = %d, want 400", recorder.Code)
@@ -184,11 +191,12 @@ func TestProviderFailureStillPersistsUserMessageWithoutLeakingError(t *testing.T
 	defer providerServer.Close()
 	conversationRepo := store.NewConversationRepo(db)
 	messageRepo := store.NewMessageRepo(db)
+	sessionLogger := &captureLogger{}
 	session, err := chat.NewSession(
 		context.Background(), profile.ID, profile.Slug, "system prompt", db,
 		conversationRepo, messageRepo, store.NewMemoryNoteRepo(db),
 		provider.NewOpenAICompatible(provider.Config{Endpoint: providerServer.URL, Model: "model", APIKey: "secret-value"}),
-		nil, observe.NewJSONLogger(io.Discard), nil, nil, nil, nil,
+		nil, sessionLogger, nil, nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -202,6 +210,9 @@ func TestProviderFailureStillPersistsUserMessageWithoutLeakingError(t *testing.T
 	if strings.Contains(recorder.Body.String(), "secret-value") || strings.Contains(recorder.Body.String(), "upstream rejected") {
 		t.Fatalf("provider details leaked: %s", recorder.Body.String())
 	}
+	if logged := sessionLogger.String(); strings.Contains(logged, "secret-value") {
+		t.Fatalf("provider detail leaked to session log: %s", logged)
+	}
 	conversation, err := conversationRepo.GetMostRecentByProfile(context.Background(), profile.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -210,6 +221,24 @@ func TestProviderFailureStillPersistsUserMessageWithoutLeakingError(t *testing.T
 	if err != nil || len(messages) != 1 || messages[0].Role != store.RoleUser || messages[0].Content != "keep this turn" {
 		t.Fatalf("persisted messages = %+v, err=%v", messages, err)
 	}
+}
+
+type captureLogger struct {
+	mu     sync.Mutex
+	output strings.Builder
+}
+
+func (*captureLogger) Emit(observe.Event)   {}
+func (*captureLogger) Infof(string, ...any) {}
+func (l *captureLogger) Errorf(format string, args ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	_, _ = fmt.Fprintf(&l.output, format+"\n", args...)
+}
+func (l *captureLogger) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.output.String()
 }
 
 func TestSendSingleFlightRequestIDReuseAndClientDisconnect(t *testing.T) {
