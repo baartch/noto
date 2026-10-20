@@ -33,6 +33,24 @@ type Options struct {
 	OnUsage         func(provider.Usage)
 }
 
+type Attachment struct {
+	ID, RelativePath, Fingerprint, Text string
+}
+
+type Input struct {
+	UserMessage        string
+	RecentUserMessages []string
+	BaseMessages       []provider.Message
+	ContextMax         int
+}
+
+type Turn struct {
+	Catalog     string
+	Attachments []Attachment
+	Diagnostics []Diagnostic
+	Degraded    bool
+}
+
 type Service struct {
 	opts   Options
 	root   *os.Root
@@ -41,6 +59,8 @@ type Service struct {
 	mu     sync.Mutex
 	scanMu sync.Mutex
 	closed bool
+	topic  string
+	active map[string]Attachment
 }
 
 func NewService(opts Options) (*Service, error) {
@@ -62,7 +82,7 @@ func NewService(opts Options) (*Service, error) {
 	if opts.Reader == nil {
 		opts.Reader = Read
 	}
-	return &Service{opts: opts, root: root, ctx: ctx, cancel: cancel}, nil
+	return &Service{opts: opts, root: root, ctx: ctx, cancel: cancel, active: make(map[string]Attachment)}, nil
 }
 
 // Close cancels in-flight work and releases the profile-rooted filesystem handle.

@@ -47,7 +47,7 @@ func Read(ctx context.Context, root *os.Root, relativePath string) (Document, er
 		component := path.Join(parts[:i+1]...)
 		info, err := root.Lstat(component)
 		if err != nil {
-			return Document{}, fmt.Errorf("%w: %v", ErrUnreadable, err)
+			return Document{}, fmt.Errorf("%w: %w", ErrUnreadable, err)
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			return Document{}, ErrUnsafePath
@@ -59,7 +59,7 @@ func Read(ctx context.Context, root *os.Root, relativePath string) (Document, er
 
 	before, err := root.Lstat(relativePath)
 	if err != nil {
-		return Document{}, fmt.Errorf("%w: %v", ErrUnreadable, err)
+		return Document{}, fmt.Errorf("%w: %w", ErrUnreadable, err)
 	}
 	if !before.Mode().IsRegular() {
 		return Document{}, ErrUnsafePath
@@ -69,7 +69,7 @@ func Read(ctx context.Context, root *os.Root, relativePath string) (Document, er
 	}
 	f, err := root.Open(relativePath)
 	if err != nil {
-		return Document{}, fmt.Errorf("%w: %v", ErrUnreadable, err)
+		return Document{}, fmt.Errorf("%w: %w", ErrUnreadable, err)
 	}
 	defer f.Close()
 	opened, err := f.Stat()

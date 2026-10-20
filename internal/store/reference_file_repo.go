@@ -53,6 +53,17 @@ func (r *ReferenceFileRepo) List(ctx context.Context, profileID string) ([]Refer
 	return files, rows.Err()
 }
 
+// DeletePath removes a confirmed-missing path from one profile catalog.
+func (r *ReferenceFileRepo) DeletePath(ctx context.Context, profileID, relativePath string) error {
+	if profileID == "" || relativePath == "" {
+		return errors.New("store: reference file profile and path are required")
+	}
+	if _, err := r.db.ExecContext(ctx, `DELETE FROM reference_files WHERE profile_id = ? AND relative_path = ?`, profileID, relativePath); err != nil {
+		return fmt.Errorf("store: delete reference file path: %w", err)
+	}
+	return nil
+}
+
 func (r *ReferenceFileRepo) Upsert(ctx context.Context, file ReferenceFile) error {
 	if file.ID == "" || file.ProfileID == "" || file.RelativePath == "" {
 		return errors.New("store: reference file requires id, profile, and relative path")

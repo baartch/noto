@@ -110,3 +110,32 @@ func TestMessageReferenceInfluenceRoundTrips(t *testing.T) {
 		})
 	}
 }
+
+func TestReferenceFileRepoDeletePathIsProfileScoped(t *testing.T) {
+	db, err := OpenForTesting(filepath.Join(t.TempDir(), "profile.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	repo := NewReferenceFileRepo(db)
+	ctx := context.Background()
+	for _, file := range []ReferenceFile{
+		{ID: "one", ProfileID: "p1", RelativePath: "same.md", Status: ReferenceFileReady},
+		{ID: "two", ProfileID: "p2", RelativePath: "same.md", Status: ReferenceFileReady},
+	} {
+		if err := repo.Upsert(ctx, file); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := repo.DeletePath(ctx, "p1", "same.md"); err != nil {
+		t.Fatal(err)
+	}
+	files, err := repo.List(ctx, "p1")
+	if err != nil || len(files) != 0 {
+		t.Fatalf("deleted profile rows = %#v, %v", files, err)
+	}
+	files, err = repo.List(ctx, "p2")
+	if err != nil || len(files) != 1 || files[0].ID != "two" {
+		t.Fatalf("other profile row changed: %#v, %v", files, err)
+	}
+}
