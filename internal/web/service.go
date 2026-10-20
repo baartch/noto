@@ -58,6 +58,7 @@ type Service struct {
 
 	mu            sync.Mutex
 	sending       bool
+	active        *sendRecord
 	stopped       bool
 	requests      map[string]*sendRecord
 	completedIDs  []string
@@ -209,6 +210,7 @@ func (s *Service) Send(ctx context.Context, requestID, content string) (SendResp
 	record := &sendRecord{content: content, done: make(chan struct{})}
 	s.requests[requestID] = record
 	s.sending = true
+	s.active = record
 	s.mu.Unlock()
 
 	go s.runSend(requestID, content, record)
@@ -234,6 +236,7 @@ func (s *Service) runSend(requestID, content string, record *sendRecord) {
 
 	s.mu.Lock()
 	s.sending = false
+	s.active = nil
 	close(record.done)
 	s.completedIDs = append(s.completedIDs, requestID)
 	for len(s.completedIDs) > maxRequestIDs {
@@ -242,6 +245,25 @@ func (s *Service) runSend(requestID, content string, record *sendRecord) {
 		delete(s.requests, oldest)
 	}
 	s.mu.Unlock()
+}
+
+// Stop rejects new messages, cancels provider work, and waits for the active turn.
+func (s *Service) Stop(ctx context.Context) error {
+	s.mu.Lock()
+	s.stopped = true
+	active := s.active
+	cancel := s.serviceCancel
+	s.mu.Unlock()
+	cancel()
+	if active == nil {
+		return nil
+	}
+	select {
+	case <-active.done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("web: wait for active send: %w", ctx.Err())
+	}
 }
 
 func encodeCursor(cursor *store.MessageHistoryCursor) (string, error) {
