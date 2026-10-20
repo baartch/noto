@@ -18,6 +18,17 @@ describe("chat UI state", () => {
 		expect(next.response.requestID).toBe("request-2");
 	});
 
+	test("a definitive API error allows an explicit new attempt", async () => {
+		let ids = 0;
+		const idFactory = () => `known-${++ids}`;
+		const failed = await sendWithAttempt("hello", null, async () => {
+			throw Object.assign(new Error("provider failed"), { status: 502 });
+		}, idFactory);
+		expect(failed.attempt).toBe(null);
+		const manualRetry = await sendWithAttempt("hello", failed.attempt, async (attempt) => attempt, idFactory);
+		expect(manualRetry.response.requestID).toBe("known-2");
+	});
+
 	test("older pages prepend chronologically without duplicate messages", () => {
 		const current = [
 			{ id: "m2", created_at: "2026-01-02T00:00:00Z" },

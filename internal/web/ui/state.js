@@ -53,7 +53,8 @@ export async function sendWithAttempt(content, previous, post, idFactory = newRe
 	try {
 		return { attempt: null, response: await post(attempt), error: null };
 	} catch (error) {
-		return { attempt, response: null, error };
+		const definiteResponse = Number.isInteger(error?.status) && error.status >= 400 && error.status < 600;
+		return { attempt: definiteResponse ? null : attempt, response: null, error };
 	}
 }
 
