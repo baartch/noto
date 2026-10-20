@@ -143,6 +143,51 @@ Credentials are encrypted at rest using AES-256-GCM. The `security` package prov
 Each profile's `memory.db` contains only that profile's data. The `store.IsolationGuards`
 type provides runtime checks. Cross-profile reads/writes are explicitly rejected.
 
+## Web GUI
+
+`noto web` serves the browser workspace on `127.0.0.1:8080`; `noto web --port 8081`
+selects another port. Port `0` asks the OS for an available port. Startup prints the
+actual local URL, and Ctrl+C stops the server. If the port is occupied, startup fails
+before opening the profile database or creating a conversation.
+
+The server binds only to loopback; it is not available from other machines on the
+network. API requests are restricted to the bound host and same origin. Provider calls
+and credentials remain server-side; the browser loads only embedded local assets.
+
+The active/default profile must already have a provider configured in the terminal UI.
+Without one, the web workspace remains read-only and explains how to configure it.
+The first version supports ordinary chat plus Daily notes and existing Weekly/Monthly
+SQLite summaries. It has no settings screen or slash commands; text beginning with `/`
+is sent as ordinary chat text.
+
+Each `noto web` process follows the same lifecycle as a terminal chat launch: it creates
+one new profile-scoped conversation and uses recent prior history for context. Browser
+reloads do not create another conversation. Separate terminal and web processes are
+not a synchronized live session; each process owns its own in-memory chat session while
+persisted messages, notes, and summaries remain profile-scoped in SQLite.
+
+The web UI keeps uncertain request IDs in the browser tab's session storage and never
+retries automatically. The server serializes active sends and deduplicates request IDs
+in memory (up to 128 completed attempts); this cache does not survive server restarts and
+is not a cross-process exactly-once guarantee. The web turn context has a five-minute
+deadline; individual OpenAI-compatible HTTP calls retain the existing 30-second client
+timeout. The UI polls send status for at most five minutes and note extraction for at
+most one minute; either can be refreshed manually afterward.
+
+The normal Go build uses the committed embedded assets and does not require Bun or
+network access. To rebuild the frontend, install Bun 1.3.10 or compatible and run:
+
+```bash
+make web-test
+make web-build
+```
+
+The UI dependencies are pinned in `internal/web/ui/package.json` and `bun.lock`.
+`make web-build` installs from the frozen lockfile, compiles Tailwind CSS and the selected
+Lucide icons, and regenerates the embedded static files. Theme colors live in the
+separate `internal/web/ui/theme.css`; normal Go releases use the generated copies in
+`internal/web/static/`.
+
 ## CLI Quick Reference
 
 ```bash
