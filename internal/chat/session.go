@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -336,10 +337,7 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 		Temperature: 0.7,
 	}
 	if s.toolsEnabled {
-		req.Tools = []provider.ToolDefinition{
-			{Type: "function", Name: "search_memory_keywords", Description: "Search memory notes by keyword query. Results are objects with content, category, created_at, and importance.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string", "description": "Keyword or short phrase to search for in memory notes"}}, "required": []string{"query"}}},
-			{Type: "function", Name: "search_memory_time_range", Description: "Search memory notes within a time range. Results are objects with content, category, created_at, and importance.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"start_time": map[string]any{"type": "string", "description": "Start of the time range in RFC3339 format"}, "end_time": map[string]any{"type": "string", "description": "End of the time range in RFC3339 format"}}, "required": []string{"start_time", "end_time"}}},
-		}
+		req.Tools = chatToolDefinitions()
 		s.logger.Infof("tools: enabled for chat request with %d tool definitions", len(req.Tools))
 	} else {
 		s.logger.Infof("tools: disabled for chat request")
@@ -351,7 +349,9 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	}
 	if err == nil && len(resp.ToolCalls) > 0 && s.toolsEnabled {
 		followup := append([]provider.Message{}, req.Messages...)
-		pipeline := NewPipeline(s.convRepo, s.msgRepo, s.adapter, s.logger).WithMemorySearchTools(s.noteRepo, store.NewMemorySummaryRepo(s.db)).WithToolsEnabled(true)
+		pipeline := NewPipeline(s.convRepo, s.msgRepo, s.adapter, s.logger).WithMemorySearchTools(s.noteRepo, store.NewMemorySummaryRepo(s.db)).WithToolsEnabled(true).WithSaveNoteHandler(func(ctx context.Context, call provider.ToolCall) string {
+			return s.handleSaveNoteCall(ctx, call, []string{userMsgRec.ID})
+		})
 		for _, call := range resp.ToolCalls {
 			s.logger.Infof("tools: executing tool call name=%s call_id=%s args=%s", call.Name, call.CallID, call.Arguments)
 			followup = append(followup, provider.Message{Role: "assistant", Content: call.Name, ToolCallID: call.CallID, ToolCallName: call.Name, ToolCallArguments: call.Arguments, ToolID: call.ID})
@@ -529,19 +529,12 @@ func (s *Session) extractAsync(userMsg, assistantMsg string, sourceIDs []string)
 	s.adapterMu.RLock()
 	extractorAdapter := s.extractorAdapter
 	s.adapterMu.RUnlock()
-	var embedder provider.Adapter
 	if extractorAdapter != nil {
 		extractor = memory.NewExtractor(s.noteRepo, extractorAdapter, s.cacheRepo)
-		embedder = extractorAdapter
 	} else if s.adapter != nil {
 		extractor = memory.NewExtractor(s.noteRepo, s.adapter, s.cacheRepo)
-		embedder = s.adapter
 	}
-	if embedder != nil && s.vectorIndex != nil && s.embeddingModel != "" {
-		dedupEmbedder := &usageReportingEmbedder{embedder: embedder, onUsage: s.recordAuxUsage}
-		deduper := vector.NewVectorDeduper(s.vectorIndex, s.profileID, dedupEmbedder, s.embeddingModel).WithWarnFunc(func(err error) {
-			s.logger.Infof("vector dedup issue: %v", err)
-		})
+	if deduper := s.buildVectorDeduper(); deduper != nil {
 		extractor.WithDeduper(deduper)
 	}
 	extractor.WithLogHook(&sessionLogHook{logger: s.logger})
@@ -575,6 +568,75 @@ func (s *Session) extractAsync(userMsg, assistantMsg string, sourceIDs []string)
 		s.onNotes(len(result.Notes), result.Updated)
 	}
 	s.markNotesDone(len(result.Notes) + result.Updated)
+}
+
+// buildVectorDeduper returns a vector deduper for note dedup, or nil when
+// embeddings are unavailable. Shared by background extraction and save_note.
+func (s *Session) buildVectorDeduper() vector.Deduper {
+	s.adapterMu.RLock()
+	extractorAdapter := s.extractorAdapter
+	s.adapterMu.RUnlock()
+	var embedder provider.Adapter
+	if extractorAdapter != nil {
+		embedder = extractorAdapter
+	} else if s.adapter != nil {
+		embedder = s.adapter
+	}
+	if embedder == nil || s.vectorIndex == nil || s.embeddingModel == "" {
+		return nil
+	}
+	dedupEmbedder := &usageReportingEmbedder{embedder: embedder, onUsage: s.recordAuxUsage}
+	return vector.NewVectorDeduper(s.vectorIndex, s.profileID, dedupEmbedder, s.embeddingModel).WithWarnFunc(func(err error) {
+		s.logger.Infof("vector dedup issue: %v", err)
+	})
+}
+
+// handleSaveNoteCall executes a save_note tool call. It persists the note
+// through the shared note-writing path, invalidates the retrieval cache, syncs
+// the vector index, and notifies the footer via onNotes — mirroring the
+// extractor's lifecycle. The note's profile/conversation binding is taken
+// from the session, never from tool arguments.
+func (s *Session) handleSaveNoteCall(ctx context.Context, call provider.ToolCall, sourceMessageIDs []string) string {
+	var args struct {
+		Content    string `json:"content"`
+		Category   string `json:"category"`
+		Importance int    `json:"importance"`
+	}
+	if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+		s.logger.Errorf("tools: save_note args decode failed call_id=%s err=%v raw=%s", call.CallID, err, call.Arguments)
+		return marshalToolResult(map[string]any{"saved": false, "error": "invalid arguments"})
+	}
+	res, err := memory.SaveNoteExplicit(ctx, s.noteRepo, s.buildVectorDeduper(), &sessionLogHook{logger: s.logger}, s.profileID, s.conversationID,
+		memory.SaveNoteInput{Content: args.Content, Category: args.Category, Importance: args.Importance}, sourceMessageIDs)
+	if err != nil {
+		s.logger.Errorf("tools: save_note failed call_id=%s err=%v", call.CallID, err)
+		return marshalToolResult(map[string]any{"saved": false, "error": err.Error()})
+	}
+	if s.cacheRepo != nil {
+		if err := s.cacheRepo.InvalidateAll(ctx, s.profileID); err != nil {
+			s.logger.Errorf("tools: save_note cache invalidation failed: %v", err)
+		}
+	}
+	if err := s.syncVectorIndex(ctx, []*store.MemoryNote{res.Note}); err != nil {
+		s.logger.Errorf("tools: save_note vector sync failed: %v", err)
+	}
+	if s.onNotes != nil {
+		if res.Updated {
+			s.onNotes(0, 1)
+		} else {
+			s.onNotes(1, 0)
+		}
+	}
+	s.logger.Infof("tools: save_note stored note_id=%s updated=%t", res.Note.ID, res.Updated)
+	return marshalToolResult(map[string]any{"saved": true, "updated": res.Updated, "note_id": res.Note.ID})
+}
+
+func marshalToolResult(payload map[string]any) string {
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return `{"saved":false,"error":"tool result encoding failed"}`
+	}
+	return string(b)
 }
 
 // SetModel updates the model used for subsequent provider calls.
