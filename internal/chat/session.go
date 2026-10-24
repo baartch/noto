@@ -25,6 +25,10 @@ const (
 	// recentHistoryMessages is the number of messages from the most recent
 	// previous conversation to prepend to context on session start.
 	recentHistoryMessages = 20
+
+	// maxToolRounds bounds tool-call follow-up rounds per chat turn so a
+	// model that keeps emitting tool calls cannot loop forever.
+	maxToolRounds = 5
 )
 
 // NotesCallback is called after extraction completes.
@@ -352,18 +356,25 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 		pipeline := NewPipeline(s.convRepo, s.msgRepo, s.adapter, s.logger).WithMemorySearchTools(s.noteRepo, store.NewMemorySummaryRepo(s.db)).WithToolsEnabled(true).WithSaveNoteHandler(func(ctx context.Context, call provider.ToolCall) string {
 			return s.handleSaveNoteCall(ctx, call, []string{userMsgRec.ID})
 		})
-		for _, call := range resp.ToolCalls {
-			s.logger.Infof("tools: executing tool call name=%s call_id=%s args=%s", call.Name, call.CallID, call.Arguments)
-			followup = append(followup, provider.Message{Role: "assistant", Content: call.Name, ToolCallID: call.CallID, ToolCallName: call.Name, ToolCallArguments: call.Arguments, ToolID: call.ID})
-			result := pipeline.executeToolCall(ctx, s.profileID, call)
-			s.logger.Infof("tools: tool call completed name=%s call_id=%s", call.Name, call.CallID)
-			followup = append(followup, provider.Message{Role: "tool", Content: result, ToolCallID: call.CallID})
+		rounds := 0
+		for len(resp.ToolCalls) > 0 && rounds < maxToolRounds {
+			rounds++
+			for _, call := range resp.ToolCalls {
+				s.logger.Infof("tools: executing tool call name=%s call_id=%s args=%s", call.Name, call.CallID, call.Arguments)
+				followup = append(followup, provider.Message{Role: "assistant", Content: call.Name, ToolCallID: call.CallID, ToolCallName: call.Name, ToolCallArguments: call.Arguments, ToolID: call.ID})
+				result := pipeline.executeToolCall(ctx, s.profileID, call)
+				s.logger.Infof("tools: tool call completed name=%s call_id=%s", call.Name, call.CallID)
+				followup = append(followup, provider.Message{Role: "tool", Content: result, ToolCallID: call.CallID})
+			}
+			resp, err = s.adapter.Complete(ctx, provider.CompletionRequest{Model: req.Model, Messages: followup, Temperature: req.Temperature, Tools: req.Tools})
+			if err != nil {
+				s.logger.Errorf("provider follow-up call failed (error type=%T)", err)
+				break
+			}
+			s.logger.Infof("tools: follow-up provider call completed after tool execution (round %d/%d)", rounds, maxToolRounds)
 		}
-		resp, err = s.adapter.Complete(ctx, provider.CompletionRequest{Model: req.Model, Messages: followup, Temperature: req.Temperature, Tools: req.Tools})
-		if err != nil {
-			s.logger.Errorf("provider follow-up call failed (error type=%T)", err)
-		} else {
-			s.logger.Infof("tools: follow-up provider call completed after tool execution")
+		if err == nil && len(resp.ToolCalls) > 0 {
+			s.logger.Infof("tools: round limit reached (%d); stopping tool loop with final response", maxToolRounds)
 		}
 	}
 	if err != nil {

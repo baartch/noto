@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
@@ -15,7 +16,7 @@ import (
 	"noto/internal/store"
 )
 
-func newSaveNoteTestSession(t *testing.T, adapter *chatRecordingAdapter, toolsEnabled bool, onNotes NotesCallback) (*Session, *store.MemoryNoteRepo) {
+func newSaveNoteTestSession(t *testing.T, adapter provider.Adapter, toolsEnabled bool, onNotes NotesCallback) (*Session, *store.MemoryNoteRepo) {
 	t.Helper()
 	db, err := store.OpenForTesting(filepath.Join(t.TempDir(), "profile.db"))
 	if err != nil {
@@ -176,6 +177,101 @@ func TestSendOmitsSaveNoteToolWhenToolsDisabled(t *testing.T) {
 	stored, err := noteRepo.ListByProfile(ctx, "p")
 	if err != nil || len(stored) != 0 {
 		t.Fatalf("ListByProfile() = %d notes, %v; want 0", len(stored), err)
+	}
+}
+
+func TestSendToolLoopRunsMultipleRounds(t *testing.T) {
+	adapter := &chatRecordingAdapter{responses: []*provider.CompletionResponse{
+		{ToolCalls: []provider.ToolCall{{ID: "call_1", CallID: "call_1", Name: "search_memory_keywords", Arguments: `{"query":"ship date"}`}}},
+		{ToolCalls: []provider.ToolCall{{ID: "call_2", CallID: "call_2", Name: "save_note", Arguments: `{"content":"Ship date is Nov 5","category":"fact","importance":7}`}}},
+		{Content: "All done.", Model: "chat"},
+	}}
+	session, noteRepo := newSaveNoteTestSession(t, adapter, true, nil)
+	ctx := context.Background()
+
+	result, err := session.Send(ctx, "When do we ship?")
+	if err != nil {
+		t.Fatalf("Send() error: %v", err)
+	}
+	if result == nil || result.Reply != "All done." {
+		t.Fatalf("Send() = %#v, want reply %q", result, "All done.")
+	}
+	requests := adapter.snapshot()
+	if len(requests) < 3 {
+		t.Fatalf("main provider call count = %d, want >= 3 (search round, save round, final)", len(requests))
+	}
+	if len(requests[0].Tools) != 3 {
+		t.Fatalf("initial request tools = %d, want 3", len(requests[0].Tools))
+	}
+	sawSearch, sawSave := false, false
+	for _, msg := range requests[1].Messages {
+		if msg.Role == "tool" && msg.ToolCallID == "call_1" {
+			sawSearch = true
+		}
+	}
+	for _, msg := range requests[2].Messages {
+		if msg.Role == "tool" && msg.ToolCallID == "call_2" && strings.Contains(msg.Content, `"saved":true`) {
+			sawSave = true
+		}
+	}
+	if !sawSearch || !sawSave {
+		t.Fatalf("missing tool results across rounds: search=%t save=%t", sawSearch, sawSave)
+	}
+	session.Close(ctx)
+	stored, err := noteRepo.ListByProfile(ctx, "p")
+	if err != nil || len(stored) != 1 {
+		t.Fatalf("ListByProfile() = %d notes, %v; want 1", len(stored), err)
+	}
+	if stored[0].Content != "Ship date is Nov 5" {
+		t.Fatalf("note content = %q", stored[0].Content)
+	}
+}
+
+// saveNoteLoopAdapter answers every completion with another save_note tool
+// call carrying a unique low-overlap content, so the loop bound is what stops
+// the turn.
+type saveNoteLoopAdapter struct {
+	mu       sync.Mutex
+	requests []provider.CompletionRequest
+	calls    int
+}
+
+func (a *saveNoteLoopAdapter) Complete(_ context.Context, req provider.CompletionRequest) (*provider.CompletionResponse, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.requests = append(a.requests, req)
+	a.calls++
+	callID := fmt.Sprintf("call_%d", a.calls)
+	return &provider.CompletionResponse{
+		ToolCalls: []provider.ToolCall{{
+			ID: callID, CallID: callID, Name: "save_note",
+			Arguments: fmt.Sprintf(`{"content":"fact %d"}`, a.calls),
+		}},
+	}, nil
+}
+
+func (*saveNoteLoopAdapter) Embed(context.Context, provider.EmbeddingRequest) (*provider.EmbeddingResponse, error) {
+	return nil, nil
+}
+func (*saveNoteLoopAdapter) ProviderType() string { return "test" }
+
+func TestSendToolLoopStopsAtRoundLimit(t *testing.T) {
+	adapter := &saveNoteLoopAdapter{}
+	session, _ := newSaveNoteTestSession(t, adapter, true, nil)
+	ctx := context.Background()
+
+	result, err := session.Send(ctx, "loop forever")
+	if err != nil {
+		t.Fatalf("Send() error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Send() = nil result")
+	}
+	adapter.mu.Lock()
+	calls := len(adapter.requests)
+	adapter.mu.Unlock()
+	if calls != maxToolRounds+1 {
+		t.Fatalf("provider call count = %d, want %d (initial + %d rounds)", calls, maxToolRounds+1, maxToolRounds)
 	}
 }
 
