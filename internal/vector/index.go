@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"sync"
 
 	vecfile "noto/internal/vector/file"
 	"noto/internal/vector/hnsw"
@@ -90,7 +91,11 @@ type Index interface {
 }
 
 // FileIndex implements a single-file vector index using a codec + HNSW graph.
+// It is guarded by a mutex: noto accesses one per-profile instance from both
+// the chat-turn goroutine (dedup, sync) and the background extraction
+// goroutine concurrently.
 type FileIndex struct {
+	mu             sync.Mutex
 	path           string
 	codec          vecfile.Codec
 	graph          hnsw.Graph
@@ -116,6 +121,8 @@ func NewFileIndex(path string, codec vecfile.Codec, graph hnsw.Graph) *FileIndex
 
 // WithProfile sets the profile identifier to record in the header.
 func (f *FileIndex) WithProfile(profileID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.profileID = profileID
 }
 
@@ -124,6 +131,12 @@ func (f *FileIndex) WithProfile(profileID string) {
 // V2 files fully restore f.entries and f.refToKey so Search works across sessions.
 // V1 files keep entries empty (backward compat; entries are repopulated on next sync).
 func (f *FileIndex) Load() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.load()
+}
+
+func (f *FileIndex) load() error {
 	if f.codec == nil {
 		return errors.New("vector: codec not configured")
 	}
@@ -187,6 +200,12 @@ func (f *FileIndex) Load() error {
 
 // Upsert inserts or updates an index entry.
 func (f *FileIndex) Upsert(entry Entry) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.upsert(entry)
+}
+
+func (f *FileIndex) upsert(entry Entry) error {
 	if len(entry.Vector) == 0 {
 		return fmt.Errorf("vector: missing embedding for %s", entry.SourceID)
 	}
@@ -226,6 +245,12 @@ func (f *FileIndex) Upsert(entry Entry) error {
 
 // Delete removes an entry from the in-memory index.
 func (f *FileIndex) Delete(sourceType SourceType, sourceID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.delete(sourceType, sourceID)
+}
+
+func (f *FileIndex) delete(sourceType SourceType, sourceID string) error {
 	key := entryKey(sourceType, sourceID)
 	entry, ok := f.entries[key]
 	if !ok {
@@ -240,6 +265,12 @@ func (f *FileIndex) Delete(sourceType SourceType, sourceID string) error {
 
 // Search returns the top-k most similar entries to the query vector.
 func (f *FileIndex) Search(query []float32, k int) ([]SearchResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.search(query, k)
+}
+
+func (f *FileIndex) search(query []float32, k int) ([]SearchResult, error) {
 	if len(f.entries) == 0 || len(f.vectors) == 0 {
 		return nil, nil
 	}
@@ -272,6 +303,12 @@ func (f *FileIndex) Search(query []float32, k int) ([]SearchResult, error) {
 
 // Rebuild discards all entries and rebuilds the index.
 func (f *FileIndex) Rebuild(entries []Entry) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.rebuild(entries)
+}
+
+func (f *FileIndex) rebuild(entries []Entry) error {
 	f.entries = make(map[string]Entry)
 	f.refToKey = make(map[string]string)
 	f.vectors = nil
@@ -279,15 +316,21 @@ func (f *FileIndex) Rebuild(entries []Entry) error {
 		_ = f.graph.Deserialize(nil)
 	}
 	for _, entry := range entries {
-		if err := f.Upsert(entry); err != nil {
+		if err := f.upsert(entry); err != nil {
 			return err
 		}
 	}
-	return f.Flush()
+	return f.flush()
 }
 
 // Flush writes the index to disk in V2 format (includes entry metadata).
 func (f *FileIndex) Flush() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.flush()
+}
+
+func (f *FileIndex) flush() error {
 	if f.path == "" {
 		return nil
 	}
@@ -378,6 +421,12 @@ func (f *FileIndex) linearSearch(query []float32, k int) []SearchResult {
 
 // SeedEntries loads manifest entries into the index lookup maps.
 func (f *FileIndex) SeedEntries(entries []Entry) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.seedEntries(entries)
+}
+
+func (f *FileIndex) seedEntries(entries []Entry) {
 	for _, entry := range entries {
 		key := entryKey(entry.SourceType, entry.SourceID)
 		f.entries[key] = entry
@@ -398,6 +447,8 @@ func (f *FileIndex) entryKeyByID(id string) string {
 
 // VectorRefFor returns the stored vector_ref for a source entry if present.
 func (f *FileIndex) VectorRefFor(sourceType SourceType, sourceID string) (string, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	key := entryKey(sourceType, sourceID)
 	entry, ok := f.entries[key]
 	if !ok || entry.VectorRef == "" {

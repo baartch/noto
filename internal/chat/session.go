@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -24,6 +25,10 @@ const (
 	// recentHistoryMessages is the number of messages from the most recent
 	// previous conversation to prepend to context on session start.
 	recentHistoryMessages = 20
+
+	// maxToolRounds bounds tool-call follow-up rounds per chat turn so a
+	// model that keeps emitting tool calls cannot loop forever.
+	maxToolRounds = 5
 )
 
 // NotesCallback is called after extraction completes.
@@ -336,10 +341,7 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 		Temperature: 0.7,
 	}
 	if s.toolsEnabled {
-		req.Tools = []provider.ToolDefinition{
-			{Type: "function", Name: "search_memory_keywords", Description: "Search memory notes by keyword query. Results are objects with content, category, created_at, and importance.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string", "description": "Keyword or short phrase to search for in memory notes"}}, "required": []string{"query"}}},
-			{Type: "function", Name: "search_memory_time_range", Description: "Search memory notes within a time range. Results are objects with content, category, created_at, and importance.", Parameters: map[string]any{"type": "object", "properties": map[string]any{"start_time": map[string]any{"type": "string", "description": "Start of the time range in RFC3339 format"}, "end_time": map[string]any{"type": "string", "description": "End of the time range in RFC3339 format"}}, "required": []string{"start_time", "end_time"}}},
-		}
+		req.Tools = chatToolDefinitions()
 		s.logger.Infof("tools: enabled for chat request with %d tool definitions", len(req.Tools))
 	} else {
 		s.logger.Infof("tools: disabled for chat request")
@@ -349,21 +351,43 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	if err == nil {
 		s.logger.Infof("tools: provider returned %d tool call(s)", len(resp.ToolCalls))
 	}
+	// toolSaved/toolUpdated accumulate save_note results for this turn so the
+	// extractor's final footer notification includes them.
+	toolSaved, toolUpdated := 0, 0
 	if err == nil && len(resp.ToolCalls) > 0 && s.toolsEnabled {
 		followup := append([]provider.Message{}, req.Messages...)
-		pipeline := NewPipeline(s.convRepo, s.msgRepo, s.adapter, s.logger).WithMemorySearchTools(s.noteRepo, store.NewMemorySummaryRepo(s.db)).WithToolsEnabled(true)
-		for _, call := range resp.ToolCalls {
-			s.logger.Infof("tools: executing tool call name=%s call_id=%s args=%s", call.Name, call.CallID, call.Arguments)
-			followup = append(followup, provider.Message{Role: "assistant", Content: call.Name, ToolCallID: call.CallID, ToolCallName: call.Name, ToolCallArguments: call.Arguments, ToolID: call.ID})
-			result := pipeline.executeToolCall(ctx, s.profileID, call)
-			s.logger.Infof("tools: tool call completed name=%s call_id=%s", call.Name, call.CallID)
-			followup = append(followup, provider.Message{Role: "tool", Content: result, ToolCallID: call.CallID})
+		pipeline := NewPipeline(s.convRepo, s.msgRepo, s.adapter, s.logger).WithMemorySearchTools(s.noteRepo, store.NewMemorySummaryRepo(s.db)).WithToolsEnabled(true).WithSaveNoteHandler(func(ctx context.Context, call provider.ToolCall) string {
+			result, saved, updated := s.handleSaveNoteCall(ctx, call, []string{userMsgRec.ID})
+			toolSaved += saved
+			toolUpdated += updated
+			return result
+		})
+		rounds := 0
+		for len(resp.ToolCalls) > 0 && rounds < maxToolRounds {
+			rounds++
+			for _, call := range resp.ToolCalls {
+				s.logger.Infof("tools: executing tool call name=%s call_id=%s args=%s", call.Name, call.CallID, call.Arguments)
+				followup = append(followup, provider.Message{Role: "assistant", Content: call.Name, ToolCallID: call.CallID, ToolCallName: call.Name, ToolCallArguments: call.Arguments, ToolID: call.ID})
+				result := pipeline.executeToolCall(ctx, s.profileID, call)
+				s.logger.Infof("tools: tool call completed name=%s call_id=%s", call.Name, call.CallID)
+				followup = append(followup, provider.Message{Role: "tool", Content: result, ToolCallID: call.CallID})
+			}
+			resp, err = s.adapter.Complete(ctx, provider.CompletionRequest{Model: req.Model, Messages: followup, Temperature: req.Temperature, Tools: req.Tools})
+			if err != nil {
+				s.logger.Errorf("provider follow-up call failed (error type=%T)", err)
+				break
+			}
+			s.logger.Infof("tools: follow-up provider call completed after tool execution (round %d/%d)", rounds, maxToolRounds)
 		}
-		resp, err = s.adapter.Complete(ctx, provider.CompletionRequest{Model: req.Model, Messages: followup, Temperature: req.Temperature, Tools: req.Tools})
-		if err != nil {
-			s.logger.Errorf("provider follow-up call failed (error type=%T)", err)
-		} else {
-			s.logger.Infof("tools: follow-up provider call completed after tool execution")
+		// The round limit stopped the loop while the model still wants tools;
+		// its response is tool calls with no text. Ask once more without tools
+		// so the turn ends with a real answer instead of a blank reply.
+		if err == nil && len(resp.ToolCalls) > 0 {
+			s.logger.Infof("tools: round limit reached (%d); requesting a text-only reply", maxToolRounds)
+			resp, err = s.adapter.Complete(ctx, provider.CompletionRequest{Model: req.Model, Messages: followup, Temperature: req.Temperature})
+			if err != nil {
+				s.logger.Errorf("provider forced-reply call failed (error type=%T)", err)
+			}
 		}
 	}
 	if err != nil {
@@ -407,7 +431,7 @@ func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error)
 	// Capture immutable turn inputs before launching extraction, so later turns cannot change provenance or source IDs.
 	sourceIDs, extractionUser, extractionAssistant := memoryExtractionInput(userMsgRec.ID, asstMsgRec.ID, userMsg, resp.Content, influenced)
 	s.markNotesPending()
-	go s.extractAsync(extractionUser, extractionAssistant, sourceIDs)
+	go s.extractAsync(extractionUser, extractionAssistant, sourceIDs, toolSaved, toolUpdated)
 
 	return &SendResult{Reply: resp.Content, LatencyMs: latency}, nil
 }
@@ -431,8 +455,9 @@ func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote
 	if s.vectorIndex == nil || s.adapter == nil {
 		return nil
 	}
-	if s.embeddingModel == "" {
-		s.missingEmbedding = true
+	embeddingModel := s.embeddingModelSnapshot()
+	if embeddingModel == "" {
+		s.setMissingEmbedding(true)
 		return nil
 	}
 	fileIndex, ok := s.vectorIndex.(*vector.FileIndex)
@@ -455,7 +480,7 @@ func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote
 	if s.adapter != nil {
 		embedder = &usageReportingEmbedder{embedder: s.adapter, onUsage: s.recordAuxUsage}
 	}
-	syncer := vector.NewSyncer(s.vectorIndex, s.profileID, embedder, s.embeddingModel).WithManifest(manifestRepo)
+	syncer := vector.NewSyncer(s.vectorIndex, s.profileID, embedder, embeddingModel).WithManifest(manifestRepo)
 	records := make([]vector.MemoryNoteRecord, 0, len(notes))
 	for _, note := range notes {
 		records = append(records, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
@@ -479,7 +504,7 @@ func (s *Session) ensureVectorManifest(ctx context.Context, repo *store.VectorMa
 		ProfileID:          s.profileID,
 		IndexPath:          s.vectorIndexPath,
 		IndexFormatVersion: "1",
-		EmbeddingModel:     s.embeddingModel,
+		EmbeddingModel:     s.embeddingModelSnapshot(),
 		EmbeddingDim:       0,
 		SourceStateVersion: "",
 		Status:             store.VectorManifestReady,
@@ -514,11 +539,11 @@ func (s *Session) ensureVectorCompaction(ctx context.Context) error {
 	}
 	rebuilder := vector.NewRebuilder(manifestRepo, s.vectorIndex, s.profileID).
 		WithManifest(manifestRepo).
-		WithEmbedder(embedder, s.embeddingModel)
+		WithEmbedder(embedder, s.embeddingModelSnapshot())
 	return rebuilder.Rebuild(ctx, records)
 }
 
-func (s *Session) extractAsync(userMsg, assistantMsg string, sourceIDs []string) {
+func (s *Session) extractAsync(userMsg, assistantMsg string, sourceIDs []string, toolSaved, toolUpdated int) {
 	if s.onNotesSaving != nil {
 		s.onNotesSaving()
 	}
@@ -529,19 +554,12 @@ func (s *Session) extractAsync(userMsg, assistantMsg string, sourceIDs []string)
 	s.adapterMu.RLock()
 	extractorAdapter := s.extractorAdapter
 	s.adapterMu.RUnlock()
-	var embedder provider.Adapter
 	if extractorAdapter != nil {
 		extractor = memory.NewExtractor(s.noteRepo, extractorAdapter, s.cacheRepo)
-		embedder = extractorAdapter
 	} else if s.adapter != nil {
 		extractor = memory.NewExtractor(s.noteRepo, s.adapter, s.cacheRepo)
-		embedder = s.adapter
 	}
-	if embedder != nil && s.vectorIndex != nil && s.embeddingModel != "" {
-		dedupEmbedder := &usageReportingEmbedder{embedder: embedder, onUsage: s.recordAuxUsage}
-		deduper := vector.NewVectorDeduper(s.vectorIndex, s.profileID, dedupEmbedder, s.embeddingModel).WithWarnFunc(func(err error) {
-			s.logger.Infof("vector dedup issue: %v", err)
-		})
+	if deduper := s.buildVectorDeduper(); deduper != nil {
 		extractor.WithDeduper(deduper)
 	}
 	extractor.WithLogHook(&sessionLogHook{logger: s.logger})
@@ -554,6 +572,9 @@ func (s *Session) extractAsync(userMsg, assistantMsg string, sourceIDs []string)
 	result, err := extractor.ExtractTurn(ctx, s.profileID, s.profileSlug, s.conversationID, sourceIDs, userMsg, assistantMsg)
 	if err != nil {
 		s.logger.Errorf("memory extraction failed (error type=%T)", err)
+		if s.onNotes != nil {
+			s.onNotes(toolSaved, toolUpdated)
+		}
 		s.markNotesDone(0)
 		return
 	}
@@ -572,9 +593,98 @@ func (s *Session) extractAsync(userMsg, assistantMsg string, sourceIDs []string)
 	}
 
 	if s.onNotes != nil {
-		s.onNotes(len(result.Notes), result.Updated)
+		s.onNotes(len(result.Notes)+toolSaved, result.Updated+toolUpdated)
 	}
 	s.markNotesDone(len(result.Notes) + result.Updated)
+}
+
+// buildVectorDeduper returns a vector deduper for note dedup, or nil when
+// embeddings are unavailable. Shared by background extraction and save_note.
+func (s *Session) buildVectorDeduper() vector.Deduper {
+	s.adapterMu.RLock()
+	extractorAdapter := s.extractorAdapter
+	embeddingModel := s.embeddingModel
+	s.adapterMu.RUnlock()
+	var embedder provider.Adapter
+	if extractorAdapter != nil {
+		embedder = extractorAdapter
+	} else if s.adapter != nil {
+		embedder = s.adapter
+	}
+	if embedder == nil || s.vectorIndex == nil || embeddingModel == "" {
+		return nil
+	}
+	dedupEmbedder := &usageReportingEmbedder{embedder: embedder, onUsage: s.recordAuxUsage}
+	return vector.NewVectorDeduper(s.vectorIndex, s.profileID, dedupEmbedder, embeddingModel).WithWarnFunc(func(err error) {
+		s.logger.Infof("vector dedup issue: %v", err)
+	})
+}
+
+// embeddingModelSnapshot returns the embeddings model under the adapter lock.
+// The field is written by settings changes and read from both the chat-turn
+// and extraction goroutines.
+func (s *Session) embeddingModelSnapshot() string {
+	s.adapterMu.RLock()
+	defer s.adapterMu.RUnlock()
+	return s.embeddingModel
+}
+
+// setMissingEmbedding records a missing embeddings model under the adapter
+// lock; written from both the chat-turn and extraction goroutines.
+func (s *Session) setMissingEmbedding(missing bool) {
+	s.adapterMu.Lock()
+	s.missingEmbedding = missing
+	s.adapterMu.Unlock()
+}
+
+// handleSaveNoteCall executes a save_note tool call. It persists the note
+// through the shared note-writing path, invalidates the retrieval cache, syncs
+// the vector index, and notifies the footer via onNotes — mirroring the
+// extractor's lifecycle. The note's profile/conversation binding is taken
+// from the session, never from tool arguments. It returns the tool result
+// plus the saved/updated counts so Send can consolidate them into the
+// extractor's final footer notification for the turn.
+func (s *Session) handleSaveNoteCall(ctx context.Context, call provider.ToolCall, sourceMessageIDs []string) (string, int, int) {
+	var args struct {
+		Content    string `json:"content"`
+		Category   string `json:"category"`
+		Importance int    `json:"importance"`
+	}
+	if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+		s.logger.Errorf("tools: save_note args decode failed call_id=%s err=%v raw=%s", call.CallID, err, call.Arguments)
+		return marshalToolResult(map[string]any{"saved": false, "error": "invalid arguments"}), 0, 0
+	}
+	res, err := memory.SaveNoteExplicit(ctx, s.noteRepo, s.buildVectorDeduper(), &sessionLogHook{logger: s.logger}, s.profileID, s.conversationID,
+		memory.SaveNoteInput{Content: args.Content, Category: args.Category, Importance: args.Importance}, sourceMessageIDs)
+	if err != nil {
+		s.logger.Errorf("tools: save_note failed call_id=%s err=%v", call.CallID, err)
+		return marshalToolResult(map[string]any{"saved": false, "error": err.Error()}), 0, 0
+	}
+	if s.cacheRepo != nil {
+		if err := s.cacheRepo.InvalidateAll(ctx, s.profileID); err != nil {
+			s.logger.Errorf("tools: save_note cache invalidation failed: %v", err)
+		}
+	}
+	if err := s.syncVectorIndex(ctx, []*store.MemoryNote{res.Note}); err != nil {
+		s.logger.Errorf("tools: save_note vector sync failed: %v", err)
+	}
+	savedCount, updatedCount := 1, 0
+	if res.Updated {
+		savedCount, updatedCount = 0, 1
+	}
+	if s.onNotes != nil {
+		s.onNotes(savedCount, updatedCount)
+	}
+	s.logger.Infof("tools: save_note stored note_id=%s updated=%t", res.Note.ID, res.Updated)
+	return marshalToolResult(map[string]any{"saved": true, "updated": res.Updated, "note_id": res.Note.ID}), savedCount, updatedCount
+}
+
+func marshalToolResult(payload map[string]any) string {
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return `{"saved":false,"error":"tool result encoding failed"}`
+	}
+	return string(b)
 }
 
 // SetModel updates the model used for subsequent provider calls.
@@ -654,8 +764,10 @@ func (s *Session) setReferenceWarning(warning bool) {
 
 // SetEmbeddingModel updates the embeddings model used for vector operations.
 func (s *Session) SetEmbeddingModel(model string) {
+	s.adapterMu.Lock()
 	s.embeddingModel = model
 	s.missingEmbedding = model == ""
+	s.adapterMu.Unlock()
 	if s.vectorIndex != nil {
 		if fileIndex, ok := s.vectorIndex.(*vector.FileIndex); ok {
 			fileIndex.WithProfile(s.profileID)
@@ -727,11 +839,15 @@ func (s *Session) ExtractorFallbackActive() bool {
 
 // EmbeddingModelMissingActive reports whether embeddings are missing.
 func (s *Session) EmbeddingModelMissingActive() bool {
+	s.adapterMu.RLock()
+	defer s.adapterMu.RUnlock()
 	return s.missingEmbedding || s.embeddingModel == ""
 }
 
 // EmbeddingModel returns the currently selected embeddings model.
 func (s *Session) EmbeddingModel() string {
+	s.adapterMu.RLock()
+	defer s.adapterMu.RUnlock()
 	return s.embeddingModel
 }
 
