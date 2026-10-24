@@ -162,3 +162,26 @@ func TestExtractorJSONContract_PersistsNotesWithProfileIDNotSlug(t *testing.T) {
 		t.Fatalf("profile_id must not be slug (%q)", p.Slug)
 	}
 }
+
+func TestExtractorJSONContract_ImportanceOutOfRangeRejected(t *testing.T) {
+	ctx, noteRepo, p, _ := newExtractorHarness(t)
+	hook := &captureRejectHook{}
+	payloads := []string{
+		`{"has_new_info":true,"confidence":0.8,"notes":[{"action":"add","target_id":"","category":"fact","content":"Out of range.","importance":11}]}`,
+		`{"has_new_info":true,"confidence":0.8,"notes":[{"action":"add","target_id":"","category":"fact","content":"Out of range.","importance":0}]}`,
+	}
+	for _, payload := range payloads {
+		hook.reasons = nil
+		ex := memory.NewExtractor(noteRepo, &extractorStubAdapter{content: payload}, nil).WithLogHook(hook)
+		res, err := ex.ExtractTurn(ctx, p.ID, p.Slug, "", nil, "foo", "bar")
+		if err != nil {
+			t.Fatalf("ExtractTurn: %v", err)
+		}
+		if len(res.Notes) != 0 {
+			t.Fatalf("expected 0 notes for importance out of range, got %d", len(res.Notes))
+		}
+		if len(hook.reasons) == 0 {
+			t.Fatal("expected importance out of range rejection reason")
+		}
+	}
+}

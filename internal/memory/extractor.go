@@ -232,6 +232,9 @@ func validateExtractionPayload(payload extractionResponse) error {
 		if strings.TrimSpace(n.Content) == "" {
 			return rejectErr("note[%d]: empty content", i)
 		}
+		if n.Importance < 1 || n.Importance > 10 {
+			return rejectErr("note[%d]: importance out of range", i)
+		}
 	}
 	return nil
 }
