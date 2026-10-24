@@ -54,11 +54,12 @@ type Extractor struct {
 	logHook        CaptureLogHook
 	onUsage        func(provider.Usage)
 	noteMaxAgeDays int
+	eligible       bool
 }
 
 // NewExtractor creates an Extractor. Pass nil adapter to disable LLM extraction.
 func NewExtractor(noteRepo *store.MemoryNoteRepo, adapter provider.Adapter, invalidator CacheInvalidator) *Extractor {
-	return &Extractor{noteRepo: noteRepo, adapter: adapter, invalidator: invalidator, logHook: NoopCaptureLogHook{}}
+	return &Extractor{noteRepo: noteRepo, adapter: adapter, invalidator: invalidator, logHook: NoopCaptureLogHook{}, eligible: true}
 }
 
 // WithDeduper configures the deduper.
@@ -88,9 +89,20 @@ func (e *Extractor) WithNoteMaxAgeDays(days int) *Extractor {
 	return e
 }
 
+// WithStructuredOutputsEligible gates LLM extraction on whether the
+// effective extractor model supports structured outputs. The session
+// wiring sets this from the provider model list; false means refuse.
+func (e *Extractor) WithStructuredOutputsEligible(eligible bool) *Extractor {
+	e.eligible = eligible
+	return e
+}
+
 // ExtractTurn analyses a single user→assistant exchange and persists any notes.
 func (e *Extractor) ExtractTurn(ctx context.Context, profileID, profileSlug, conversationID string, sourceMessageIDs []string, userMsg, assistantMsg string) (*ExtractionResult, error) {
 	if e.adapter == nil {
+		return &ExtractionResult{}, nil
+	}
+	if !e.eligible {
 		return &ExtractionResult{}, nil
 	}
 
@@ -168,6 +180,11 @@ func (e *Extractor) llmExtract(ctx context.Context, profileSlug, userMsg, assist
 	resp, err := e.adapter.Complete(ctx, provider.CompletionRequest{
 		Messages:    []provider.Message{{Role: "user", Content: prompt}},
 		Temperature: 0.2,
+		ResponseFormat: &provider.ResponseFormat{
+			Name:   "memory_extraction",
+			Strict: true,
+			Schema: extractionSchema(),
+		},
 	})
 	if err != nil {
 		return extractionResponse{}
@@ -177,10 +194,6 @@ func (e *Extractor) llmExtract(ctx context.Context, profileSlug, userMsg, assist
 	}
 
 	raw := strings.TrimSpace(resp.Content)
-	raw = strings.TrimPrefix(raw, "```json")
-	raw = strings.TrimPrefix(raw, "```")
-	raw = strings.TrimSuffix(raw, "```")
-	raw = strings.TrimSpace(raw)
 
 	var payload extractionResponse
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {

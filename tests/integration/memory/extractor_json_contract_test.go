@@ -13,15 +13,17 @@ import (
 
 type extractorStubAdapter struct {
 	content string
+	lastReq *provider.CompletionRequest
 }
 
-func (s extractorStubAdapter) Complete(_ context.Context, _ provider.CompletionRequest) (*provider.CompletionResponse, error) {
+func (s *extractorStubAdapter) Complete(_ context.Context, req provider.CompletionRequest) (*provider.CompletionResponse, error) {
+	s.lastReq = &req
 	return &provider.CompletionResponse{Content: s.content}, nil
 }
-func (s extractorStubAdapter) Embed(_ context.Context, _ provider.EmbeddingRequest) (*provider.EmbeddingResponse, error) {
+func (s *extractorStubAdapter) Embed(_ context.Context, _ provider.EmbeddingRequest) (*provider.EmbeddingResponse, error) {
 	return &provider.EmbeddingResponse{Embedding: []float32{0.1}, Model: "stub"}, nil
 }
-func (s extractorStubAdapter) ProviderType() string { return "stub" }
+func (s *extractorStubAdapter) ProviderType() string { return "stub" }
 
 type captureRejectHook struct {
 	reasons []string
@@ -52,7 +54,8 @@ func newExtractorHarness(t *testing.T) (context.Context, *store.MemoryNoteRepo, 
 func TestExtractorJSONContract_ValidPerNoteActionsAccepted(t *testing.T) {
 	ctx, noteRepo, p, _ := newExtractorHarness(t)
 
-	ex := memory.NewExtractor(noteRepo, extractorStubAdapter{content: `{"has_new_info":true,"confidence":0.9,"notes":[{"action":"add","target_id":"","category":"fact","content":"User prefers concise responses.","importance":7}]}`}, nil)
+	adapter := &extractorStubAdapter{content: `{"has_new_info":true,"confidence":0.9,"notes":[{"action":"add","target_id":"","category":"fact","content":"User prefers concise responses.","importance":7}]}`}
+	ex := memory.NewExtractor(noteRepo, adapter, nil)
 	res, err := ex.ExtractTurn(ctx, p.ID, p.Slug, "", nil, "I prefer concise responses", "Got it")
 	if err != nil {
 		t.Fatalf("ExtractTurn: %v", err)
@@ -60,12 +63,18 @@ func TestExtractorJSONContract_ValidPerNoteActionsAccepted(t *testing.T) {
 	if len(res.Notes) != 1 {
 		t.Fatalf("expected 1 note, got %d", len(res.Notes))
 	}
+	if adapter.lastReq == nil || adapter.lastReq.ResponseFormat == nil {
+		t.Fatal("expected ResponseFormat on the extraction request")
+	}
+	if rf := adapter.lastReq.ResponseFormat; rf.Name != "memory_extraction" || !rf.Strict || rf.Schema == nil {
+		t.Fatalf("ResponseFormat = %+v, want name memory_extraction, strict, with schema", rf)
+	}
 }
 
 func TestExtractorJSONContract_UpdateRequiresTargetID(t *testing.T) {
 	ctx, noteRepo, p, _ := newExtractorHarness(t)
 	hook := &captureRejectHook{}
-	ex := memory.NewExtractor(noteRepo, extractorStubAdapter{content: `{"has_new_info":true,"confidence":0.8,"notes":[{"action":"update","category":"progress","content":"Status changed","importance":6}]}`}, nil).WithLogHook(hook)
+	ex := memory.NewExtractor(noteRepo, &extractorStubAdapter{content: `{"has_new_info":true,"confidence":0.8,"notes":[{"action":"update","category":"progress","content":"Status changed","importance":6}]}`}, nil).WithLogHook(hook)
 	res, err := ex.ExtractTurn(ctx, p.ID, p.Slug, "", nil, "update this", "ok")
 	if err != nil {
 		t.Fatalf("ExtractTurn: %v", err)
@@ -81,7 +90,7 @@ func TestExtractorJSONContract_UpdateRequiresTargetID(t *testing.T) {
 func TestExtractorJSONContract_CategoryEnforcement(t *testing.T) {
 	ctx, noteRepo, p, _ := newExtractorHarness(t)
 	hook := &captureRejectHook{}
-	ex := memory.NewExtractor(noteRepo, extractorStubAdapter{content: `{"has_new_info":true,"confidence":0.8,"notes":[{"action":"add","category":"invalid","content":"X","importance":6}]}`}, nil).WithLogHook(hook)
+	ex := memory.NewExtractor(noteRepo, &extractorStubAdapter{content: `{"has_new_info":true,"confidence":0.8,"notes":[{"action":"add","category":"invalid","content":"X","importance":6}]}`}, nil).WithLogHook(hook)
 	res, err := ex.ExtractTurn(ctx, p.ID, p.Slug, "", nil, "foo", "bar")
 	if err != nil {
 		t.Fatalf("ExtractTurn: %v", err)
@@ -97,7 +106,7 @@ func TestExtractorJSONContract_CategoryEnforcement(t *testing.T) {
 func TestExtractorJSONContract_MalformedPayloadRejected(t *testing.T) {
 	ctx, noteRepo, p, _ := newExtractorHarness(t)
 	hook := &captureRejectHook{}
-	ex := memory.NewExtractor(noteRepo, extractorStubAdapter{content: `not-json`}, nil).WithLogHook(hook)
+	ex := memory.NewExtractor(noteRepo, &extractorStubAdapter{content: `not-json`}, nil).WithLogHook(hook)
 	res, err := ex.ExtractTurn(ctx, p.ID, p.Slug, "", nil, "foo", "bar")
 	if err != nil {
 		t.Fatalf("ExtractTurn: %v", err)
@@ -114,7 +123,7 @@ func TestExtractorJSONContract_RequiresTopLevelMetadata(t *testing.T) {
 	ctx, noteRepo, p, _ := newExtractorHarness(t)
 	hook := &captureRejectHook{}
 	// confidence out of range should be rejected.
-	ex := memory.NewExtractor(noteRepo, extractorStubAdapter{content: `{"has_new_info":true,"confidence":1.2,"notes":[{"action":"add","target_id":"","category":"fact","content":"X","importance":3}]}`}, nil).WithLogHook(hook)
+	ex := memory.NewExtractor(noteRepo, &extractorStubAdapter{content: `{"has_new_info":true,"confidence":1.2,"notes":[{"action":"add","target_id":"","category":"fact","content":"X","importance":3}]}`}, nil).WithLogHook(hook)
 	res, err := ex.ExtractTurn(ctx, p.ID, p.Slug, "", nil, "foo", "bar")
 	if err != nil {
 		t.Fatalf("ExtractTurn: %v", err)
@@ -130,7 +139,7 @@ func TestExtractorJSONContract_RequiresTopLevelMetadata(t *testing.T) {
 func TestExtractorJSONContract_PersistsNotesWithProfileIDNotSlug(t *testing.T) {
 	ctx, noteRepo, p, _ := newExtractorHarness(t)
 
-	ex := memory.NewExtractor(noteRepo, extractorStubAdapter{content: `{"has_new_info":true,"confidence":0.91,"notes":[{"action":"add","target_id":"","category":"fact","content":"Profile ID mapping check.","importance":6}]}`}, nil)
+	ex := memory.NewExtractor(noteRepo, &extractorStubAdapter{content: `{"has_new_info":true,"confidence":0.91,"notes":[{"action":"add","target_id":"","category":"fact","content":"Profile ID mapping check.","importance":6}]}`}, nil)
 	res, err := ex.ExtractTurn(ctx, p.ID, p.Slug, "", nil, "remember this", "ok")
 	if err != nil {
 		t.Fatalf("ExtractTurn: %v", err)
