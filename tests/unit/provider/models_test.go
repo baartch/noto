@@ -9,6 +9,35 @@ import (
 	"noto/internal/provider"
 )
 
+func TestListModels_ParsesStructuredOutputsSupport(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[
+			{"id":"model-a","context_length":1000,"supported_parameters":["structured_outputs","tools"]},
+			{"id":"model-b","context_length":1000,"supported_parameters":["tools"]},
+			{"id":"model-c","context_length":1000}
+		]}`))
+	}))
+	defer ts.Close()
+
+	models, err := provider.ListModels(context.Background(), provider.Config{Endpoint: ts.URL})
+	if err != nil {
+		t.Fatalf("list models: %v", err)
+	}
+	byID := map[string]provider.ModelInfo{}
+	for _, m := range models {
+		byID[m.ID] = m
+	}
+	if !byID["model-a"].SupportsStructuredOutputs {
+		t.Fatalf("model-a: expected structured outputs support")
+	}
+	if byID["model-b"].SupportsStructuredOutputs {
+		t.Fatalf("model-b: expected no structured outputs support")
+	}
+	if byID["model-c"].SupportsStructuredOutputs {
+		t.Fatalf("model-c: expected no support when supported_parameters absent")
+	}
+}
+
 func TestListModels_ParsesContextLengthAndToolSupport(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/models" {
