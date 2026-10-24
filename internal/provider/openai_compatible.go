@@ -141,23 +141,11 @@ func (a *OpenAICompatible) Embed(ctx context.Context, req EmbeddingRequest) (*Em
 // SetModel updates the default model used when the request has no model set.
 func (a *OpenAICompatible) SetModel(model string) { a.cfg.Model = model }
 
-// Complete performs an OpenAI-compatible chat completion request.
-func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
-	endpoint := a.cfg.Endpoint
-	if endpoint == "" {
-		endpoint = "https://api.openai.com/v1"
-	}
-	endpoint = strings.TrimSuffix(endpoint, "/chat/completions")
-	endpoint = strings.TrimSuffix(endpoint, "/completions")
-	endpoint = strings.TrimSuffix(endpoint, "/responses")
-	endpoint = strings.TrimSuffix(endpoint, "/embeddings")
-	endpoint = strings.TrimSuffix(endpoint, "/embeddings/models")
-	endpoint = strings.TrimRight(endpoint, "/")
-	endpoint += "/chat/completions"
-
+// buildChatCompletionsPayload constructs the wire request from the normalized CompletionRequest.
+func buildChatCompletionsPayload(cfg Config, req CompletionRequest) openAIChatCompletionsRequest {
 	model := req.Model
 	if model == "" {
-		model = a.cfg.Model
+		model = cfg.Model
 	}
 	payload := openAIChatCompletionsRequest{
 		Model:       model,
@@ -202,6 +190,38 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 			})
 		}
 	}
+	if req.ResponseFormat != nil {
+		payload.ResponseFormat = &openAIResponseFormat{
+			Type:       "json_schema",
+			JSONSchema: openAIJSONSchemaFormat{Name: req.ResponseFormat.Name, Strict: req.ResponseFormat.Strict, Schema: req.ResponseFormat.Schema},
+		}
+		if isOpenRouterEndpoint(cfg.Endpoint) {
+			payload.ProviderPrefs = &openAIProviderPreferences{RequireParameters: true}
+		}
+	}
+	return payload
+}
+
+// isOpenRouterEndpoint reports whether the configured endpoint targets OpenRouter.
+func isOpenRouterEndpoint(endpoint string) bool {
+	return strings.Contains(strings.ToLower(endpoint), "openrouter.ai")
+}
+
+// Complete performs an OpenAI-compatible chat completion request.
+func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) (*CompletionResponse, error) {
+	endpoint := a.cfg.Endpoint
+	if endpoint == "" {
+		endpoint = "https://api.openai.com/v1"
+	}
+	endpoint = strings.TrimSuffix(endpoint, "/chat/completions")
+	endpoint = strings.TrimSuffix(endpoint, "/completions")
+	endpoint = strings.TrimSuffix(endpoint, "/responses")
+	endpoint = strings.TrimSuffix(endpoint, "/embeddings")
+	endpoint = strings.TrimSuffix(endpoint, "/embeddings/models")
+	endpoint = strings.TrimRight(endpoint, "/")
+	endpoint += "/chat/completions"
+
+	payload := buildChatCompletionsPayload(a.cfg, req)
 
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -320,11 +340,28 @@ type openAIChatCompletionsMessage struct {
 }
 
 type openAIChatCompletionsRequest struct {
-	Model       string                                `json:"model"`
-	Messages    []openAIChatCompletionsMessage        `json:"messages"`
-	Tools       []openAIChatCompletionsToolDefinition `json:"tools,omitempty"`
-	MaxTokens   int                                   `json:"max_tokens,omitempty"`
-	Temperature float64                               `json:"temperature,omitempty"`
+	Model          string                                `json:"model"`
+	Messages       []openAIChatCompletionsMessage        `json:"messages"`
+	Tools          []openAIChatCompletionsToolDefinition `json:"tools,omitempty"`
+	MaxTokens      int                                   `json:"max_tokens,omitempty"`
+	Temperature    float64                               `json:"temperature,omitempty"`
+	ResponseFormat *openAIResponseFormat                 `json:"response_format,omitempty"`
+	ProviderPrefs  *openAIProviderPreferences            `json:"provider,omitempty"`
+}
+
+type openAIJSONSchemaFormat struct {
+	Name   string         `json:"name"`
+	Strict bool           `json:"strict"`
+	Schema map[string]any `json:"schema"`
+}
+
+type openAIResponseFormat struct {
+	Type       string                 `json:"type"` // "json_schema"
+	JSONSchema openAIJSONSchemaFormat `json:"json_schema"`
+}
+
+type openAIProviderPreferences struct {
+	RequireParameters bool `json:"require_parameters,omitempty"`
 }
 
 type openAIResponsesPromptTokensDetails struct {
