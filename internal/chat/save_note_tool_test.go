@@ -297,6 +297,7 @@ func TestSendToolSaveAndExtractionCoexist(t *testing.T) {
 	}}
 	session, noteRepo := newSaveNoteTestSession(t, mainAdapter, true, nil)
 	session.extractorAdapter = extractAdapter
+	session.SetExtractorEligible(true)
 	ctx := context.Background()
 
 	result, err := session.Send(ctx, "I live in Lisbon, please remember that")
@@ -354,6 +355,7 @@ func TestSendToolSaveFooterCountsSurviveExtraction(t *testing.T) {
 	}
 	session, _ := newSaveNoteTestSession(t, mainAdapter, true, onNotes)
 	session.extractorAdapter = extractAdapter
+	session.SetExtractorEligible(true)
 	ctx := context.Background()
 
 	if _, err := session.Send(ctx, "I live in Porto, note that"); err != nil {

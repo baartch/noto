@@ -161,6 +161,7 @@ func TestSessionSendKeepsReferenceTextTemporaryAndAtRequestTail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	session.SetExtractorEligible(true)
 	result, err := session.Send(ctx, "Write an artist bio")
 	if err != nil || result.Reply != "Here is your bio." {
 		t.Fatalf("Send() = %#v, %v", result, err)

@@ -66,6 +66,7 @@ type Session struct {
 	vectorIndexPath     string
 	vectorIndex         vector.Index
 	extractorFallback   bool
+	extractorEligible   bool
 	embeddingModel      string
 	missingEmbedding    bool
 	toolsEnabled        bool
@@ -563,6 +564,7 @@ func (s *Session) extractAsync(userMsg, assistantMsg string, sourceIDs []string,
 		extractor.WithDeduper(deduper)
 	}
 	extractor.WithLogHook(&sessionLogHook{logger: s.logger})
+	extractor.WithStructuredOutputsEligible(s.ExtractorEligibleActive())
 	extractor.WithUsageHook(s.recordAuxUsage)
 	if s.db != nil {
 		if settings, err := store.NewTimelineSettingsRepo(s.db).GetOrDefault(ctx, s.profileID); err == nil {
@@ -802,6 +804,22 @@ func (s *Session) SetExtractorModel(model string) {
 	if a, ok := adapter.(interface{ SetModel(string) }); ok {
 		a.SetModel(model)
 	}
+}
+
+// SetExtractorEligible records whether the effective extractor model
+// supports structured outputs. Zero value (false) means ineligible:
+// extraction is refused until a successful model-list fetch proves otherwise.
+func (s *Session) SetExtractorEligible(eligible bool) {
+	s.adapterMu.Lock()
+	s.extractorEligible = eligible
+	s.adapterMu.Unlock()
+}
+
+// ExtractorEligibleActive reports structured-outputs eligibility for the effective extractor model.
+func (s *Session) ExtractorEligibleActive() bool {
+	s.adapterMu.RLock()
+	defer s.adapterMu.RUnlock()
+	return s.extractorEligible
 }
 
 // CacheStatus returns a short label for the footer showing current context state.
