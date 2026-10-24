@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"noto/internal/memory"
 	"noto/internal/observe"
@@ -272,6 +273,56 @@ func TestSendToolLoopStopsAtRoundLimit(t *testing.T) {
 	adapter.mu.Unlock()
 	if calls != maxToolRounds+1 {
 		t.Fatalf("provider call count = %d, want %d (initial + %d rounds)", calls, maxToolRounds+1, maxToolRounds)
+	}
+}
+
+func TestSendToolSaveAndExtractionCoexist(t *testing.T) {
+	mainAdapter := &chatRecordingAdapter{responses: []*provider.CompletionResponse{
+		{ToolCalls: []provider.ToolCall{{ID: "call_1", CallID: "call_1", Name: "save_note", Arguments: `{"content":"User lives in Lisbon","category":"fact","importance":7}`}}},
+		{Content: "Noted.", Model: "chat"},
+	}}
+	extractAdapter := &chatRecordingAdapter{callDone: make(chan struct{}, 4), responses: []*provider.CompletionResponse{
+		{Content: `{"has_new_info":true,"confidence":0.9,"notes":[{"action":"add","category":"fact","content":"User lives in Lisbon","importance":7}]}`},
+	}}
+	session, noteRepo := newSaveNoteTestSession(t, mainAdapter, true, nil)
+	session.extractorAdapter = extractAdapter
+	ctx := context.Background()
+
+	result, err := session.Send(ctx, "I live in Lisbon, please remember that")
+	if err != nil {
+		t.Fatalf("Send() error: %v", err)
+	}
+	if result == nil || result.Reply != "Noted." {
+		t.Fatalf("Send() = %#v, want reply %q", result, "Noted.")
+	}
+
+	deadline := time.After(5 * time.Second)
+	for len(extractAdapter.snapshot()) < 1 {
+		select {
+		case <-extractAdapter.callDone:
+		case <-deadline:
+			t.Fatal("background memory extractor did not run")
+		}
+	}
+	session.Close(ctx)
+
+	stored, err := noteRepo.ListByProfile(ctx, "p")
+	if err != nil || len(stored) != 1 {
+		t.Fatalf("ListByProfile() = %d notes, %v; want 1 (extractor merges into the tool-saved note, not a duplicate)", len(stored), err)
+	}
+	msgs, err := session.msgRepo.ListByConversation(ctx, "conv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var assistantMsgID string
+	for _, m := range msgs {
+		if m.Role == store.RoleAssistant {
+			assistantMsgID = m.ID
+			break
+		}
+	}
+	if assistantMsgID == "" || !strings.Contains(stored[0].SourceMessageIDs, `"`+assistantMsgID+`"`) {
+		t.Fatalf("extraction source IDs not merged into tool-saved note: %s", stored[0].SourceMessageIDs)
 	}
 }
 
