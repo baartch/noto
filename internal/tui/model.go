@@ -105,6 +105,12 @@ func ProfileSwitchFailed(err error) tea.Msg {
 	return profileSwitchFailedMsg{err: err}
 }
 
+// ExtractorEligibilityUpdated reports the effective extractor model's
+// structured-outputs eligibility after a model-list fetch or selection.
+func ExtractorEligibilityUpdated(eligible bool) tea.Msg {
+	return extractorEligibilityUpdatedMsg{eligible: eligible}
+}
+
 // ---- async tea.Msg types (internal) ----------------------------------------
 
 type providerReplyMsg struct {
@@ -184,6 +190,7 @@ type profileSwitchedMsg struct {
 	needsProviderSetup     bool
 }
 type profileSwitchFailedMsg struct{ err error }
+type extractorEligibilityUpdatedMsg struct{ eligible bool }
 type spinnerTickMsg struct{}
 
 // ---- picker kind ------------------------------------------------------------
@@ -302,6 +309,7 @@ type Model struct {
 	extractorModel         string
 	extractorModelSelected ExtractorModelSelectedFunc
 	extractorFallback      bool
+	extractorIneligible    bool
 	embeddingModelMissing  bool
 	promptBootstrapWarning bool
 	embeddingModel         string
@@ -2561,6 +2569,12 @@ func (m *Model) updatePendingSpinner() {
 			return
 		}
 	}
+}
+
+// SetExtractorIneligible sets the initial footer warning state for the
+// effective extractor model.
+func (m *Model) SetExtractorIneligible(ineligible bool) {
+	m.extractorIneligible = ineligible
 }
 
 // SetStartupConversationHistory seeds the visible conversation history and optional non-fatal load error.
