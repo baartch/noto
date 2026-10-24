@@ -40,6 +40,27 @@ func modelExtractorHandler(ctx *ExecContext, args []string) error {
 	}
 	model := args[0]
 
+	if ctx.ListModels == nil {
+		return errors.New("model list unavailable — cannot verify structured outputs support")
+	}
+	models, err := ctx.ListModels(context.Background())
+	if err != nil {
+		return fmt.Errorf("could not verify model support: %w", err)
+	}
+	found := false
+	for _, mi := range models {
+		if mi.ID == model {
+			found = true
+			if !mi.SupportsStructuredOutputs {
+				return fmt.Errorf("model %s does not support structured outputs — extraction requires it", model)
+			}
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("model %s not found in provider model list", model)
+	}
+
 	path, err := config.ProfileDBPath(ctx.ProfileSlug)
 	if err != nil {
 		return err

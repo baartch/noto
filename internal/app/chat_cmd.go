@@ -191,6 +191,10 @@ func runChat(cmd *cobra.Command, _ []string) error {
 		listModelsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 			return provider.ListModels(callCtx, adapterCfg)
 		}
+
+		execCtx.ListModels = func(callCtx context.Context) ([]provider.ModelInfo, error) {
+			return provider.ListModels(callCtx, adapterCfg)
+		}
 		if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
 			if sess != nil {
 				applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
