@@ -1056,6 +1056,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case updateNoticeMsg:
 		m.updateNotice = msg.formatted
 
+	// ---- extractor eligibility ----------------------------------------------
+	case extractorEligibilityUpdatedMsg:
+		m.extractorIneligible = !msg.eligible
+
 	case profileSwitchedMsg:
 		m.profileName = msg.profileName
 		m.activeModel = msg.activeModel
