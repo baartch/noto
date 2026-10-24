@@ -296,6 +296,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			providerFn = nil
 			listModelsFn = nil
 			listEmbeddingsFn = nil
+			execCtx.ListModels = nil
 			modelSelectedFn = func(modelID string) error { return nil }
 			embeddingModelSelectedFn = func(modelID string) error { return nil }
 			extractorModelSelectedFn = func(modelID string) error { return nil }
@@ -386,6 +387,9 @@ func runChat(cmd *cobra.Command, _ []string) error {
 				}
 
 				listModelsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
+					return provider.ListModels(callCtx, adapterCfg)
+				}
+				execCtx.ListModels = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 					return provider.ListModels(callCtx, adapterCfg)
 				}
 				if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
