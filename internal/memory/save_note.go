@@ -10,6 +10,12 @@ import (
 	"noto/internal/vector"
 )
 
+// explicitTextDedupThreshold is the word-overlap score required for an
+// explicit save to merge into an existing note. Much stricter than the
+// extractor's textDedupThreshold: an overlap that is not near-identical is
+// a different fact and must not overwrite an existing note.
+const explicitTextDedupThreshold = 0.8
+
 // SaveNoteInput is a validated explicit note save request (e.g. from a
 // save_note tool call).
 type SaveNoteInput struct {
@@ -27,8 +33,9 @@ type SaveNoteResult struct {
 // SaveNoteExplicit persists an explicit note save request. Unlike extracted
 // notes it bypasses the value-score gate (MinValueScore) — the requester
 // already decided the note is worth keeping — but not deduplication or
-// validation. When deduper is nil, a text-overlap fallback (jaccard
-// similarity, same threshold as the extractor) merges into the best match.
+// validation. A near-identical text match (stricter than the extractor's
+// overlap threshold) always merges into the existing note, even when a
+// vector deduper is configured but misses.
 func SaveNoteExplicit(
 	ctx context.Context,
 	noteRepo *store.MemoryNoteRepo,
@@ -58,7 +65,12 @@ func SaveNoteExplicit(
 	candidate.Importance = in.Importance
 	logHook.CandidateScored(candidate)
 
-	// Dedup first: vector deduper when available, text-overlap fallback when not.
+	// Dedup first: vector deduper when available; a strict near-identical
+	// text check always runs as a backstop (vector checks can miss when the
+	// index is stale or the embedding call fails). Explicit saves use a much
+	// stricter text threshold than the extractor: a word-overlap match that
+	// is not near-identical is a different fact, not a duplicate, and must
+	// not overwrite an existing note.
 	if deduper != nil {
 		res, err := deduper.CheckDuplicate(ctx, profileID, candidate.Content)
 		if err == nil && res.IsDuplicate {
@@ -73,7 +85,8 @@ func SaveNoteExplicit(
 				return &SaveNoteResult{Note: note, Updated: true}, nil
 			}
 		}
-	} else if matchID := findTextDuplicate(ctx, noteRepo, profileID, candidate.Content); matchID != "" {
+	}
+	if matchID := findTextDuplicate(ctx, noteRepo, profileID, candidate.Content, explicitTextDedupThreshold); matchID != "" {
 		note, err := noteRepo.GetByID(ctx, matchID)
 		if err == nil {
 			if err := UpdateCandidateAsDuplicate(ctx, noteRepo, note, candidate, sourceMessageIDs); err != nil {
@@ -115,8 +128,8 @@ func isKnownCategory(cat store.MemoryCategory) bool {
 }
 
 // findTextDuplicate returns the ID of the most similar existing note when
-// word overlap reaches textDedupThreshold, else "".
-func findTextDuplicate(ctx context.Context, noteRepo *store.MemoryNoteRepo, profileID, content string) string {
+// word overlap reaches the given threshold, else "".
+func findTextDuplicate(ctx context.Context, noteRepo *store.MemoryNoteRepo, profileID, content string, threshold float64) string {
 	existing, err := noteRepo.ListByProfile(ctx, profileID)
 	if err != nil {
 		return ""
@@ -138,7 +151,7 @@ func findTextDuplicate(ctx context.Context, noteRepo *store.MemoryNoteRepo, prof
 			bestID = note.ID
 		}
 	}
-	if bestID != "" && bestScore >= textDedupThreshold {
+	if bestID != "" && bestScore >= threshold {
 		return bestID
 	}
 	return ""

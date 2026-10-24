@@ -242,6 +242,10 @@ func (a *saveNoteLoopAdapter) Complete(_ context.Context, req provider.Completio
 	defer a.mu.Unlock()
 	a.requests = append(a.requests, req)
 	a.calls++
+	if len(req.Tools) == 0 {
+		// Forced text-only follow-up: no tools offered, answer in text.
+		return &provider.CompletionResponse{Content: "Stopped after tool rounds."}, nil
+	}
 	callID := fmt.Sprintf("call_%d", a.calls)
 	return &provider.CompletionResponse{
 		ToolCalls: []provider.ToolCall{{
@@ -268,11 +272,18 @@ func TestSendToolLoopStopsAtRoundLimit(t *testing.T) {
 	if result == nil {
 		t.Fatal("Send() = nil result")
 	}
+	if result.Reply != "Stopped after tool rounds." {
+		t.Fatalf("reply = %q, want the forced text-only answer, not a blank reply", result.Reply)
+	}
 	adapter.mu.Lock()
 	calls := len(adapter.requests)
+	forcedNoTools := len(adapter.requests[len(adapter.requests)-1].Tools) == 0
 	adapter.mu.Unlock()
-	if calls != maxToolRounds+1 {
-		t.Fatalf("provider call count = %d, want %d (initial + %d rounds)", calls, maxToolRounds+1, maxToolRounds)
+	if calls != maxToolRounds+2 {
+		t.Fatalf("provider call count = %d, want %d (initial + %d rounds + forced reply)", calls, maxToolRounds+2, maxToolRounds)
+	}
+	if !forcedNoTools {
+		t.Fatal("forced reply request still offered tools")
 	}
 }
 
@@ -323,6 +334,44 @@ func TestSendToolSaveAndExtractionCoexist(t *testing.T) {
 	}
 	if assistantMsgID == "" || !strings.Contains(stored[0].SourceMessageIDs, `"`+assistantMsgID+`"`) {
 		t.Fatalf("extraction source IDs not merged into tool-saved note: %s", stored[0].SourceMessageIDs)
+	}
+}
+
+func TestSendToolSaveFooterCountsSurviveExtraction(t *testing.T) {
+	mainAdapter := &chatRecordingAdapter{responses: []*provider.CompletionResponse{
+		{ToolCalls: []provider.ToolCall{{ID: "call_1", CallID: "call_1", Name: "save_note", Arguments: `{"content":"User lives in Porto","category":"fact","importance":6}`}}},
+		{Content: "Noted.", Model: "chat"},
+	}}
+	extractAdapter := &chatRecordingAdapter{callDone: make(chan struct{}, 4), responses: []*provider.CompletionResponse{
+		{Content: `{"has_new_info":false,"confidence":0,"notes":[]}`},
+	}}
+	var mu sync.Mutex
+	var notesCalls [][2]int
+	onNotes := func(saved, updated int) {
+		mu.Lock()
+		notesCalls = append(notesCalls, [2]int{saved, updated})
+		mu.Unlock()
+	}
+	session, _ := newSaveNoteTestSession(t, mainAdapter, true, onNotes)
+	session.extractorAdapter = extractAdapter
+	ctx := context.Background()
+
+	if _, err := session.Send(ctx, "I live in Porto, note that"); err != nil {
+		t.Fatalf("Send() error: %v", err)
+	}
+	deadline := time.After(5 * time.Second)
+	for len(extractAdapter.snapshot()) < 1 {
+		select {
+		case <-extractAdapter.callDone:
+		case <-deadline:
+			t.Fatal("background memory extractor did not run")
+		}
+	}
+	mu.Lock()
+	last := notesCalls[len(notesCalls)-1]
+	mu.Unlock()
+	if last != [2]int{1, 0} {
+		t.Fatalf("final onNotes call = %v, want (1,0): tool-save count was lost to the extractor's footer call", last)
 	}
 }
 

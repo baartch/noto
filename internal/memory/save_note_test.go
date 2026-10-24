@@ -127,6 +127,71 @@ func TestSaveNoteExplicitTextDedupFallbackWithoutDeduper(t *testing.T) {
 	}
 }
 
+func TestSaveNoteExplicitTextFallbackRequiresNearIdentical(t *testing.T) {
+	_, repo := openSaveNoteTestDB(t)
+	ctx := context.Background()
+
+	seed := &store.MemoryNote{
+		ID: "mn-seed", ProfileID: "p1", Category: store.CategoryFact, Importance: 5,
+		Content: "User's sister is named Anna", SourceMessageIDs: `["msg-old"]`,
+	}
+	if err := repo.Create(ctx, seed); err != nil {
+		t.Fatal(err)
+	}
+
+	// Word overlap is ~0.67 (jaccard), above the extractor's 0.45 threshold but
+	// far from near-identical: an explicit save must not overwrite a different fact.
+	res, err := SaveNoteExplicit(ctx, repo, nil, nil, "p1", "conv-1",
+		SaveNoteInput{Content: "User's daughter is named Anna", Category: "fact", Importance: 8},
+		[]string{"msg-new"})
+	if err != nil {
+		t.Fatalf("SaveNoteExplicit() error: %v", err)
+	}
+	if res.Updated {
+		t.Fatalf("SaveNoteExplicit() merged %q into %q; want a separate note", "User's daughter is named Anna", "User's sister is named Anna")
+	}
+	notes, err := repo.ListByProfile(ctx, "p1")
+	if err != nil || len(notes) != 2 {
+		t.Fatalf("ListByProfile() = %d notes, %v; want 2 (both facts kept)", len(notes), err)
+	}
+	contents := make([]string, 0, len(notes))
+	for _, n := range notes {
+		contents = append(contents, n.Content)
+	}
+	joined := strings.Join(contents, "\n")
+	if !strings.Contains(joined, "sister") || !strings.Contains(joined, "daughter") {
+		t.Fatalf("a fact was overwritten: %s", joined)
+	}
+}
+
+func TestSaveNoteExplicitTextBackstopAfterVectorMiss(t *testing.T) {
+	_, repo := openSaveNoteTestDB(t)
+	ctx := context.Background()
+
+	seed := &store.MemoryNote{
+		ID: "mn-seed", ProfileID: "p1", Category: store.CategoryFact, Importance: 5,
+		Content: "Ship date is Nov 5", SourceMessageIDs: `["msg-old"]`,
+	}
+	if err := repo.Create(ctx, seed); err != nil {
+		t.Fatal(err)
+	}
+
+	deduper := &saveNoteStubDeduper{result: vector.DedupResult{IsDuplicate: false}}
+	res, err := SaveNoteExplicit(ctx, repo, deduper, nil, "p1", "conv-1",
+		SaveNoteInput{Content: "Ship date is Nov 5", Category: "fact", Importance: 7},
+		[]string{"msg-new"})
+	if err != nil {
+		t.Fatalf("SaveNoteExplicit() error: %v", err)
+	}
+	if res == nil || !res.Updated {
+		t.Fatalf("SaveNoteExplicit() = %#v, want Updated=true via text backstop after vector miss", res)
+	}
+	notes, err := repo.ListByProfile(ctx, "p1")
+	if err != nil || len(notes) != 1 {
+		t.Fatalf("ListByProfile() = %d notes, %v; want 1", len(notes), err)
+	}
+}
+
 func TestSaveNoteExplicitValidatesInput(t *testing.T) {
 	_, repo := openSaveNoteTestDB(t)
 	ctx := context.Background()
