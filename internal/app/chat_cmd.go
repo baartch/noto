@@ -192,10 +192,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 		listModelsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 			return provider.ListModels(callCtx, adapterCfg)
 		}
-
-		execCtx.ListModels = func(callCtx context.Context) ([]provider.ModelInfo, error) {
-			return provider.ListModels(callCtx, adapterCfg)
-		}
+		execCtx.ListModels = listModelsFn
 		if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
 			if sess != nil {
 				eligible := applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
@@ -225,6 +222,13 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					if prog != nil {
 						prog.Send(tui.ExtractorEligibilityUpdated(eligible))
 					}
+				}
+			} else {
+				if sess != nil {
+					sess.SetExtractorEligible(false)
+				}
+				if prog != nil {
+					prog.Send(tui.ExtractorEligibilityUpdated(false))
 				}
 			}
 			return nil
@@ -264,6 +268,13 @@ func runChat(cmd *cobra.Command, _ []string) error {
 				eligible := applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
 				if prog != nil {
 					prog.Send(tui.ExtractorEligibilityUpdated(eligible))
+				}
+			} else {
+				if sess != nil {
+					sess.SetExtractorEligible(false)
+				}
+				if prog != nil {
+					prog.Send(tui.ExtractorEligibilityUpdated(false))
 				}
 			}
 			return nil
@@ -398,9 +409,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 				listModelsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 					return provider.ListModels(callCtx, adapterCfg)
 				}
-				execCtx.ListModels = func(callCtx context.Context) ([]provider.ModelInfo, error) {
-					return provider.ListModels(callCtx, adapterCfg)
-				}
+				execCtx.ListModels = listModelsFn
 				if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
 					if sess != nil {
 						eligible := applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
@@ -408,6 +417,13 @@ func runChat(cmd *cobra.Command, _ []string) error {
 							prog.Send(tui.ExtractorEligibilityUpdated(eligible))
 							prog.Send(tui.StatsUpdated(sess.Stats().Format()))
 						}
+					}
+				} else {
+					if sess != nil {
+						sess.SetExtractorEligible(false)
+					}
+					if prog != nil {
+						prog.Send(tui.ExtractorEligibilityUpdated(false))
 					}
 				}
 				listEmbeddingsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
@@ -429,6 +445,13 @@ func runChat(cmd *cobra.Command, _ []string) error {
 							if prog != nil {
 								prog.Send(tui.ExtractorEligibilityUpdated(eligible))
 							}
+						}
+					} else {
+						if sess != nil {
+							sess.SetExtractorEligible(false)
+						}
+						if prog != nil {
+							prog.Send(tui.ExtractorEligibilityUpdated(false))
 						}
 					}
 					return nil
@@ -469,8 +492,23 @@ func runChat(cmd *cobra.Command, _ []string) error {
 						if prog != nil {
 							prog.Send(tui.ExtractorEligibilityUpdated(eligible))
 						}
+					} else {
+						if sess != nil {
+							sess.SetExtractorEligible(false)
+						}
+						if prog != nil {
+							prog.Send(tui.ExtractorEligibilityUpdated(false))
+						}
 					}
 					return nil
+				}
+			}
+
+			if providerCfg == nil || decryptedKey == "" {
+				// No provider on this profile: fresh session defaults ineligible;
+				// surface it so the footer warns instead of silently guessing.
+				if prog != nil {
+					prog.Send(tui.ExtractorEligibilityUpdated(false))
 				}
 			}
 
