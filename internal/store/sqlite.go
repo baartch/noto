@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 
+	"noto/internal/observe"
+
 	_ "modernc.org/sqlite" // SQLite driver
 )
 
@@ -26,8 +28,24 @@ func OpenProfile(path string) (*DB, error) {
 	return open(path, profileMigrationsFS, "migrations/profile")
 }
 
+// OpenProfileLogged opens a profile database and logs each committed migration.
+func OpenProfileLogged(path string) (*DB, error) {
+	logger, err := observe.NewFileLogger("")
+	if err != nil {
+		return OpenProfile(path)
+	}
+	defer func() { _ = logger.Close() }()
+	return openWithMigrationLog(path, profileMigrationsFS, "migrations/profile", func(version string) {
+		logger.Infof("store: migration applied: version=%s database=%q", version, path)
+	})
+}
+
 // open is the shared implementation used by OpenProfile.
 func open(path string, migrFS embed.FS, migrDir string) (*DB, error) {
+	return openWithMigrationLog(path, migrFS, migrDir, nil)
+}
+
+func openWithMigrationLog(path string, migrFS embed.FS, migrDir string, logMigration func(string)) (*DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("store: open %s: %w", path, err)
@@ -40,7 +58,7 @@ func open(path string, migrFS embed.FS, migrDir string) (*DB, error) {
 	}
 
 	wrapped := &DB{DB: db}
-	if err := wrapped.migrate(migrFS, migrDir); err != nil {
+	if err := wrapped.migrate(migrFS, migrDir, logMigration); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: migrate %s: %w", path, err)
 	}
@@ -66,7 +84,7 @@ func applyPragmas(ctx context.Context, db *sql.DB) error {
 }
 
 // migrate applies all embedded SQL migration files from migrDir in lexicographic order.
-func (db *DB) migrate(migrFS embed.FS, migrDir string) error {
+func (db *DB) migrate(migrFS embed.FS, migrDir string, logMigration func(string)) error {
 	ctx := context.Background()
 	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -124,6 +142,9 @@ func (db *DB) migrate(migrFS embed.FS, migrDir string) error {
 		}
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("store: commit migration %s: %w", name, err)
+		}
+		if logMigration != nil {
+			logMigration(version)
 		}
 	}
 	return nil

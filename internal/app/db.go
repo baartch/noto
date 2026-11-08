@@ -15,5 +15,5 @@ func openProfileDB(slug string) (*store.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	return store.OpenProfile(dbPath)
+	return store.OpenProfileLogged(dbPath)
 }

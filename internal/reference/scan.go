@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"noto/internal/startup"
 	"noto/internal/store"
 )
 
@@ -20,7 +21,22 @@ type scannedFile struct {
 }
 
 // Scan indexes new and changed supported files and reconciles confirmed removals.
-func (s *Service) Scan(parent context.Context) ([]Diagnostic, error) {
+func (s *Service) Scan(parent context.Context, reporters ...startup.Reporter) (diagnostics []Diagnostic, resultErr error) {
+	var report startup.Reporter
+	if len(reporters) > 0 {
+		report = reporters[0]
+	}
+	event := startup.Event{Phase: "files", State: "start", Total: -1}
+	report.Send(event)
+	defer func() {
+		event.State = "success"
+		if resultErr != nil {
+			event.State = "failure"
+		} else if len(diagnostics) > 0 {
+			event.State = "warning"
+		}
+		report.Send(event)
+	}()
 	s.scanMu.Lock()
 	defer s.scanMu.Unlock()
 	ctx, done, err := s.operationContext(parent)
@@ -33,6 +49,9 @@ func (s *Service) Scan(parent context.Context) ([]Diagnostic, error) {
 	if err != nil {
 		return nil, err
 	}
+	event.Total = len(files)
+	event.State = "update"
+	report.Send(event)
 	existing, err := s.opts.Repo.List(ctx, s.opts.ProfileID)
 	if err != nil {
 		return nil, err
@@ -43,8 +62,11 @@ func (s *Service) Scan(parent context.Context) ([]Diagnostic, error) {
 	}
 
 	seen := make([]string, 0, len(files))
-	var diagnostics []Diagnostic
-	for _, entry := range files {
+	for i, entry := range files {
+		event.Done = i
+		if i > 0 {
+			report.Send(event)
+		}
 		if err := ctx.Err(); err != nil {
 			return diagnostics, err
 		}
@@ -121,6 +143,8 @@ func (s *Service) Scan(parent context.Context) ([]Diagnostic, error) {
 			return diagnostics, err
 		}
 	}
+	event.Done = len(files)
+	report.Send(event)
 
 	if _, err := s.opts.Repo.DeleteMissing(ctx, s.opts.ProfileID, seen); err != nil {
 		return diagnostics, err

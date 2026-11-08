@@ -2,6 +2,7 @@ package vector
 
 import (
 	"context"
+	"errors"
 
 	"noto/internal/provider"
 )
@@ -60,7 +61,7 @@ func (d *DeduperImpl) CheckDuplicate(ctx context.Context, profileID string, cont
 			fileIndex.WithProfile(profileID)
 		}
 		if err := fileIndex.Load(); err != nil {
-			if d.warnFn != nil && (err == ErrIndexNotFound || err == ErrIndexCorrupted) {
+			if d.warnFn != nil && (errors.Is(err, ErrIndexNotFound) || errors.Is(err, ErrIndexCorrupted)) {
 				d.warnFn(err)
 				return DedupResult{IsDuplicate: false}, nil
 			}
@@ -73,7 +74,7 @@ func (d *DeduperImpl) CheckDuplicate(ctx context.Context, profileID string, cont
 	}
 	results, err := d.index.Search(resp.Embedding, 3)
 	if err != nil {
-		if d.warnFn != nil && (err == ErrIndexNotFound || err == ErrIndexCorrupted) {
+		if d.warnFn != nil && (errors.Is(err, ErrIndexNotFound) || errors.Is(err, ErrIndexCorrupted)) {
 			d.warnFn(err)
 			return DedupResult{IsDuplicate: false}, nil
 		}

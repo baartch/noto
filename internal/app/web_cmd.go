@@ -18,6 +18,7 @@ import (
 	chatpkg "noto/internal/chat"
 	"noto/internal/profile"
 	"noto/internal/provider"
+	startupprogress "noto/internal/startup"
 	"noto/internal/store"
 	"noto/internal/web"
 )
@@ -100,7 +101,10 @@ func runWeb(cmd *cobra.Command, port int) error {
 	}
 	if !setupRequired {
 		systemPrompt, _ := loadSystemPrompt(ctx, profileDB, activeProfile)
-		session, err = newConfiguredSession(ctx, profileDB, activeProfile, systemPrompt, providerCfg, apiKey, sessionCallbacks{})
+		err = withStartupProgress(cmd.ErrOrStderr(), func(report startupprogress.Reporter) error {
+			session, err = newConfiguredSession(ctx, profileDB, activeProfile, systemPrompt, providerCfg, apiKey, sessionCallbacks{OnStartup: report})
+			return err
+		})
 		if err != nil {
 			if errors.Is(err, errProviderSetupRequired) {
 				setupRequired = true

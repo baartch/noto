@@ -1,5 +1,11 @@
 # Release notes
 
+## 0.14.0
+
+October 24, 2026
+
+- Add `save_note` tool
+
 ## 0.13.0
 
 October 20, 2026

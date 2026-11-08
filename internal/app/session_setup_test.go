@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"noto/internal/provider"
+	"noto/internal/startup"
 	"noto/internal/store"
 )
 
@@ -29,11 +30,15 @@ func TestConfiguredSessionAllowsUnsetModelForTUISettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = db.Close() }()
-	session, err := newConfiguredSession(context.Background(), db, profile, "system prompt", &store.ProviderConfig{Endpoint: "http://127.0.0.1:1"}, "test-secret", sessionCallbacks{})
+	var events []startup.Event
+	session, err := newConfiguredSession(context.Background(), db, profile, "system prompt", &store.ProviderConfig{Endpoint: "http://127.0.0.1:1"}, "test-secret", sessionCallbacks{OnStartup: func(e startup.Event) { events = append(events, e) }})
 	if err != nil {
 		t.Fatalf("newConfiguredSession with unset model: %v", err)
 	}
 	session.Close(context.Background())
+	if len(events) == 0 {
+		t.Fatal("startup callback received no file progress")
+	}
 }
 
 func TestConfiguredSessionUsesProfileProviderAndPrompt(t *testing.T) {

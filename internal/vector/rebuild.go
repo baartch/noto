@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"noto/internal/provider"
+	"noto/internal/startup"
 )
 
 // ManifestStatusSetter is the interface for updating the vector manifest status.
@@ -22,6 +23,13 @@ type Rebuilder struct {
 	profileID      string
 	embedder       Embedder
 	embeddingModel string
+	progress       startup.Reporter
+}
+
+// WithProgress configures startup progress reporting.
+func (rb *Rebuilder) WithProgress(report startup.Reporter) *Rebuilder {
+	rb.progress = report
+	return rb
 }
 
 // NewRebuilder creates a Rebuilder.
@@ -51,7 +59,16 @@ func (rb *Rebuilder) WithEmbedder(embedder Embedder, model string) *Rebuilder {
 }
 
 // Rebuild discards the existing index and re-indexes the given notes.
-func (rb *Rebuilder) Rebuild(ctx context.Context, notes []MemoryNoteRecord) error {
+func (rb *Rebuilder) Rebuild(ctx context.Context, notes []MemoryNoteRecord) (resultErr error) {
+	event := startup.Event{Phase: "rebuild", State: "start", Total: len(notes)}
+	rb.progress.Send(event)
+	defer func() {
+		event.State = "success"
+		if resultErr != nil {
+			event.State = "failure"
+		}
+		rb.progress.Send(event)
+	}()
 	// Mark manifest as rebuilding.
 	_ = rb.manifestSetter.SetManifestStatusStr(ctx, rb.profileID, string(ManifestRebuilding))
 
@@ -77,18 +94,9 @@ func (rb *Rebuilder) Rebuild(ctx context.Context, notes []MemoryNoteRecord) erro
 			Vector:         resp.Embedding,
 		}
 		entries = append(entries, entry)
-		if rb.manifestRepo != nil {
-			_ = rb.manifestRepo.UpsertEntry(ctx, &ManifestEntry{
-				ID:             entry.ID,
-				ProfileID:      entry.ProfileID,
-				SourceType:     entry.SourceType,
-				SourceID:       entry.SourceID,
-				ChunkHash:      entry.ChunkHash,
-				EmbeddingModel: entry.EmbeddingModel,
-				EmbeddingDim:   entry.EmbeddingDim,
-				VectorRef:      entry.VectorRef,
-			})
-		}
+		event.Done++
+		event.State = "update"
+		rb.progress.Send(event)
 	}
 
 	if err := rb.index.Rebuild(entries); err != nil {
@@ -98,6 +106,21 @@ func (rb *Rebuilder) Rebuild(ctx context.Context, notes []MemoryNoteRecord) erro
 	if err := rb.index.Flush(); err != nil {
 		_ = rb.manifestSetter.SetManifestStatusStr(ctx, rb.profileID, string(ManifestFailed))
 		return fmt.Errorf("vector: flush after rebuild: %w", err)
+	}
+	if rb.manifestRepo != nil {
+		for _, entry := range entries {
+			if index, ok := rb.index.(*FileIndex); ok {
+				entry.VectorRef, _ = index.VectorRefFor(entry.SourceType, entry.SourceID)
+			}
+			if err := rb.manifestRepo.UpsertEntry(ctx, &ManifestEntry{
+				ID: entry.ID, ProfileID: entry.ProfileID, SourceType: entry.SourceType,
+				SourceID: entry.SourceID, ChunkHash: entry.ChunkHash,
+				EmbeddingModel: entry.EmbeddingModel, EmbeddingDim: entry.EmbeddingDim, VectorRef: entry.VectorRef,
+			}); err != nil {
+				_ = rb.manifestSetter.SetManifestStatusStr(ctx, rb.profileID, string(ManifestFailed))
+				return fmt.Errorf("vector: update manifest for %s: %w", entry.SourceID, err)
+			}
+		}
 	}
 
 	_ = rb.manifestSetter.SetManifestStatusStr(ctx, rb.profileID, string(ManifestReady))

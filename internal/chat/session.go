@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"noto/internal/observe"
 	"noto/internal/provider"
 	"noto/internal/reference"
+	"noto/internal/startup"
 	"noto/internal/store"
 	"noto/internal/vector"
 	vecfile "noto/internal/vector/file"
@@ -76,6 +76,7 @@ type Session struct {
 	referenceWarning    bool
 	adapterMu           sync.RWMutex
 	statsMu             sync.Mutex
+	vectorSyncMu        sync.Mutex
 
 	backupStop   chan struct{}
 	pendingNotes int
@@ -112,7 +113,12 @@ func NewSession(
 	onNotesSaving NotesSavingCallback,
 	onContextStatus ContextStatusCallback,
 	onStats func(provider.Stats),
+	startupReporters ...startup.Reporter,
 ) (*Session, error) {
+	var report startup.Reporter
+	if len(startupReporters) > 0 {
+		report = startupReporters[0]
+	}
 	// Build system prompt with injected memory context.
 	cacheRepo := store.NewContextCacheRepo(db)
 	vecPath, _ := config.ProfileVectorPath(profileSlug)
@@ -207,6 +213,7 @@ func NewSession(
 		if pathErr != nil {
 			s.referenceWarning = true
 			logger.Infof("reference files directory unavailable: %v", pathErr)
+			report.Send(startup.Event{Phase: "files", State: "failure", Total: -1})
 		} else {
 			refs, refErr := reference.NewService(reference.Options{
 				Root: filesDir, ProfileID: profileID, Repo: store.NewReferenceFileRepo(db),
@@ -216,9 +223,10 @@ func NewSession(
 			if refErr != nil {
 				s.referenceWarning = true
 				logger.Infof("reference files unavailable: %v", refErr)
+				report.Send(startup.Event{Phase: "files", State: "failure", Total: -1})
 			} else {
 				s.references = refs
-				diagnostics, scanErr := refs.Scan(ctx)
+				diagnostics, scanErr := refs.Scan(ctx, report)
 				if scanErr != nil || len(diagnostics) > 0 {
 					s.referenceWarning = true
 					logger.Infof("reference file scan completed with issues: files=%d err=%v", len(diagnostics), scanErr)
@@ -233,15 +241,38 @@ func NewSession(
 		s.startBackupTicker()
 	}
 
-	// Rebuild vector index from existing notes if the index file is missing.
-	// This avoids "index file not found" warnings on every turn and ensures
-	// the vector deduper works from the first extraction.
+	// Repair a missing or unreadable index before the first extraction.
 	if s.noteRepo != nil && s.embeddingModel != "" && s.adapter != nil && s.vectorIndex != nil {
-		if _, err := os.Stat(vecPath); os.IsNotExist(err) {
-			existingNotes, listErr := s.noteRepo.ListByProfile(ctx, profileID)
-			if listErr == nil && len(existingNotes) > 0 {
-				if syncErr := s.syncVectorIndex(ctx, existingNotes); syncErr != nil {
-					logger.Infof("initial vector index rebuild: %v", syncErr)
+		if index, ok := s.vectorIndex.(*vector.FileIndex); ok {
+			report.Send(startup.Event{Phase: "checking", State: "start", Total: -1})
+			if err := index.Load(); err != nil {
+				if errors.Is(err, vector.ErrIndexNotFound) || errors.Is(err, vector.ErrIndexCorrupted) {
+					report.Send(startup.Event{Phase: "checking", State: "success", Total: -1})
+					if syncErr := s.syncVectorIndex(ctx, nil, report); syncErr != nil {
+						logger.Infof("initial vector index rebuild: %v", syncErr)
+					}
+				} else {
+					logger.Infof("initial vector index load: %v", err)
+					report.Send(startup.Event{Phase: "checking", State: "failure", Total: -1})
+				}
+			} else {
+				notes, err := s.noteRepo.ListByProfile(ctx, profileID)
+				if err != nil {
+					logger.Infof("initial vector index check: %v", err)
+					report.Send(startup.Event{Phase: "checking", State: "failure", Total: -1})
+				} else {
+					missing := make([]*store.MemoryNote, 0)
+					for _, note := range notes {
+						if _, ok := index.VectorRefFor(vector.SourceMemoryNote, note.ID); !ok {
+							missing = append(missing, note)
+						}
+					}
+					report.Send(startup.Event{Phase: "checking", State: "success", Total: -1})
+					if len(missing) > 0 {
+						if err := s.syncVectorIndex(ctx, missing, report); err != nil {
+							logger.Infof("initial vector index sync: %v", err)
+						}
+					}
 				}
 			}
 		}
@@ -452,7 +483,30 @@ func (s *Session) PendingNotes() int {
 }
 
 // extractAsync runs note extraction and calls onNotes when done.
-func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote) error {
+func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote, reporters ...startup.Reporter) (resultErr error) {
+	var report startup.Reporter
+	if len(reporters) > 0 && reporters[0] != nil {
+		original := reporters[0]
+		finished := false
+		phase, total := "sync", len(notes)
+		if notes == nil {
+			phase, total = "rebuild", -1
+		}
+		report = func(event startup.Event) {
+			if event.State == "failure" || event.State == "success" || event.State == "warning" {
+				finished = true
+			}
+			original.Send(event)
+		}
+		report.Send(startup.Event{Phase: phase, State: "start", Total: total})
+		defer func() {
+			if resultErr != nil && !finished {
+				report.Send(startup.Event{Phase: phase, State: "failure", Total: total})
+			}
+		}()
+	}
+	s.vectorSyncMu.Lock()
+	defer s.vectorSyncMu.Unlock()
 	if s.vectorIndex == nil || s.adapter == nil {
 		return nil
 	}
@@ -461,12 +515,13 @@ func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote
 		s.setMissingEmbedding(true)
 		return nil
 	}
+	needsRebuild := false
 	fileIndex, ok := s.vectorIndex.(*vector.FileIndex)
 	if ok {
 		fileIndex.WithProfile(s.profileID)
 		if err := fileIndex.Load(); err != nil {
 			if errors.Is(err, vector.ErrIndexNotFound) || errors.Is(err, vector.ErrIndexCorrupted) {
-				// No existing index; proceed to create a fresh one.
+				needsRebuild = true
 			} else {
 				return err
 			}
@@ -481,7 +536,19 @@ func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote
 	if s.adapter != nil {
 		embedder = &usageReportingEmbedder{embedder: s.adapter, onUsage: s.recordAuxUsage}
 	}
-	syncer := vector.NewSyncer(s.vectorIndex, s.profileID, embedder, embeddingModel).WithManifest(manifestRepo)
+	if needsRebuild {
+		allNotes, err := s.noteRepo.ListByProfile(ctx, s.profileID)
+		if err != nil {
+			return fmt.Errorf("vector: list notes for rebuild: %w", err)
+		}
+		records := make([]vector.MemoryNoteRecord, 0, len(allNotes))
+		for _, note := range allNotes {
+			records = append(records, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
+		}
+		return vector.NewRebuilder(manifestRepo, s.vectorIndex, s.profileID).
+			WithManifest(manifestRepo).WithEmbedder(embedder, embeddingModel).WithProgress(report).Rebuild(ctx, records)
+	}
+	syncer := vector.NewSyncer(s.vectorIndex, s.profileID, embedder, embeddingModel).WithManifest(manifestRepo).WithProgress(report)
 	records := make([]vector.MemoryNoteRecord, 0, len(notes))
 	for _, note := range notes {
 		records = append(records, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
@@ -513,6 +580,8 @@ func (s *Session) ensureVectorManifest(ctx context.Context, repo *store.VectorMa
 }
 
 func (s *Session) ensureVectorCompaction(ctx context.Context) error {
+	s.vectorSyncMu.Lock()
+	defer s.vectorSyncMu.Unlock()
 	if s.vectorIndex == nil || s.adapter == nil {
 		return nil
 	}
