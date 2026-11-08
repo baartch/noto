@@ -10,6 +10,7 @@ import (
 
 	"noto/internal/observe"
 	"noto/internal/provider"
+	"noto/internal/startup"
 	"noto/internal/store"
 	"noto/internal/vector"
 	vecfile "noto/internal/vector/file"
@@ -135,7 +136,8 @@ func TestNewSessionRepairsCorruptIndex(t *testing.T) {
 	if err := os.WriteFile(path, []byte("broken"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s, err := NewSession(ctx, "p", "p", "system", seed.db, seed.convRepo, seed.msgRepo, repo, adapter, nil, observe.NewJSONLogger(io.Discard), nil, nil, nil, nil)
+	var events []startup.Event
+	s, err := NewSession(ctx, "p", "p", "system", seed.db, seed.convRepo, seed.msgRepo, repo, adapter, nil, observe.NewJSONLogger(io.Discard), nil, nil, nil, nil, func(e startup.Event) { events = append(events, e) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,6 +148,25 @@ func TestNewSessionRepairsCorruptIndex(t *testing.T) {
 	}
 	if _, ok := idx.VectorRefFor(vector.SourceMemoryNote, note.ID); !ok {
 		t.Fatal("startup recovery omitted note")
+	}
+	var sawRebuild, sawCheck bool
+	for _, event := range events {
+		if event == (startup.Event{Phase: "rebuild", State: "success", Done: 1, Total: 1}) {
+			sawRebuild = true
+		}
+		if event.Phase == "checking" && event.State == "start" {
+			sawCheck = true
+		}
+	}
+	if !sawRebuild || !sawCheck {
+		t.Fatalf("startup progress missing rebuild: %#v", events)
+	}
+	before := len(events)
+	if err := s.syncVectorIndex(ctx, []*store.MemoryNote{note}); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != before {
+		t.Fatalf("later sync emitted startup progress: %#v", events[before:])
 	}
 }
 
@@ -171,7 +192,8 @@ func TestNewSessionRepairsIncompleteIndex(t *testing.T) {
 	if err := idx.Flush(); err != nil {
 		t.Fatal(err)
 	}
-	s, err := NewSession(ctx, "p", "p", "system", seed.db, seed.convRepo, seed.msgRepo, repo, adapter, nil, observe.NewJSONLogger(io.Discard), nil, nil, nil, nil)
+	var events []startup.Event
+	s, err := NewSession(ctx, "p", "p", "system", seed.db, seed.convRepo, seed.msgRepo, repo, adapter, nil, observe.NewJSONLogger(io.Discard), nil, nil, nil, nil, func(e startup.Event) { events = append(events, e) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,6 +206,15 @@ func TestNewSessionRepairsIncompleteIndex(t *testing.T) {
 		if _, ok := idx.VectorRefFor(vector.SourceMemoryNote, id); !ok {
 			t.Errorf("startup recovery omitted %s", id)
 		}
+	}
+	var sawSync bool
+	for _, event := range events {
+		if event == (startup.Event{Phase: "sync", State: "success", Done: 1, Total: 1}) {
+			sawSync = true
+		}
+	}
+	if !sawSync {
+		t.Fatalf("missing startup sync progress: %#v", events)
 	}
 }
 
@@ -215,5 +246,21 @@ func TestSyncVectorIndexRebuildUpdatesStaleManifest(t *testing.T) {
 	entries, err := store.NewVectorManifestRepo(s.db).ListEntriesVec(ctx, "p")
 	if err != nil || len(entries) != 1 || entries[0].ChunkHash != vector.ContentHash("new") {
 		t.Fatalf("manifest after rebuild = %#v, %v; want updated hash", entries, err)
+	}
+}
+
+func TestStartupSyncReportsEarlyFailure(t *testing.T) {
+	s, _ := newSaveNoteTestSession(t, &recoveryAdapter{}, false, nil)
+	path := filepath.Join(t.TempDir(), "memory.vec")
+	s.vectorIndexPath = path
+	s.vectorIndex = vector.NewFileIndex(path, vecfile.NewBinaryCodec(), nil)
+	s.embeddingModel = "embed"
+	if err := s.db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var events []startup.Event
+	err := s.syncVectorIndex(context.Background(), nil, func(e startup.Event) { events = append(events, e) })
+	if err == nil || len(events) == 0 || events[len(events)-1].State != "failure" {
+		t.Fatalf("sync = %v, events = %#v; want failure progress", err, events)
 	}
 }

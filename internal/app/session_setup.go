@@ -9,6 +9,7 @@ import (
 	chatpkg "noto/internal/chat"
 	"noto/internal/observe"
 	"noto/internal/provider"
+	"noto/internal/startup"
 	"noto/internal/store"
 )
 
@@ -19,6 +20,7 @@ type sessionCallbacks struct {
 	OnNotesSaving   chatpkg.NotesSavingCallback
 	OnContextStatus chatpkg.ContextStatusCallback
 	OnStats         func(provider.Stats)
+	OnStartup       startup.Reporter
 }
 
 // newConfiguredSession wires the shared profile-scoped chat session. Callers
@@ -81,6 +83,7 @@ func newConfiguredSession(
 		callbacks.OnNotesSaving,
 		callbacks.OnContextStatus,
 		callbacks.OnStats,
+		callbacks.OnStartup,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("app: create chat session: %w", err)

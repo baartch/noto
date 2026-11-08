@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"noto/internal/provider"
+	"noto/internal/startup"
 )
 
 // NoteProvider is the minimal interface the Syncer needs from the store.
@@ -51,6 +52,13 @@ type Syncer struct {
 	embeddingModel string
 	embedder       Embedder
 	manifest       ManifestEntryRepo
+	progress       startup.Reporter
+}
+
+// WithProgress configures startup progress reporting.
+func (s *Syncer) WithProgress(report startup.Reporter) *Syncer {
+	s.progress = report
+	return s
 }
 
 // NewSyncer creates a Syncer for the given profile.
@@ -66,7 +74,16 @@ func (s *Syncer) WithManifest(manifest ManifestEntryRepo) *Syncer {
 
 // SyncNotes upserts the given notes into the vector index.
 // If metadata already exists for a note with matching content hash, reuses the embedding.
-func (s *Syncer) SyncNotes(ctx context.Context, notes []MemoryNoteRecord) error {
+func (s *Syncer) SyncNotes(ctx context.Context, notes []MemoryNoteRecord) (resultErr error) {
+	event := startup.Event{Phase: "sync", State: "start", Total: len(notes)}
+	s.progress.Send(event)
+	defer func() {
+		event.State = "success"
+		if resultErr != nil {
+			event.State = "failure"
+		}
+		s.progress.Send(event)
+	}()
 	// Load existing metadata if available to avoid re-embedding
 	var existingMetadata map[string]*ManifestEntry
 	if s.manifest != nil {
@@ -149,6 +166,9 @@ func (s *Syncer) SyncNotes(ctx context.Context, notes []MemoryNoteRecord) error 
 				VectorRef:      entry.VectorRef,
 			})
 		}
+		event.Done++
+		event.State = "update"
+		s.progress.Send(event)
 	}
 	return s.index.Flush()
 }

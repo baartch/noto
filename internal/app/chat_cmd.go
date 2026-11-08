@@ -18,6 +18,7 @@ import (
 	profilepkg "noto/internal/profile"
 	"noto/internal/provider"
 	"noto/internal/security"
+	"noto/internal/startup"
 	"noto/internal/store"
 	"noto/internal/tui"
 )
@@ -147,27 +148,31 @@ func runChat(cmd *cobra.Command, _ []string) error {
 		systemPrompt, bootstrapWarning := loadSystemPrompt(ctx, profileDB, activeProfile)
 		promptBootstrapWarning = promptBootstrapWarning || bootstrapWarning
 
-		sess, err = newConfiguredSession(ctx, profileDB, activeProfile, systemPrompt, providerCfg, decryptedKey, sessionCallbacks{
-			OnNotes: func(saved, updated int) {
-				if prog != nil {
-					prog.Send(tui.NotesSaved(saved, updated))
-				}
-			},
-			OnNotesSaving: func() {
-				if prog != nil {
-					prog.Send(tui.NotesSaving())
-				}
-			},
-			OnContextStatus: func(status string) {
-				if prog != nil {
-					prog.Send(tui.CacheStatusUpdated(status))
-				}
-			},
-			OnStats: func(stats provider.Stats) {
-				if prog != nil {
-					prog.Send(tui.StatsUpdated(stats.Format()))
-				}
-			},
+		err = withStartupProgress(cmd.ErrOrStderr(), func(report startup.Reporter) error {
+			sess, err = newConfiguredSession(ctx, profileDB, activeProfile, systemPrompt, providerCfg, decryptedKey, sessionCallbacks{
+				OnStartup: report,
+				OnNotes: func(saved, updated int) {
+					if prog != nil {
+						prog.Send(tui.NotesSaved(saved, updated))
+					}
+				},
+				OnNotesSaving: func() {
+					if prog != nil {
+						prog.Send(tui.NotesSaving())
+					}
+				},
+				OnContextStatus: func(status string) {
+					if prog != nil {
+						prog.Send(tui.CacheStatusUpdated(status))
+					}
+				},
+				OnStats: func(stats provider.Stats) {
+					if prog != nil {
+						prog.Send(tui.StatsUpdated(stats.Format()))
+					}
+				},
+			})
+			return err
 		})
 		if err != nil {
 			return fmt.Errorf("chat: start session: %w", err)
