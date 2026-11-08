@@ -8,6 +8,11 @@ import (
 	"noto/internal/store"
 )
 
+func newTestSession(t *testing.T) *Session {
+	t.Helper()
+	return &Session{}
+}
+
 func TestSessionPendingNotesSnapshot(t *testing.T) {
 	s := &Session{}
 	if got := s.PendingNotes(); got != 0 {
@@ -54,5 +59,20 @@ func TestMemoryExtractionInputExcludesAssistantWhenReferenceInfluenced(t *testin
 	ids, user, assistant = memoryExtractionInput("user-id", "assistant-id", "user", "ordinary assistant", false)
 	if !reflect.DeepEqual(ids, []string{"user-id", "assistant-id"}) || user != "user" || assistant != "ordinary assistant" {
 		t.Fatalf("ordinary extraction input = %#v, %q, %q", ids, user, assistant)
+	}
+}
+
+func TestSession_ExtractorEligibilityDefaultsFalse(t *testing.T) {
+	s := newTestSession(t)
+	if s.ExtractorEligibleActive() {
+		t.Fatal("default eligibility must be false (unknown = ineligible)")
+	}
+	s.SetExtractorEligible(true)
+	if !s.ExtractorEligibleActive() {
+		t.Fatal("SetExtractorEligible(true) not observed")
+	}
+	s.SetExtractorEligible(false)
+	if s.ExtractorEligibleActive() {
+		t.Fatal("SetExtractorEligible(false) not observed")
 	}
 }

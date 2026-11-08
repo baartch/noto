@@ -114,6 +114,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 	activeModel := ""
 	extractorModel := ""
 	extractorFallback := false
+	extractorIneligible := true
 	cacheStatus := "ctx:n/a"
 	tokenStatus := "tokens: n/a"
 	inputHistory := loadInputHistory(ctx, profileDB, activeProfile.ID)
@@ -191,10 +192,13 @@ func runChat(cmd *cobra.Command, _ []string) error {
 		listModelsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 			return provider.ListModels(callCtx, adapterCfg)
 		}
+		execCtx.ListModels = listModelsFn
 		if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
 			if sess != nil {
-				applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
+				eligible := applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
+				extractorIneligible = !eligible
 				if prog != nil {
+					prog.Send(tui.ExtractorEligibilityUpdated(eligible))
 					prog.Send(tui.StatsUpdated(sess.Stats().Format()))
 				}
 			}
@@ -214,7 +218,17 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					extractorModel = modelID
 				}
 				if sess != nil {
-					applySessionModelMetadata(sess, models, modelID, extractorModel, extractorFallback)
+					eligible := applySessionModelMetadata(sess, models, modelID, extractorModel, extractorFallback)
+					if prog != nil {
+						prog.Send(tui.ExtractorEligibilityUpdated(eligible))
+					}
+				}
+			} else {
+				if sess != nil {
+					sess.SetExtractorEligible(false)
+				}
+				if prog != nil {
+					prog.Send(tui.ExtractorEligibilityUpdated(false))
 				}
 			}
 			return nil
@@ -251,7 +265,17 @@ func runChat(cmd *cobra.Command, _ []string) error {
 				}
 			}
 			if models, err := provider.ListModels(ctx, adapterCfg); err == nil && sess != nil {
-				applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
+				eligible := applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
+				if prog != nil {
+					prog.Send(tui.ExtractorEligibilityUpdated(eligible))
+				}
+			} else {
+				if sess != nil {
+					sess.SetExtractorEligible(false)
+				}
+				if prog != nil {
+					prog.Send(tui.ExtractorEligibilityUpdated(false))
+				}
 			}
 			return nil
 		}
@@ -292,6 +316,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			providerFn = nil
 			listModelsFn = nil
 			listEmbeddingsFn = nil
+			execCtx.ListModels = nil
 			modelSelectedFn = func(modelID string) error { return nil }
 			embeddingModelSelectedFn = func(modelID string) error { return nil }
 			extractorModelSelectedFn = func(modelID string) error { return nil }
@@ -384,12 +409,21 @@ func runChat(cmd *cobra.Command, _ []string) error {
 				listModelsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
 					return provider.ListModels(callCtx, adapterCfg)
 				}
+				execCtx.ListModels = listModelsFn
 				if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
 					if sess != nil {
-						applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
+						eligible := applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
 						if prog != nil {
+							prog.Send(tui.ExtractorEligibilityUpdated(eligible))
 							prog.Send(tui.StatsUpdated(sess.Stats().Format()))
 						}
+					}
+				} else {
+					if sess != nil {
+						sess.SetExtractorEligible(false)
+					}
+					if prog != nil {
+						prog.Send(tui.ExtractorEligibilityUpdated(false))
 					}
 				}
 				listEmbeddingsFn = func(callCtx context.Context) ([]provider.ModelInfo, error) {
@@ -407,7 +441,17 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					}
 					if models, err := provider.ListModels(ctx, adapterCfg); err == nil {
 						if sess != nil {
-							applySessionModelMetadata(sess, models, modelID, extractorModel, extractorFallback)
+							eligible := applySessionModelMetadata(sess, models, modelID, extractorModel, extractorFallback)
+							if prog != nil {
+								prog.Send(tui.ExtractorEligibilityUpdated(eligible))
+							}
+						}
+					} else {
+						if sess != nil {
+							sess.SetExtractorEligible(false)
+						}
+						if prog != nil {
+							prog.Send(tui.ExtractorEligibilityUpdated(false))
 						}
 					}
 					return nil
@@ -444,9 +488,27 @@ func runChat(cmd *cobra.Command, _ []string) error {
 						}
 					}
 					if models, err := provider.ListModels(ctx, adapterCfg); err == nil && sess != nil {
-						applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
+						eligible := applySessionModelMetadata(sess, models, activeModel, extractorModel, extractorFallback)
+						if prog != nil {
+							prog.Send(tui.ExtractorEligibilityUpdated(eligible))
+						}
+					} else {
+						if sess != nil {
+							sess.SetExtractorEligible(false)
+						}
+						if prog != nil {
+							prog.Send(tui.ExtractorEligibilityUpdated(false))
+						}
 					}
 					return nil
+				}
+			}
+
+			if providerCfg == nil || decryptedKey == "" {
+				// No provider on this profile: fresh session defaults ineligible;
+				// surface it so the footer warns instead of silently guessing.
+				if prog != nil {
+					prog.Send(tui.ExtractorEligibilityUpdated(false))
 				}
 			}
 
@@ -484,6 +546,7 @@ func runChat(cmd *cobra.Command, _ []string) error {
 		providerCfg == nil || decryptedKey == "",
 	)
 	m.SetStartupConversationHistory(startupMessages, startupHistoryErr)
+	m.SetExtractorIneligible(extractorIneligible)
 	prog = tea.NewProgram(m)
 	if _, runErr := prog.Run(); runErr != nil {
 		return fmt.Errorf("chat: TUI error: %w", runErr)
@@ -584,7 +647,25 @@ func resolveSessionModelMetadata(models []provider.ModelInfo, activeModel, extra
 	return mainContext, referenceContext, supportsTools, activeFound
 }
 
-func applySessionModelMetadata(sess *chatpkg.Session, models []provider.ModelInfo, activeModel, extractorModel string, extractorFallback bool) {
+// resolveExtractorEligibility reports whether the effective extractor model
+// supports structured outputs. Unknown or unlisted models are ineligible.
+func resolveExtractorEligibility(models []provider.ModelInfo, activeModel, extractorModel string, extractorFallback bool) bool {
+	effective := extractorModel
+	if extractorFallback {
+		effective = activeModel
+	}
+	if effective == "" {
+		return false
+	}
+	for _, model := range models {
+		if model.ID == effective {
+			return model.SupportsStructuredOutputs
+		}
+	}
+	return false
+}
+
+func applySessionModelMetadata(sess *chatpkg.Session, models []provider.ModelInfo, activeModel, extractorModel string, extractorFallback bool) (extractorEligible bool) {
 	mainContext, referenceContext, supportsTools, activeFound := resolveSessionModelMetadata(models, activeModel, extractorModel, extractorFallback)
 	if mainContext > 0 {
 		sess.SetModelContextMax(mainContext)
@@ -595,4 +676,7 @@ func applySessionModelMetadata(sess *chatpkg.Session, models []provider.ModelInf
 	if activeFound {
 		sess.SetToolsEnabled(supportsTools)
 	}
+	extractorEligible = resolveExtractorEligibility(models, activeModel, extractorModel, extractorFallback)
+	sess.SetExtractorEligible(extractorEligible)
+	return extractorEligible
 }

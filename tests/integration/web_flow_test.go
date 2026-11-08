@@ -243,7 +243,7 @@ func newWebIntegrationProvider(t *testing.T, blockExtraction bool) *webIntegrati
 	stub.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/models" {
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"data":[{"id":"chat-model","context_length":8192,"supported_parameters":[]}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"id":"chat-model","context_length":8192,"supported_parameters":["structured_outputs"]}]}`))
 			return
 		}
 		if r.Method != http.MethodPost || r.URL.Path != "/chat/completions" {

@@ -51,6 +51,9 @@ func (m *Model) renderFooter() string {
 	if m.extractorFallback {
 		leftParts = append(leftParts, yellow.Render("Extractor model missing — using main model."))
 	}
+	if m.extractorIneligible {
+		leftParts = append(leftParts, yellow.Render("Extractor model lacks structured outputs — extraction paused."))
+	}
 	if m.embeddingModelMissing {
 		leftParts = append(leftParts, yellow.Render("Embeddings model missing — memory disabled."))
 	}

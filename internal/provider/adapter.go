@@ -46,6 +46,13 @@ type ToolDefinition struct {
 	Parameters  map[string]any
 }
 
+// ResponseFormat requests provider-enforced structured output via json_schema.
+type ResponseFormat struct {
+	Name   string
+	Strict bool
+	Schema map[string]any
+}
+
 // ToolCall is a normalized tool invocation emitted by the model.
 type ToolCall struct {
 	ID        string
@@ -56,11 +63,12 @@ type ToolCall struct {
 
 // CompletionRequest is the normalized request payload sent to a provider.
 type CompletionRequest struct {
-	Messages    []Message
-	Model       string
-	MaxTokens   int
-	Temperature float64
-	Tools       []ToolDefinition
+	Messages       []Message
+	Model          string
+	MaxTokens      int
+	Temperature    float64
+	Tools          []ToolDefinition
+	ResponseFormat *ResponseFormat
 }
 
 // CompletionResponse is the normalized response from a provider.

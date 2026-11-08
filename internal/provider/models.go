@@ -14,12 +14,13 @@ import (
 
 // ModelInfo holds metadata about a single model returned by the provider.
 type ModelInfo struct {
-	ID                 string
-	OwnedBy            string
-	ContextLength      int
-	TopProviderContext int
-	Pricing            ModelPricing
-	ToolSupport        ToolSupport
+	ID                        string
+	OwnedBy                   string
+	ContextLength             int
+	TopProviderContext        int
+	Pricing                   ModelPricing
+	ToolSupport               ToolSupport
+	SupportsStructuredOutputs bool
 }
 
 // ListModels fetches available models from the provider's /models endpoint.
@@ -85,6 +86,7 @@ func ListModels(ctx context.Context, cfg Config) ([]ModelInfo, error) {
 	models := make([]ModelInfo, 0, len(result.Data))
 	for _, m := range result.Data {
 		supportsTools := slices.Contains(m.SupportedParameters, "tools")
+		supportsStructured := slices.Contains(m.SupportedParameters, "structured_outputs")
 		models = append(models, ModelInfo{
 			ID:                 m.ID,
 			OwnedBy:            m.OwnedBy,
@@ -100,7 +102,8 @@ func ListModels(ctx context.Context, cfg Config) ([]ModelInfo, error) {
 				InputCacheRead:    m.Pricing.InputCacheRead,
 				InputCacheWrite:   m.Pricing.InputCacheWrite,
 			},
-			ToolSupport: ToolSupport{SupportsTools: supportsTools},
+			ToolSupport:               ToolSupport{SupportsTools: supportsTools},
+			SupportsStructuredOutputs: supportsStructured,
 		})
 	}
 	sort.Slice(models, func(i, j int) bool {

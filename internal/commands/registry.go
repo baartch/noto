@@ -1,11 +1,13 @@
 package commands
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
+	"noto/internal/provider"
 	"noto/internal/store"
 )
 
@@ -73,6 +75,10 @@ type ExecContext struct {
 
 	// OnPromptChanged is called after a prompt edit to invalidate caches.
 	OnPromptChanged func(profileSlug string) error
+
+	// ListModels fetches the provider's model list, if available in this
+	// execution context. Commands use it to validate model capabilities.
+	ListModels func(ctx context.Context) ([]provider.ModelInfo, error)
 }
 
 // Registry holds all registered commands and provides lookup and listing operations.

@@ -9,6 +9,8 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+
+	"noto/internal/provider"
 )
 
 // openPicker initializes the picker overlay and fires the async data fetch.
@@ -68,8 +70,19 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 				if err != nil {
 					return modelsLoadedMsg{err: err}
 				}
-				items := make([]pickerItem, len(models))
-				for i, mi := range models {
+				// Structured-outputs-only extractor picker: filter out
+				// ineligible models; none eligible → picker error, no items.
+				eligible := make([]provider.ModelInfo, 0, len(models))
+				for _, mi := range models {
+					if mi.SupportsStructuredOutputs {
+						eligible = append(eligible, mi)
+					}
+				}
+				if len(eligible) == 0 {
+					return modelsLoadedMsg{err: errors.New("no models support structured outputs on this endpoint")}
+				}
+				items := make([]pickerItem, len(eligible))
+				for i, mi := range eligible {
 					items[i] = pickerItem{Value: mi.ID, Active: mi.ID == current}
 				}
 				return modelsLoadedMsg{items: items}
