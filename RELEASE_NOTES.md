@@ -1,5 +1,14 @@
 # Release notes
 
+## 0.15.0
+
+November 8, 2026
+
+- Require structured-output support for automatic note extraction, with extractor model validation and eligibility warnings
+- Show startup progress while indexing
+- Fix recovery from corrupt vector indexes
+- Restore the missing context cache table
+
 ## 0.14.0
 
 October 24, 2026
