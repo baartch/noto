@@ -48,7 +48,7 @@ func memoryEditHandler(ctx *ExecContext, args []string) error {
 	if err != nil {
 		return err
 	}
-	db, err := store.OpenProfile(path)
+	db, err := store.OpenProfileLogged(path)
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func memoryListHandler(ctx *ExecContext, _ []string) error {
 		if err != nil {
 			return err
 		}
-		opened, err := store.OpenProfile(path)
+		opened, err := store.OpenProfileLogged(path)
 		if err != nil {
 			return err
 		}

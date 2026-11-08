@@ -44,7 +44,7 @@ func modelExtractorHandler(ctx *ExecContext, args []string) error {
 	if err != nil {
 		return err
 	}
-	db, err := store.OpenProfile(path)
+	db, err := store.OpenProfileLogged(path)
 	if err != nil {
 		return err
 	}
