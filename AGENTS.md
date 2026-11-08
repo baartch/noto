@@ -41,16 +41,9 @@ tests/
 
 Go 1.26+: Follow standard conventions
 
-<!-- MANUAL ADDITIONS START -->
-<!-- MANUAL ADDITIONS END -->
+## Tools and Utilities
 
-<!-- SPECKIT START -->
-
-For additional context about technologies to be used, project structure,
-shell commands, and other important information, read:
-
-- `specs/005-memory-context/plan.md`
-<!-- SPECKIT END -->
+USE LEAN-CTX FOR ALL FILE READS, TOOL CALLS, AND BASH CALLS!
 
 <!-- lean-ctx -->
 ## lean-ctx
