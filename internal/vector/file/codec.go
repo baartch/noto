@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 )
 
 // Magic identifies the vector file format version.
@@ -192,9 +193,15 @@ func (c *BinaryCodec) ReadGraph(r io.Reader) ([]byte, error) {
 	if size == 0 {
 		return nil, nil
 	}
-	buf := make([]byte, size)
-	if _, err := io.ReadFull(r, buf); err != nil {
+	if size > math.MaxInt64 {
+		return nil, errors.New("vector: invalid graph size")
+	}
+	buf, err := io.ReadAll(io.LimitReader(r, int64(size)))
+	if err != nil {
 		return nil, fmt.Errorf("vector: read graph: %w", err)
+	}
+	if uint64(len(buf)) != size {
+		return nil, fmt.Errorf("vector: read graph: %w", io.ErrUnexpectedEOF)
 	}
 	return buf, nil
 }
@@ -271,9 +278,12 @@ func readString(r io.Reader) (string, error) {
 	if size == 0 {
 		return "", nil
 	}
-	buf := make([]byte, size)
-	if _, err := io.ReadFull(r, buf); err != nil {
+	buf, err := io.ReadAll(io.LimitReader(r, int64(size)))
+	if err != nil {
 		return "", fmt.Errorf("vector: read string: %w", err)
+	}
+	if uint32(len(buf)) != size {
+		return "", fmt.Errorf("vector: read string: %w", io.ErrUnexpectedEOF)
 	}
 	return string(buf), nil
 }

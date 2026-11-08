@@ -42,8 +42,25 @@ func (g *SimpleGraph) Insert(id string, vector []float32) error {
 	if len(vector) != g.Dim {
 		return errors.New("hnsw: dim mismatch")
 	}
+	for i := range g.Nodes {
+		if g.Nodes[i].ID == id {
+			g.Nodes[i].Vector = vector
+			return nil
+		}
+	}
 	g.Nodes = append(g.Nodes, Node{ID: id, Vector: vector})
 	return nil
+}
+
+// Delete removes every node for an index entry.
+func (g *SimpleGraph) Delete(id string) {
+	nodes := g.Nodes[:0]
+	for _, node := range g.Nodes {
+		if node.ID != id {
+			nodes = append(nodes, node)
+		}
+	}
+	g.Nodes = nodes
 }
 
 // Search performs a linear cosine search (placeholder for HNSW).
@@ -86,6 +103,8 @@ func (g *SimpleGraph) Serialize() ([]byte, error) {
 // Deserialize loads the graph from bytes.
 func (g *SimpleGraph) Deserialize(data []byte) error {
 	if len(data) == 0 {
+		g.Dim = 0
+		g.Nodes = nil
 		return nil
 	}
 	if err := gob.NewDecoder(bytes.NewReader(data)).Decode(g); err != nil {

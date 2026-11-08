@@ -96,7 +96,7 @@ func (s *Syncer) SyncNotes(ctx context.Context, notes []MemoryNoteRecord) error 
 		// If memory.vec was deleted/corrupted, metadata survives in SQLite but
 		// the vector data is gone — we must re-embed.
 		hasVector := false
-		if existing, ok := existingMetadata[note.ID]; ok && existing.ChunkHash == chunkHash {
+		if existing, ok := existingMetadata[note.ID]; ok && existing.ChunkHash == chunkHash && existing.EmbeddingModel == s.embeddingModel {
 			if fileIndex, ok := s.index.(*FileIndex); ok {
 				_, hasVector = fileIndex.VectorRefFor(SourceMemoryNote, note.ID)
 			}
@@ -127,8 +127,10 @@ func (s *Syncer) SyncNotes(ctx context.Context, notes []MemoryNoteRecord) error 
 			entry.EmbeddingDim = len(resp.Embedding)
 		}
 
-		if err := s.index.Upsert(entry); err != nil {
-			return fmt.Errorf("vector: upsert index entry %s: %w", note.ID, err)
+		if !hasVector {
+			if err := s.index.Upsert(entry); err != nil {
+				return fmt.Errorf("vector: upsert index entry %s: %w", note.ID, err)
+			}
 		}
 		if fileIndex, ok := s.index.(*FileIndex); ok {
 			if ref, ok := fileIndex.VectorRefFor(SourceMemoryNote, note.ID); ok {

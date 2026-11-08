@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -75,6 +74,7 @@ type Session struct {
 	referenceWarning    bool
 	adapterMu           sync.RWMutex
 	statsMu             sync.Mutex
+	vectorSyncMu        sync.Mutex
 
 	backupStop   chan struct{}
 	pendingNotes int
@@ -232,15 +232,33 @@ func NewSession(
 		s.startBackupTicker()
 	}
 
-	// Rebuild vector index from existing notes if the index file is missing.
-	// This avoids "index file not found" warnings on every turn and ensures
-	// the vector deduper works from the first extraction.
+	// Repair a missing or unreadable index before the first extraction.
 	if s.noteRepo != nil && s.embeddingModel != "" && s.adapter != nil && s.vectorIndex != nil {
-		if _, err := os.Stat(vecPath); os.IsNotExist(err) {
-			existingNotes, listErr := s.noteRepo.ListByProfile(ctx, profileID)
-			if listErr == nil && len(existingNotes) > 0 {
-				if syncErr := s.syncVectorIndex(ctx, existingNotes); syncErr != nil {
-					logger.Infof("initial vector index rebuild: %v", syncErr)
+		if index, ok := s.vectorIndex.(*vector.FileIndex); ok {
+			if err := index.Load(); err != nil {
+				if errors.Is(err, vector.ErrIndexNotFound) || errors.Is(err, vector.ErrIndexCorrupted) {
+					if syncErr := s.syncVectorIndex(ctx, nil); syncErr != nil {
+						logger.Infof("initial vector index rebuild: %v", syncErr)
+					}
+				} else {
+					logger.Infof("initial vector index load: %v", err)
+				}
+			} else {
+				notes, err := s.noteRepo.ListByProfile(ctx, profileID)
+				if err != nil {
+					logger.Infof("initial vector index check: %v", err)
+				} else {
+					missing := make([]*store.MemoryNote, 0)
+					for _, note := range notes {
+						if _, ok := index.VectorRefFor(vector.SourceMemoryNote, note.ID); !ok {
+							missing = append(missing, note)
+						}
+					}
+					if len(missing) > 0 {
+						if err := s.syncVectorIndex(ctx, missing); err != nil {
+							logger.Infof("initial vector index sync: %v", err)
+						}
+					}
 				}
 			}
 		}
@@ -452,6 +470,8 @@ func (s *Session) PendingNotes() int {
 
 // extractAsync runs note extraction and calls onNotes when done.
 func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote) error {
+	s.vectorSyncMu.Lock()
+	defer s.vectorSyncMu.Unlock()
 	if s.vectorIndex == nil || s.adapter == nil {
 		return nil
 	}
@@ -460,12 +480,13 @@ func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote
 		s.setMissingEmbedding(true)
 		return nil
 	}
+	needsRebuild := false
 	fileIndex, ok := s.vectorIndex.(*vector.FileIndex)
 	if ok {
 		fileIndex.WithProfile(s.profileID)
 		if err := fileIndex.Load(); err != nil {
 			if errors.Is(err, vector.ErrIndexNotFound) || errors.Is(err, vector.ErrIndexCorrupted) {
-				// No existing index; proceed to create a fresh one.
+				needsRebuild = true
 			} else {
 				return err
 			}
@@ -479,6 +500,18 @@ func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote
 	var embedder vector.Embedder
 	if s.adapter != nil {
 		embedder = &usageReportingEmbedder{embedder: s.adapter, onUsage: s.recordAuxUsage}
+	}
+	if needsRebuild {
+		allNotes, err := s.noteRepo.ListByProfile(ctx, s.profileID)
+		if err != nil {
+			return fmt.Errorf("vector: list notes for rebuild: %w", err)
+		}
+		records := make([]vector.MemoryNoteRecord, 0, len(allNotes))
+		for _, note := range allNotes {
+			records = append(records, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
+		}
+		return vector.NewRebuilder(manifestRepo, s.vectorIndex, s.profileID).
+			WithManifest(manifestRepo).WithEmbedder(embedder, embeddingModel).Rebuild(ctx, records)
 	}
 	syncer := vector.NewSyncer(s.vectorIndex, s.profileID, embedder, embeddingModel).WithManifest(manifestRepo)
 	records := make([]vector.MemoryNoteRecord, 0, len(notes))
@@ -512,6 +545,8 @@ func (s *Session) ensureVectorManifest(ctx context.Context, repo *store.VectorMa
 }
 
 func (s *Session) ensureVectorCompaction(ctx context.Context) error {
+	s.vectorSyncMu.Lock()
+	defer s.vectorSyncMu.Unlock()
 	if s.vectorIndex == nil || s.adapter == nil {
 		return nil
 	}

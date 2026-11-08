@@ -77,18 +77,6 @@ func (rb *Rebuilder) Rebuild(ctx context.Context, notes []MemoryNoteRecord) erro
 			Vector:         resp.Embedding,
 		}
 		entries = append(entries, entry)
-		if rb.manifestRepo != nil {
-			_ = rb.manifestRepo.UpsertEntry(ctx, &ManifestEntry{
-				ID:             entry.ID,
-				ProfileID:      entry.ProfileID,
-				SourceType:     entry.SourceType,
-				SourceID:       entry.SourceID,
-				ChunkHash:      entry.ChunkHash,
-				EmbeddingModel: entry.EmbeddingModel,
-				EmbeddingDim:   entry.EmbeddingDim,
-				VectorRef:      entry.VectorRef,
-			})
-		}
 	}
 
 	if err := rb.index.Rebuild(entries); err != nil {
@@ -98,6 +86,21 @@ func (rb *Rebuilder) Rebuild(ctx context.Context, notes []MemoryNoteRecord) erro
 	if err := rb.index.Flush(); err != nil {
 		_ = rb.manifestSetter.SetManifestStatusStr(ctx, rb.profileID, string(ManifestFailed))
 		return fmt.Errorf("vector: flush after rebuild: %w", err)
+	}
+	if rb.manifestRepo != nil {
+		for _, entry := range entries {
+			if index, ok := rb.index.(*FileIndex); ok {
+				entry.VectorRef, _ = index.VectorRefFor(entry.SourceType, entry.SourceID)
+			}
+			if err := rb.manifestRepo.UpsertEntry(ctx, &ManifestEntry{
+				ID: entry.ID, ProfileID: entry.ProfileID, SourceType: entry.SourceType,
+				SourceID: entry.SourceID, ChunkHash: entry.ChunkHash,
+				EmbeddingModel: entry.EmbeddingModel, EmbeddingDim: entry.EmbeddingDim, VectorRef: entry.VectorRef,
+			}); err != nil {
+				_ = rb.manifestSetter.SetManifestStatusStr(ctx, rb.profileID, string(ManifestFailed))
+				return fmt.Errorf("vector: update manifest for %s: %w", entry.SourceID, err)
+			}
+		}
 	}
 
 	_ = rb.manifestSetter.SetManifestStatusStr(ctx, rb.profileID, string(ManifestReady))

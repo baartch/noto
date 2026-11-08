@@ -178,6 +178,15 @@ func (r *VectorManifestRepo) UpsertVectorEntry(ctx context.Context, e *VectorEnt
 			embedding_dim   = excluded.embedding_dim,
 			vector_ref      = excluded.vector_ref,
 			updated_at      = excluded.updated_at
+		ON CONFLICT(id) DO UPDATE SET
+			profile_id      = excluded.profile_id,
+			source_type     = excluded.source_type,
+			source_id       = excluded.source_id,
+			chunk_hash      = excluded.chunk_hash,
+			embedding_model = excluded.embedding_model,
+			embedding_dim   = excluded.embedding_dim,
+			vector_ref      = excluded.vector_ref,
+			updated_at      = excluded.updated_at
 	`,
 		e.ID, e.ProfileID, e.SourceType, e.SourceID, e.ChunkHash,
 		e.EmbeddingModel, e.EmbeddingDim, e.VectorRef, time.Now().UTC(),

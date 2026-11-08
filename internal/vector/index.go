@@ -105,6 +105,7 @@ type FileIndex struct {
 	embeddingModel string
 	embeddingDim   int
 	loaded         bool
+	dirty          bool
 	profileID      string
 }
 
@@ -137,6 +138,9 @@ func (f *FileIndex) Load() error {
 }
 
 func (f *FileIndex) load() error {
+	if f.dirty {
+		return nil
+	}
 	if f.codec == nil {
 		return errors.New("vector: codec not configured")
 	}
@@ -153,26 +157,45 @@ func (f *FileIndex) load() error {
 
 	header, err := f.codec.ReadHeader(file)
 	if err != nil {
-		return ErrIndexCorrupted
+		return fmt.Errorf("%w: header: %v", ErrIndexCorrupted, err)
 	}
-	f.embeddingModel = header.EmbeddingModel
-	f.embeddingDim = int(header.EmbeddingDim)
+	info, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("vector: stat index: %w", err)
+	}
+	pos, err := file.Seek(0, 1)
+	if err != nil {
+		return fmt.Errorf("vector: seek index: %w", err)
+	}
+	remaining := uint64(info.Size() - pos)
+	count, dim := uint64(header.EntryCount), uint64(header.EmbeddingDim)
+	if (count > 0 && dim == 0) || (dim > 0 && count > remaining/4/dim) || (header.HasEntries && count > remaining/16) {
+		return fmt.Errorf("%w: invalid vector dimensions or entry count", ErrIndexCorrupted)
+	}
 
 	vectors, err := f.codec.ReadVectors(file, int(header.EntryCount), int(header.EmbeddingDim))
 	if err != nil {
-		return ErrIndexCorrupted
+		return fmt.Errorf("%w: vectors: %v", ErrIndexCorrupted, err)
 	}
-	f.vectors = reshapeVectors(vectors, int(header.EntryCount), int(header.EmbeddingDim))
+	loadedVectors := reshapeVectors(vectors, int(header.EntryCount), int(header.EmbeddingDim))
+	loadedEntries := make(map[string]Entry)
+	loadedRefs := make(map[string]string)
 
 	// V2 format includes entry metadata — restore entries and refToKey map
 	if header.HasEntries {
 		entries, err := f.codec.ReadEntries(file, int(header.EntryCount))
 		if err != nil {
-			return ErrIndexCorrupted
+			return fmt.Errorf("%w: entries: %v", ErrIndexCorrupted, err)
 		}
 		for _, entry := range entries {
 			key := entryKey(SourceType(entry.SourceType), entry.SourceID)
-			f.entries[key] = Entry{
+			idx, err := strconv.Atoi(entry.VectorRef)
+			_, duplicateKey := loadedEntries[key]
+			_, duplicateRef := loadedRefs[entry.VectorRef]
+			if err != nil || idx < 0 || idx >= len(loadedVectors) || duplicateKey || duplicateRef || entry.SourceType == "" || entry.SourceID == "" {
+				return fmt.Errorf("%w: invalid entry metadata", ErrIndexCorrupted)
+			}
+			loadedEntries[key] = Entry{
 				ID:         "ve-" + entry.SourceID,
 				SourceType: SourceType(entry.SourceType),
 				SourceID:   entry.SourceID,
@@ -180,20 +203,25 @@ func (f *FileIndex) load() error {
 				VectorRef:  entry.VectorRef,
 			}
 			if entry.VectorRef != "" {
-				f.refToKey[entry.VectorRef] = key
+				loadedRefs[entry.VectorRef] = key
 			}
 		}
 	}
 
 	graphBytes, err := f.codec.ReadGraph(file)
 	if err != nil {
-		return ErrIndexCorrupted
+		return fmt.Errorf("%w: graph: %v", ErrIndexCorrupted, err)
 	}
 	if f.graph != nil && len(graphBytes) > 0 {
 		if err := f.graph.Deserialize(graphBytes); err != nil {
-			return ErrIndexCorrupted
+			return fmt.Errorf("%w: graph: %v", ErrIndexCorrupted, err)
 		}
 	}
+	f.embeddingModel = header.EmbeddingModel
+	f.embeddingDim = int(header.EmbeddingDim)
+	f.vectors = loadedVectors
+	f.entries = loadedEntries
+	f.refToKey = loadedRefs
 	f.loaded = true
 	return nil
 }
@@ -222,6 +250,12 @@ func (f *FileIndex) upsert(entry Entry) error {
 	key := entryKey(entry.SourceType, entry.SourceID)
 	ref := entry.VectorRef
 	if ref == "" {
+		if existing, ok := f.entries[key]; ok {
+			ref = existing.VectorRef
+			entry.VectorRef = ref
+		}
+	}
+	if ref == "" {
 		ref = strconv.Itoa(len(f.vectors))
 		entry.VectorRef = ref
 		f.vectors = append(f.vectors, entry.Vector)
@@ -230,7 +264,7 @@ func (f *FileIndex) upsert(entry Entry) error {
 		if err != nil {
 			return fmt.Errorf("vector: invalid vector_ref: %w", err)
 		}
-		if idx >= len(f.vectors) {
+		if idx < 0 || idx >= len(f.vectors) {
 			return errors.New("vector: vector_ref out of range")
 		}
 		f.vectors[idx] = entry.Vector
@@ -240,6 +274,7 @@ func (f *FileIndex) upsert(entry Entry) error {
 	if f.graph != nil {
 		_ = f.graph.Insert(entry.ID, entry.Vector)
 	}
+	f.dirty = true
 	return nil
 }
 
@@ -260,6 +295,10 @@ func (f *FileIndex) delete(sourceType SourceType, sourceID string) error {
 	if entry.VectorRef != "" {
 		delete(f.refToKey, entry.VectorRef)
 	}
+	if graph, ok := f.graph.(interface{ Delete(string) }); ok {
+		graph.Delete(entry.ID)
+	}
+	f.dirty = true
 	return nil
 }
 
@@ -293,7 +332,7 @@ func (f *FileIndex) search(query []float32, k int) ([]SearchResult, error) {
 				entry := f.entries[key]
 				results = append(results, SearchResult{Entry: entry, Score: scores[i]})
 			}
-			if len(results) > 0 {
+			if len(results) >= min(k, len(f.entries)) {
 				return results, nil
 			}
 		}
@@ -308,12 +347,23 @@ func (f *FileIndex) Rebuild(entries []Entry) error {
 	return f.rebuild(entries)
 }
 
-func (f *FileIndex) rebuild(entries []Entry) error {
+func (f *FileIndex) rebuild(entries []Entry) (err error) {
+	defer func() {
+		if err != nil {
+			// A failed rebuild must not make a partial in-memory index appear valid.
+			f.dirty = false
+			f.loaded = false
+		}
+	}()
 	f.entries = make(map[string]Entry)
 	f.refToKey = make(map[string]string)
 	f.vectors = nil
+	f.embeddingDim = 0
+	f.embeddingModel = ""
 	if f.graph != nil {
-		_ = f.graph.Deserialize(nil)
+		if err := f.graph.Deserialize(nil); err != nil {
+			return fmt.Errorf("vector: reset graph: %w", err)
+		}
 	}
 	for _, entry := range entries {
 		if err := f.upsert(entry); err != nil {
@@ -346,12 +396,37 @@ func (f *FileIndex) flush() error {
 		return fmt.Errorf("vector: create index: %w", err)
 	}
 
-	flat := flattenVectors(f.vectors)
+	// The V2 header counts both vectors and metadata records. Compact orphaned
+	// vectors on disk so replacements and deletes cannot make those counts differ.
+	vectors := make([][]float32, 0, len(f.entries))
+	records := make([]vecfile.EntryRecord, 0, len(f.entries))
+	entries := make([]Entry, 0, len(f.entries))
+	for _, entry := range f.entries {
+		entries = append(entries, entry)
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		a, _ := strconv.Atoi(entries[i].VectorRef)
+		b, _ := strconv.Atoi(entries[j].VectorRef)
+		return a < b
+	})
+	for _, entry := range entries {
+		idx, err := strconv.Atoi(entry.VectorRef)
+		if err != nil || idx < 0 || idx >= len(f.vectors) {
+			_ = file.Close()
+			return fmt.Errorf("vector: invalid vector_ref for %s", entry.SourceID)
+		}
+		records = append(records, vecfile.EntryRecord{
+			SourceType: string(entry.SourceType), SourceID: entry.SourceID,
+			ChunkHash: entry.ChunkHash, VectorRef: strconv.Itoa(len(vectors)),
+		})
+		vectors = append(vectors, f.vectors[idx])
+	}
+	flat := flattenVectors(vectors)
 	header := vecfile.Header{
 		ProfileID:      f.profileID,
 		EmbeddingModel: f.embeddingModel,
 		EmbeddingDim:   uint32(f.embeddingDim),
-		EntryCount:     uint32(len(f.vectors)),
+		EntryCount:     uint32(len(vectors)),
 		HasEntries:     true,
 	}
 	if err := f.codec.WriteHeader(file, header); err != nil {
@@ -363,15 +438,6 @@ func (f *FileIndex) flush() error {
 		return fmt.Errorf("vector: write vectors: %w", err)
 	}
 	// Persist entry metadata so Load() can fully restore entries + refToKey
-	records := make([]vecfile.EntryRecord, 0, len(f.entries))
-	for _, entry := range f.entries {
-		records = append(records, vecfile.EntryRecord{
-			SourceType: string(entry.SourceType),
-			SourceID:   entry.SourceID,
-			ChunkHash:  entry.ChunkHash,
-			VectorRef:  entry.VectorRef,
-		})
-	}
 	if err := f.codec.WriteEntries(file, records); err != nil {
 		_ = file.Close()
 		return fmt.Errorf("vector: write entries: %w", err)
@@ -394,6 +460,8 @@ func (f *FileIndex) flush() error {
 	if err := os.Rename(tmp, f.path); err != nil {
 		return fmt.Errorf("vector: move index: %w", err)
 	}
+	f.loaded = true
+	f.dirty = false
 	return nil
 }
 
