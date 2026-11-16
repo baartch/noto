@@ -1,10 +1,13 @@
 package chat
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -16,6 +19,31 @@ import (
 	"noto/internal/provider"
 	"noto/internal/store"
 )
+
+func TestExtractionProviderFailureLogsStatusWithoutResponseBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "private provider response", http.StatusBadRequest)
+	}))
+	defer server.Close()
+	mainAdapter := &chatRecordingAdapter{responses: []*provider.CompletionResponse{{Content: "Reply"}}}
+	session, _ := newSaveNoteTestSession(t, mainAdapter, false, nil)
+	session.extractorAdapter = provider.NewOpenAICompatible(provider.Config{Endpoint: server.URL, Model: "extractor"})
+	session.SetExtractorEligible(true)
+	var logs bytes.Buffer
+	session.logger = observe.NewJSONLogger(&logs)
+	ctx := context.Background()
+	if _, err := session.Send(ctx, "Some new information"); err != nil {
+		t.Fatal(err)
+	}
+	session.Close(ctx)
+	output := logs.String()
+	if !strings.Contains(output, "memory extraction failed") || !strings.Contains(output, "status=400") {
+		t.Fatalf("logs missing extraction failure status: %s", output)
+	}
+	if strings.Contains(output, "private provider response") || strings.Contains(output, "has_new_info=false") {
+		t.Fatalf("logs expose provider body or misrepresent the failure: %s", output)
+	}
+}
 
 func newSaveNoteTestSession(t *testing.T, adapter provider.Adapter, toolsEnabled bool, onNotes NotesCallback) (*Session, *store.MemoryNoteRepo) {
 	t.Helper()

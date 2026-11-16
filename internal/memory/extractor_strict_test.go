@@ -2,6 +2,10 @@ package memory
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"testing"
 
@@ -13,11 +17,15 @@ type strictStubAdapter struct {
 	calls    int
 	lastReq  *provider.CompletionRequest
 	response string
+	err      error
 }
 
 func (s *strictStubAdapter) Complete(_ context.Context, req provider.CompletionRequest) (*provider.CompletionResponse, error) {
 	s.calls++
 	s.lastReq = &req
+	if s.err != nil {
+		return nil, s.err
+	}
 	return &provider.CompletionResponse{Content: s.response}, nil
 }
 func (s *strictStubAdapter) Embed(_ context.Context, _ provider.EmbeddingRequest) (*provider.EmbeddingResponse, error) {
@@ -77,6 +85,51 @@ func TestExtractorSendsResponseFormat(t *testing.T) {
 	}
 }
 
+func TestExtractorReportsProviderFailureInsteadOfNoNewInfo(t *testing.T) {
+	_, noteRepo := openSaveNoteTestDB(t)
+	providerErr := errors.New("provider failed")
+	adapter := &strictStubAdapter{err: providerErr}
+	hook := &captureReasonsHook{}
+	ex := NewExtractor(noteRepo, adapter, nil).WithLogHook(hook)
+	_, err := ex.ExtractTurn(context.Background(), strictTestProfileID, strictTestProfileSlug, "", nil, "user", "assistant")
+	if !errors.Is(err, providerErr) {
+		t.Fatalf("ExtractTurn error = %v, want provider failure", err)
+	}
+	if hook.sawReason("has_new_info=false") {
+		t.Fatal("provider failure was reported as no new information")
+	}
+}
+
+func TestExtractorWorksWithProviderThatDoesNotSupportTemperature(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request map[string]json.RawMessage
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if _, ok := request["temperature"]; ok {
+			http.Error(w, "no provider supports temperature", http.StatusNotFound)
+			return
+		}
+		if _, ok := request["response_format"]; !ok {
+			http.Error(w, "structured output required", http.StatusBadRequest)
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"{\"has_new_info\":true,\"confidence\":0.9,\"notes\":[{\"action\":\"add\",\"target_id\":\"\",\"category\":\"fact\",\"content\":\"Noto now has a web interface\",\"importance\":8}]}"}}]}`))
+	}))
+	defer server.Close()
+	_, repo := openSaveNoteTestDB(t)
+	adapter := provider.NewOpenAICompatible(provider.Config{Endpoint: server.URL, Model: "extractor"})
+	ex := NewExtractor(repo, adapter, nil)
+	result, err := ex.ExtractTurn(context.Background(), strictTestProfileID, strictTestProfileSlug, "", nil, "Noto now has a web interface", "That's useful.")
+	if err != nil {
+		t.Fatalf("ExtractTurn: %v", err)
+	}
+	if len(result.Notes) != 1 {
+		t.Fatalf("stored %d notes, want 1", len(result.Notes))
+	}
+}
+
 func TestExtractorRejectsFencedJSON(t *testing.T) {
 	_, noteRepo := openSaveNoteTestDB(t)
 	adapter := &strictStubAdapter{response: "```json\n" + `{"has_new_info":true,"confidence":0.9,"notes":[]}` + "\n```"}
@@ -91,5 +144,8 @@ func TestExtractorRejectsFencedJSON(t *testing.T) {
 	}
 	if !hook.sawReason("invalid json") {
 		t.Fatalf("expected 'invalid json' rejection, got %v", hook.reasons)
+	}
+	if hook.sawReason("has_new_info=false") {
+		t.Fatal("invalid JSON was reported as no new information")
 	}
 }
