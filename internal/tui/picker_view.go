@@ -120,6 +120,12 @@ func (m Model) openPicker(kind pickerKind, cmds []tea.Cmd) (tea.Model, tea.Cmd) 
 
 // updatePicker handles keypresses while the picker overlay is open.
 func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea.Cmd) {
+	if m.picker.selecting {
+		if key.Matches(msg, m.keys.quit) {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
 	//exhaustive:ignore
 	switch {
 	case msg.Key().Code == tea.KeyEsc:
@@ -148,6 +154,21 @@ func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea
 	case msg.Key().Code == tea.KeyEnter:
 		chosen := m.picker.selectedValue()
 		kind := m.pickerKind
+		if chosen != "" && (kind == pickerKindModel || kind == pickerKindExtractorModel) {
+			var selectModel func(string) error
+			if kind == pickerKindModel {
+				selectModel = m.modelSelected
+			} else {
+				selectModel = m.extractorModelSelected
+			}
+			if selectModel != nil {
+				m.picker.selecting = true
+				m.picker.loading = true
+				return m, func() tea.Msg {
+					return modelSelectionFinishedMsg{kind: kind, model: chosen, err: selectModel(chosen)}
+				}
+			}
+		}
 		m.picker = nil
 		m.input.SetValue("")
 		m.clearSuggestions()
@@ -160,32 +181,14 @@ func (m Model) updatePicker(msg tea.KeyPressMsg, cmds []tea.Cmd) (tea.Model, tea
 			return m, tea.Batch(cmds...)
 		}
 		switch kind {
-		case pickerKindModel:
-			if m.modelSelected != nil {
-				if err := m.modelSelected(chosen); err != nil {
-					m.err = err
-				} else {
-					m.activeModel = chosen
-					m.messages = append(m.messages, chatMessage{role: "command", content: "Model set to: " + chosen, timestamp: time.Now()})
-					m.syncViewport()
-				}
-			}
+		case pickerKindModel, pickerKindExtractorModel:
+			// A configured model callback was handled asynchronously above.
 		case pickerKindBackup:
 			if m.backupSelected != nil {
 				if err := m.backupSelected(chosen); err != nil {
 					m.err = err
 				} else {
 					m.messages = append(m.messages, chatMessage{role: "command", content: "Restored backup: " + chosen, timestamp: time.Now()})
-					m.syncViewport()
-				}
-			}
-		case pickerKindExtractorModel:
-			if m.extractorModelSelected != nil {
-				if err := m.extractorModelSelected(chosen); err != nil {
-					m.err = err
-				} else {
-					m.extractorModel = chosen
-					m.messages = append(m.messages, chatMessage{role: "command", content: "Extractor model set to: " + chosen, timestamp: time.Now()})
 					m.syncViewport()
 				}
 			}

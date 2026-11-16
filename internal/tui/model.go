@@ -191,6 +191,11 @@ type profileSwitchedMsg struct {
 }
 type profileSwitchFailedMsg struct{ err error }
 type extractorEligibilityUpdatedMsg struct{ eligible bool }
+type modelSelectionFinishedMsg struct {
+	kind  pickerKind
+	model string
+	err   error
+}
 type spinnerTickMsg struct{}
 
 // ---- picker kind ------------------------------------------------------------
@@ -934,13 +939,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// ---- picker items loaded ------------------------------------------------
 	case modelsLoadedMsg:
-		if m.picker != nil && (m.pickerKind == pickerKindModel || m.pickerKind == pickerKindExtractorModel || m.pickerKind == pickerKindEmbeddingsModel) {
+		if m.picker != nil && !m.picker.selecting && (m.pickerKind == pickerKindModel || m.pickerKind == pickerKindExtractorModel || m.pickerKind == pickerKindEmbeddingsModel) {
 			m.picker.loading = false
 			if msg.err != nil {
 				m.picker.err = msg.err
 			} else {
 				m.picker.setItems(msg.items)
 			}
+		}
+
+	case modelSelectionFinishedMsg:
+		m.picker = nil
+		m.input.SetValue("")
+		m.clearSuggestions()
+		if m.pickerFromSettings {
+			m.pickerFromSettings = false
+		} else {
+			cmds = append(cmds, m.input.Focus())
+		}
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			label := "Model set to: "
+			if msg.kind == pickerKindExtractorModel {
+				m.extractorModel = msg.model
+				label = "Extractor model set to: "
+			} else {
+				m.activeModel = msg.model
+			}
+			m.messages = append(m.messages, chatMessage{role: "command", content: label + msg.model, timestamp: time.Now()})
+			m.syncViewport()
 		}
 
 	case backupsLoadedMsg:
