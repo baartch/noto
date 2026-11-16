@@ -420,6 +420,12 @@ func TestChatToolDefinitionsIncludeSaveNote(t *testing.T) {
 	if saveNote == nil {
 		t.Fatalf("save_note missing from chatToolDefinitions(): %#v", defs)
 	}
+	description := strings.ToLower(saveNote.Description)
+	for _, instruction := range []string{"only when the user explicitly asks", "do not use proactively", "in any language"} {
+		if !strings.Contains(description, instruction) {
+			t.Errorf("save_note description missing %q: %q", instruction, saveNote.Description)
+		}
+	}
 	if !strings.Contains(strings.ToLower(saveNote.Description), "do not mention") {
 		t.Fatalf("save_note description lacks no-acknowledgment instruction: %q", saveNote.Description)
 	}
