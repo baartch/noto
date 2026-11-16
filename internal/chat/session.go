@@ -642,7 +642,11 @@ func (s *Session) extractAsync(userMsg, assistantMsg string, sourceIDs []string,
 	}
 	result, err := extractor.ExtractTurn(ctx, s.profileID, s.profileSlug, s.conversationID, sourceIDs, userMsg, assistantMsg)
 	if err != nil {
-		s.logger.Errorf("memory extraction failed (error type=%T)", err)
+		if statusErr, ok := errors.AsType[*provider.HTTPStatusError](err); ok {
+			s.logger.Errorf("memory extraction failed (provider status=%d)", statusErr.StatusCode)
+		} else {
+			s.logger.Errorf("memory extraction failed (error type=%T)", err)
+		}
 		if s.onNotes != nil {
 			s.onNotes(toolSaved, toolUpdated)
 		}

@@ -110,7 +110,13 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, profileSlug, con
 	if notes, err := e.noteRepo.ListByProfile(ctx, profileID); err == nil {
 		existing = notes
 	}
-	resp := e.llmExtract(ctx, profileSlug, userMsg, assistantMsg, existing)
+	resp, err := e.llmExtract(ctx, profileSlug, userMsg, assistantMsg, existing)
+	if err != nil {
+		return nil, fmt.Errorf("memory extraction: %w", err)
+	}
+	if resp == nil {
+		return &ExtractionResult{}, nil
+	}
 	if !resp.HasNewInfo || resp.Confidence < 0.6 || len(resp.Notes) == 0 {
 		var reason string
 		switch {
@@ -169,17 +175,16 @@ func (e *Extractor) ExtractTurn(ctx context.Context, profileID, profileSlug, con
 	return &ExtractionResult{Notes: notes, UpdatedNotes: updatedNotes, Updated: updated + updatedCount, Merged: mergedCount}, nil
 }
 
-// llmExtract calls the model and parses the JSON response. Never returns an error
-// — failures are silently dropped so a bad extraction never breaks the chat flow.
-func (e *Extractor) llmExtract(ctx context.Context, profileSlug, userMsg, assistantMsg string, existing []*store.MemoryNote) extractionResponse {
+// llmExtract calls the model and parses the JSON response. Invalid payloads are
+// logged and dropped; provider failures are returned to the background caller.
+func (e *Extractor) llmExtract(ctx context.Context, profileSlug, userMsg, assistantMsg string, existing []*store.MemoryNote) (*extractionResponse, error) {
 	template, _, err := config.ReadExtractorPromptFile(profileSlug)
 	if err != nil || strings.TrimSpace(template) == "" {
 		template = config.DefaultExtractorPromptTemplate
 	}
 	prompt := fmt.Sprintf(template, formatExistingNotes(existing), userMsg, assistantMsg)
 	resp, err := e.adapter.Complete(ctx, provider.CompletionRequest{
-		Messages:    []provider.Message{{Role: "user", Content: prompt}},
-		Temperature: 0.2,
+		Messages: []provider.Message{{Role: "user", Content: prompt}},
 		ResponseFormat: &provider.ResponseFormat{
 			Name:   "memory_extraction",
 			Strict: true,
@@ -187,7 +192,7 @@ func (e *Extractor) llmExtract(ctx context.Context, profileSlug, userMsg, assist
 		},
 	})
 	if err != nil {
-		return extractionResponse{}
+		return nil, err
 	}
 	if e.onUsage != nil {
 		e.onUsage(resp.Usage)
@@ -198,13 +203,13 @@ func (e *Extractor) llmExtract(ctx context.Context, profileSlug, userMsg, assist
 	var payload extractionResponse
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		e.logHook.ExtractionPayloadRejected("invalid json")
-		return extractionResponse{}
+		return nil, nil
 	}
 	if err := validateExtractionPayload(payload); err != nil {
 		e.logHook.ExtractionPayloadRejected(err.Error())
-		return extractionResponse{}
+		return nil, nil
 	}
-	return payload
+	return &payload, nil
 }
 
 func validateExtractionPayload(payload extractionResponse) error {

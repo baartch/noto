@@ -62,11 +62,12 @@ func (d pickerDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 
 // pickerState is the generic overlay picker used for model and profile selection.
 type pickerState struct {
-	title   string
-	list    list.Model
-	loading bool
-	err     error
-	width   int
+	title     string
+	list      list.Model
+	loading   bool
+	selecting bool
+	err       error
+	width     int
 }
 
 func newPickerState(title string, width int) *pickerState {

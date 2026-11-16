@@ -15,6 +15,17 @@ import (
 
 const defaultTimeout = 30 * time.Second
 
+// HTTPStatusError carries the status of a failed completion request. The body
+// may contain sensitive provider data and should not be included in logs.
+type HTTPStatusError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *HTTPStatusError) Error() string {
+	return fmt.Sprintf("provider: unexpected status %d: %s", e.StatusCode, e.Body)
+}
+
 // OpenAICompatible implements the Adapter interface for OpenAI-compatible APIs.
 type OpenAICompatible struct {
 	cfg    Config
@@ -248,7 +259,7 @@ func (a *OpenAICompatible) Complete(ctx context.Context, req CompletionRequest) 
 	}
 	if resp.StatusCode != http.StatusOK {
 		data, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("provider: unexpected status %d: %s", resp.StatusCode, string(data))
+		return nil, &HTTPStatusError{StatusCode: resp.StatusCode, Body: string(data)}
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
