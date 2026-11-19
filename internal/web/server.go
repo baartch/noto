@@ -14,7 +14,11 @@ import (
 )
 
 // NewHandler returns the same-origin API and embedded asset handler for one server origin.
-func NewHandler(service *Service, origin string) http.Handler {
+func NewHandler(service *Service, origin string, settingsBackends ...SettingsBackend) http.Handler {
+	var settingsBackend SettingsBackend
+	if len(settingsBackends) > 0 {
+		settingsBackend = settingsBackends[0]
+	}
 	expectedHost := ""
 	if parsed, err := url.Parse(origin); err == nil && parsed.Scheme == "http" && parsed.Hostname() == "127.0.0.1" && parsed.User == nil {
 		expectedHost = parsed.Host
@@ -42,6 +46,49 @@ func NewHandler(service *Service, origin string) http.Handler {
 				return
 			}
 			writeJSON(w, http.StatusOK, service.State())
+		case "/api/settings":
+			if r.Method != http.MethodGet {
+				writeMethodError(w, "GET")
+				return
+			}
+			if settingsBackend == nil {
+				writeAPIError(w, http.StatusServiceUnavailable, "settings_unavailable", "settings are unavailable")
+				return
+			}
+			profiles, err := settingsBackend.Profiles(r.Context())
+			if err != nil {
+				writeAPIError(w, http.StatusInternalServerError, "settings_unavailable", "settings are unavailable")
+				return
+			}
+			activeProfileSlug := ""
+			if service != nil {
+				activeProfileSlug = service.State().Profile.Slug
+			}
+			writeJSON(w, http.StatusOK, SettingsDTO{ActiveProfileSlug: activeProfileSlug, Profiles: profiles})
+		case "/api/settings/models":
+			if r.Method != http.MethodGet {
+				writeMethodError(w, "GET")
+				return
+			}
+			if settingsBackend == nil {
+				writeAPIError(w, http.StatusServiceUnavailable, "settings_unavailable", "settings are unavailable")
+				return
+			}
+			slug := r.URL.Query().Get("profile")
+			if slug == "" {
+				writeAPIError(w, http.StatusBadRequest, "invalid_profile", "profile is required")
+				return
+			}
+			result, err := settingsBackend.Models(r.Context(), slug)
+			if errors.Is(err, ErrSettingsProfileNotFound) {
+				writeAPIError(w, http.StatusNotFound, "profile_not_found", "profile was not found")
+				return
+			}
+			if err != nil {
+				writeAPIError(w, http.StatusBadGateway, "models_unavailable", "models are unavailable")
+				return
+			}
+			writeJSON(w, http.StatusOK, result)
 		case "/api/messages":
 			switch r.Method {
 			case http.MethodGet:

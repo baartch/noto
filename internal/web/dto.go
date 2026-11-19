@@ -14,6 +14,7 @@ type StateDTO struct {
 // ProfileDTO exposes only the profile label needed by the workspace.
 type ProfileDTO struct {
 	Name string `json:"name"`
+	Slug string `json:"slug"`
 }
 
 // MessageDTO is a sanitized, profile-scoped chat message for the browser.

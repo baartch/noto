@@ -99,6 +99,7 @@ func (s *Service) State() StateDTO {
 	state := StateDTO{Model: s.model, SetupRequired: s.setupRequired, Sending: sending}
 	if s.profile != nil {
 		state.Profile.Name = s.profile.Name
+		state.Profile.Slug = s.profile.Slug
 	}
 	if s.session != nil {
 		state.PendingNotes = s.session.PendingNotes()

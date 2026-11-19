@@ -133,8 +133,9 @@ func runWeb(cmd *cobra.Command, port int) error {
 		webSession = session
 	}
 	service := web.NewService(profileDB, activeProfile, webSession, activeModel, setupRequired)
+	settingsBackend := newWebSettingsBackend()
 	server := &http.Server{
-		Handler:           web.NewHandler(service, origin),
+		Handler:           web.NewHandler(service, origin, settingsBackend),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
