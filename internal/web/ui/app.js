@@ -36,6 +36,7 @@ const ui = {
 
 const state = {
 	profile: "",
+	profileSlug: "",
 	model: "",
 	setupRequired: true,
 	sending: false,
@@ -108,6 +109,7 @@ function showStatus(target, message, tone = "muted", action = null) {
 
 function renderState(serverState) {
 	state.profile = serverState.profile?.name || "Default profile";
+	state.profileSlug = serverState.profile?.slug || "";
 	state.model = serverState.model || "Provider not configured";
 	state.setupRequired = Boolean(serverState.setup_required);
 	state.sending = Boolean(serverState.sending);
@@ -119,7 +121,7 @@ function renderState(serverState) {
 }
 
 function updateSendControls() {
-	const disabled = state.setupRequired || state.sending;
+	const disabled = state.setupRequired || state.sending || !state.profileSlug;
 	ui.sendButton.disabled = disabled;
 	ui.messageInput.disabled = state.setupRequired;
 	ui.sendLabel.textContent = state.sending ? "Thinking…" : "Send";
@@ -408,7 +410,7 @@ async function pollMemoryExtraction() {
 }
 
 async function sendMessage() {
-	if (state.setupRequired || state.sending) return;
+	if (state.setupRequired || state.sending || !state.profileSlug) return;
 	const content = ui.messageInput.value;
 	if (!content.trim()) return;
 	ui.messageInput.value = "";
@@ -435,9 +437,9 @@ async function sendMessage() {
 		return api("/api/messages", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ request_id: attempt.requestID, content: attempt.content }),
+			body: JSON.stringify({ request_id: attempt.requestID, content: attempt.content, profile_slug: attempt.profileSlug }),
 		});
-	});
+	}, undefined, state.profileSlug);
 	state.sending = false;
 	state.sendAttempt = result.attempt;
 	saveSendAttempt(attemptStorage, result.attempt);

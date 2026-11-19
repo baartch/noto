@@ -78,9 +78,16 @@ func runWeb(cmd *cobra.Command, port int) error {
 		return fmt.Errorf("web: open profile database: %w", err)
 	}
 	var session *chatpkg.Session
+	var service *web.Service
 	skipDeferredCleanup := false
 	defer func() {
 		if skipDeferredCleanup {
+			return
+		}
+		if service != nil {
+			if closeErr := service.CloseRuntime(context.Background()); closeErr != nil {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "noto web: close profile runtime: %v\n", closeErr)
+			}
 			return
 		}
 		if session != nil {
@@ -132,7 +139,7 @@ func runWeb(cmd *cobra.Command, port int) error {
 	if session != nil {
 		webSession = session
 	}
-	service := web.NewService(profileDB, activeProfile, webSession, activeModel, setupRequired)
+	service = web.NewService(profileDB, activeProfile, webSession, activeModel, setupRequired)
 	settingsBackend := newWebSettingsBackend()
 	server := &http.Server{
 		Handler:           web.NewHandler(service, origin, settingsBackend),
@@ -157,21 +164,8 @@ func runWeb(cmd *cobra.Command, port int) error {
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelShutdown()
 	cleanupErr := cleanupWeb(shutdownCtx, server, service,
-		func(context.Context) error {
-			if session != nil {
-				session.Close(context.Background())
-				session = nil
-			}
-			return nil
-		},
-		func() error {
-			if profileDB == nil {
-				return nil
-			}
-			closeErr := profileDB.Close()
-			profileDB = nil
-			return closeErr
-		},
+		service.CloseRuntime,
+		nil,
 	)
 	if cleanupErr != nil {
 		skipDeferredCleanup = true

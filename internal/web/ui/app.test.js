@@ -36,9 +36,13 @@ test("submission clears the input and formats the pending bubble before the repl
 	};
 	globalThis.window = { sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} }, matchMedia: () => ({ matches: true }), addEventListener() {} };
 	let finishSend;
-	globalThis.fetch = async (url) => {
-		if (url === "/api/messages") return new Promise((resolve) => { finishSend = resolve; });
-		const body = url === "/api/state" ? { setup_required: false } :
+	const messageRequests = [];
+	globalThis.fetch = async (url, options = {}) => {
+		if (url === "/api/messages") {
+			messageRequests.push(JSON.parse(options.body));
+			return new Promise((resolve) => { finishSend = resolve; });
+		}
+		const body = url === "/api/state" ? { setup_required: false, profile: { slug: "artist" } } :
 			url === "/api/markdown" ? { content_html: "<p>First</p>\n<p><strong>Second</strong></p>\n" } :
 			{ items: [], next_cursor: null, next_offset: null };
 		return { ok: true, json: async () => body };
@@ -49,6 +53,7 @@ test("submission clears the input and formats the pending bubble before the repl
 	input.value = "First\n\n**Second**";
 	elements.get("#message-form").listeners.submit({ preventDefault() {} });
 	expect(input.value).toBe("");
+	expect(messageRequests[0]?.profile_slug).toBe("artist");
 	let row = elements.get("#message-list").children.find((child) => child.attributes?.["aria-label"] === "Your message");
 	expect(row.children[0].children[1].classes.has("whitespace-pre-wrap")).toBe(true);
 	expect(row.children[0].children[1].textContent).toBe("First\n\n**Second**");

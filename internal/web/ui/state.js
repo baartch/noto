@@ -16,10 +16,12 @@ function newRequestID() {
 	return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function createSendAttempt(content, previous = null, idFactory = newRequestID) {
+export function createSendAttempt(content, previous = null, idFactory = newRequestID, profileSlug = "") {
 	if (typeof content !== "string" || content.trim() === "") return null;
 	if (previous?.content === content) return previous;
-	return { requestID: idFactory(), content };
+	const attempt = { requestID: idFactory(), content };
+	if (profileSlug) attempt.profileSlug = profileSlug;
+	return attempt;
 }
 
 export function saveSendAttempt(storage, attempt) {
@@ -36,19 +38,19 @@ export function loadSendAttempt(storage) {
 		const raw = storage.getItem(sendAttemptStorageKey);
 		if (!raw) return null;
 		const value = JSON.parse(raw);
-		if (!requestIDPattern.test(value?.requestID) || typeof value.content !== "string" || !value.content.trim() || value.content.length > 65536) {
+		if (!requestIDPattern.test(value?.requestID) || typeof value.content !== "string" || !value.content.trim() || value.content.length > 65536 || typeof value.profileSlug !== "string" || !value.profileSlug) {
 			storage.removeItem(sendAttemptStorageKey);
 			return null;
 		}
-		return { requestID: value.requestID, content: value.content };
+		return { requestID: value.requestID, content: value.content, profileSlug: value.profileSlug };
 	} catch {
 		try { storage.removeItem(sendAttemptStorageKey); } catch { /* Storage remains unavailable. */ }
 		return null;
 	}
 }
 
-export async function sendWithAttempt(content, previous, post, idFactory = newRequestID) {
-	const attempt = createSendAttempt(content, previous, idFactory);
+export async function sendWithAttempt(content, previous, post, idFactory = newRequestID, profileSlug = "") {
+	const attempt = createSendAttempt(content, previous, idFactory, profileSlug);
 	if (!attempt) return { attempt: null, response: null, error: new Error("message is empty") };
 	try {
 		return { attempt: null, response: await post(attempt), error: null };

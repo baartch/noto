@@ -57,11 +57,33 @@ func WriteActiveProfile(slug string, lastSelected time.Time) error {
 		lastSelected = time.Now().UTC()
 	}
 	content := fmt.Sprintf("%s\n%s\n", slug, lastSelected.UTC().Format(time.RFC3339Nano))
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("config: create app dir: %w", err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+	tmp, err := os.CreateTemp(dir, "."+ActiveProfileFile+"-*")
+	if err != nil {
+		return fmt.Errorf("config: create active profile temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("config: secure active profile temp file: %w", err)
+	}
+	if _, err := tmp.WriteString(content); err != nil {
+		_ = tmp.Close()
 		return fmt.Errorf("config: write active profile: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("config: sync active profile: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("config: close active profile temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("config: replace active profile: %w", err)
 	}
 	return nil
 }

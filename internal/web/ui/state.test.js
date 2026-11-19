@@ -19,6 +19,21 @@ describe("chat UI state", () => {
 		expect(next.response.requestID).toBe("request-2");
 	});
 
+	test("send retries stay bound to the profile where the attempt originated", async () => {
+		let ids = 0;
+		const idFactory = () => `request-${++ids}`;
+		const failed = await sendWithAttempt("hello", null, async () => { throw new Error("disconnected"); }, idFactory, "alpha");
+		expect(failed.attempt).toEqual({ requestID: "request-1", content: "hello", profileSlug: "alpha" });
+		let attemptedProfile = "";
+		const staleRetry = await sendWithAttempt("hello", failed.attempt, async (attempt) => {
+			attemptedProfile = attempt.profileSlug;
+			throw Object.assign(new Error("profile changed"), { status: 409 });
+		}, idFactory, "beta");
+		expect(attemptedProfile).toBe("alpha");
+		expect(staleRetry.attempt).toBe(null);
+		expect(ids).toBe(1);
+	});
+
 	test("a definitive API error allows an explicit new attempt", async () => {
 		let ids = 0;
 		const idFactory = () => `known-${++ids}`;
@@ -75,11 +90,22 @@ describe("chat UI state", () => {
 			setItem: (key, value) => values.set(key, value),
 			removeItem: (key) => values.delete(key),
 		};
-		const attempt = { requestID: "request-9", content: "message that may have reached the server" };
+		const attempt = { requestID: "request-9", content: "message that may have reached the server", profileSlug: "artist" };
 		saveSendAttempt(storage, attempt);
 		expect(loadSendAttempt(storage)).toEqual(attempt);
 		expect(values.size).toBe(1);
 		saveSendAttempt(storage, null);
+		expect(loadSendAttempt(storage)).toBe(null);
+		expect(values.size).toBe(0);
+	});
+
+	test("legacy pending attempts without a profile are discarded", () => {
+		const values = new Map([["noto:web:pending-send", JSON.stringify({ requestID: "legacy-1", content: "hello" })]]);
+		const storage = {
+			getItem: (key) => values.get(key) ?? null,
+			setItem: (key, value) => values.set(key, value),
+			removeItem: (key) => values.delete(key),
+		};
 		expect(loadSendAttempt(storage)).toBe(null);
 		expect(values.size).toBe(0);
 	});

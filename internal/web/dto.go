@@ -4,11 +4,13 @@ import "time"
 
 // StateDTO contains browser-safe server and active-profile state.
 type StateDTO struct {
-	Profile       ProfileDTO `json:"profile"`
-	Model         string     `json:"model"`
-	SetupRequired bool       `json:"setup_required"`
-	Sending       bool       `json:"sending"`
-	PendingNotes  int        `json:"pending_notes"`
+	Profile          ProfileDTO `json:"profile"`
+	Model            string     `json:"model"`
+	Revision         uint64     `json:"revision"`
+	SetupRequired    bool       `json:"setup_required"`
+	Sending          bool       `json:"sending"`
+	RecoveryRequired bool       `json:"recovery_required"`
+	PendingNotes     int        `json:"pending_notes"`
 }
 
 // ProfileDTO exposes only the profile label needed by the workspace.

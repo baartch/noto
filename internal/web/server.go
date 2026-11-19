@@ -47,24 +47,27 @@ func NewHandler(service *Service, origin string, settingsBackends ...SettingsBac
 			}
 			writeJSON(w, http.StatusOK, service.State())
 		case "/api/settings":
-			if r.Method != http.MethodGet {
-				writeMethodError(w, "GET")
-				return
-			}
 			if settingsBackend == nil {
 				writeAPIError(w, http.StatusServiceUnavailable, "settings_unavailable", "settings are unavailable")
 				return
 			}
-			profiles, err := settingsBackend.Profiles(r.Context())
-			if err != nil {
-				writeAPIError(w, http.StatusInternalServerError, "settings_unavailable", "settings are unavailable")
-				return
+			switch r.Method {
+			case http.MethodGet:
+				profiles, err := settingsBackend.Profiles(r.Context())
+				if err != nil {
+					writeAPIError(w, http.StatusInternalServerError, "settings_unavailable", "settings are unavailable")
+					return
+				}
+				activeProfileSlug := ""
+				if service != nil {
+					activeProfileSlug = service.State().Profile.Slug
+				}
+				writeJSON(w, http.StatusOK, SettingsDTO{ActiveProfileSlug: activeProfileSlug, Profiles: profiles})
+			case http.MethodPost:
+				handleSettingsSave(w, r, service, settingsBackend)
+			default:
+				writeMethodError(w, "GET, POST")
 			}
-			activeProfileSlug := ""
-			if service != nil {
-				activeProfileSlug = service.State().Profile.Slug
-			}
-			writeJSON(w, http.StatusOK, SettingsDTO{ActiveProfileSlug: activeProfileSlug, Profiles: profiles})
 		case "/api/settings/models":
 			if r.Method != http.MethodGet {
 				writeMethodError(w, "GET")
@@ -79,13 +82,21 @@ func NewHandler(service *Service, origin string, settingsBackends ...SettingsBac
 				writeAPIError(w, http.StatusBadRequest, "invalid_profile", "profile is required")
 				return
 			}
-			result, err := settingsBackend.Models(r.Context(), slug)
+			if service == nil {
+				writeAPIError(w, http.StatusServiceUnavailable, "settings_unavailable", "settings are unavailable")
+				return
+			}
+			result, err := service.Models(r.Context(), settingsBackend, slug)
 			if errors.Is(err, ErrSettingsProfileNotFound) {
 				writeAPIError(w, http.StatusNotFound, "profile_not_found", "profile was not found")
 				return
 			}
 			if err != nil {
-				writeAPIError(w, http.StatusBadGateway, "models_unavailable", "models are unavailable")
+				if errors.Is(err, ErrSettingsModelListUnavailable) {
+					writeAPIError(w, http.StatusBadGateway, "models_unavailable", "models are unavailable")
+				} else {
+					writeAPIError(w, http.StatusInternalServerError, "settings_unavailable", "settings are unavailable")
+				}
 				return
 			}
 			writeJSON(w, http.StatusOK, result)
@@ -118,6 +129,67 @@ func NewHandler(service *Service, origin string, settingsBackends ...SettingsBac
 			serveStatic(w, r)
 		}
 	})
+}
+
+func handleSettingsSave(w http.ResponseWriter, r *http.Request, service *Service, backend SettingsBackend) {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		writeAPIError(w, http.StatusUnsupportedMediaType, "json_required", "request content type must be application/json")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	var request struct {
+		ProfileSlug string `json:"profile_slug"`
+		Model       string `json:"model"`
+		Revision    uint64 `json:"revision"`
+	}
+	if err := decoder.Decode(&request); err != nil {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			writeAPIError(w, http.StatusRequestEntityTooLarge, "body_too_large", "settings request exceeds 64 KiB")
+			return
+		}
+		writeAPIError(w, http.StatusBadRequest, "invalid_json", "request body is invalid")
+		return
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		writeAPIError(w, http.StatusBadRequest, "invalid_json", "request body must contain one JSON object")
+		return
+	}
+	if strings.TrimSpace(request.ProfileSlug) == "" || request.Revision == 0 {
+		writeAPIError(w, http.StatusBadRequest, "invalid_settings", "profile_slug and nonzero revision are required")
+		return
+	}
+	saver, ok := backend.(SettingsSaver)
+	if !ok || service == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, "settings_unavailable", "settings are unavailable")
+		return
+	}
+	state, err := service.SaveSettings(r.Context(), saver, request.ProfileSlug, request.Model, request.Revision)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrSettingsProfileNotFound):
+			writeAPIError(w, http.StatusNotFound, "profile_not_found", "profile was not found")
+		case errors.Is(err, ErrSettingsModelNotFound):
+			writeAPIError(w, http.StatusBadRequest, "model_not_found", "model is not available for this profile")
+		case errors.Is(err, ErrSettingsModelListUnavailable):
+			writeAPIError(w, http.StatusBadGateway, "models_unavailable", "models are unavailable")
+		case errors.Is(err, ErrSettingsRevisionConflict):
+			writeAPIError(w, http.StatusConflict, "settings_changed", "settings changed in another tab; reload and try again")
+		case errors.Is(err, ErrSettingsBusy), errors.Is(err, ErrSendInProgress), errors.Is(err, ErrProfileMismatch):
+			writeAPIError(w, http.StatusConflict, "settings_conflict", "settings cannot be changed while the profile is busy")
+		case errors.Is(err, ErrServiceStopped):
+			writeAPIError(w, http.StatusServiceUnavailable, "server_stopping", "server is shutting down")
+		case errors.Is(err, ErrSettingsRecoveryRequired):
+			writeAPIError(w, http.StatusServiceUnavailable, "settings_recovery_required", "settings require recovery; further changes are disabled")
+		default:
+			writeAPIError(w, http.StatusInternalServerError, "settings_save_failed", "settings could not be saved")
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, state)
 }
 
 func handleMarkdownPreview(w http.ResponseWriter, r *http.Request) {
@@ -183,8 +255,9 @@ func handleMessagePost(w http.ResponseWriter, r *http.Request, service *Service)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	var request struct {
-		RequestID string `json:"request_id"`
-		Content   string `json:"content"`
+		RequestID   string `json:"request_id"`
+		Content     string `json:"content"`
+		ProfileSlug string `json:"profile_slug"`
 	}
 	if err := decoder.Decode(&request); err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
@@ -199,11 +272,11 @@ func handleMessagePost(w http.ResponseWriter, r *http.Request, service *Service)
 		writeAPIError(w, http.StatusBadRequest, "invalid_json", "request body must contain one JSON object")
 		return
 	}
-	if !requestIDPattern.MatchString(request.RequestID) || strings.TrimSpace(request.Content) == "" {
-		writeAPIError(w, http.StatusBadRequest, "invalid_message", "request_id and non-empty content are required")
+	if !requestIDPattern.MatchString(request.RequestID) || strings.TrimSpace(request.Content) == "" || request.ProfileSlug == "" {
+		writeAPIError(w, http.StatusBadRequest, "invalid_message", "request_id, profile_slug, and non-empty content are required")
 		return
 	}
-	response, err := service.Send(r.Context(), request.RequestID, request.Content)
+	response, err := service.SendForProfile(r.Context(), request.RequestID, request.Content, request.ProfileSlug)
 	if err != nil {
 		if r.Context().Err() != nil {
 			return
@@ -211,7 +284,9 @@ func handleMessagePost(w http.ResponseWriter, r *http.Request, service *Service)
 		switch {
 		case errors.Is(err, ErrProviderSetupRequired):
 			writeAPIError(w, http.StatusServiceUnavailable, "provider_setup_required", "configure a provider before chatting")
-		case errors.Is(err, ErrSendInProgress), errors.Is(err, ErrRequestIDConflict):
+		case errors.Is(err, ErrSettingsRecoveryRequired):
+			writeAPIError(w, http.StatusServiceUnavailable, "settings_recovery_required", "settings require recovery; further changes are disabled")
+		case errors.Is(err, ErrSendInProgress), errors.Is(err, ErrRequestIDConflict), errors.Is(err, ErrProfileMismatch):
 			writeAPIError(w, http.StatusConflict, "send_conflict", "another message is in progress or request_id was reused")
 		case errors.Is(err, ErrServiceStopped):
 			writeAPIError(w, http.StatusServiceUnavailable, "server_stopping", "server is shutting down")
