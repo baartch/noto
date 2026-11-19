@@ -9,7 +9,7 @@ import {
 	Sparkles,
 	createIcons,
 } from "lucide";
-import { clearSubmittedDraft, copyRichTextToClipboard, createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
+import { copyRichTextToClipboard, createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
 
 const icons = { ArrowUp, Bot, ChevronDown, Copy, LoaderCircle, MessagesSquare, NotebookPen, Sparkles };
 const $ = (selector) => document.querySelector(selector);
@@ -185,8 +185,10 @@ function messageElement(message) {
 	meta.append(name, document.createTextNode("·"), timestamp);
 	const body = document.createElement("div");
 	body.className = "markdown-body break-words text-sm leading-6 text-ink";
-	if (message.optimistic) body.textContent = message.content;
-	else body.innerHTML = message.content_html || "";
+	if (message.optimistic && message.content_html === undefined) {
+		body.classList.add("whitespace-pre-wrap");
+		body.textContent = message.content;
+	} else body.innerHTML = message.content_html || "";
 	const copyButton = document.createElement("button");
 	copyButton.type = "button";
 	copyButton.className = "grid size-6 place-items-center rounded text-muted hover:text-ink focus-visible:ring-2 focus-visible:ring-focus";
@@ -409,6 +411,7 @@ async function sendMessage() {
 	if (state.setupRequired || state.sending) return;
 	const content = ui.messageInput.value;
 	if (!content.trim()) return;
+	ui.messageInput.value = "";
 	state.sending = true;
 	showStatus(ui.chatStatus, "");
 	updateSendControls();
@@ -420,6 +423,15 @@ async function sendMessage() {
 			conversation_id: state.messages.at(-1)?.conversation_id || "",
 		};
 		renderMessages({ scrollToBottom: true });
+		void api("/api/markdown", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ content: attempt.content }),
+		}).then((preview) => {
+			if (state.pendingUserMessage?.id !== `pending:${attempt.requestID}`) return;
+			state.pendingUserMessage.content_html = preview.content_html;
+			renderMessages();
+		}).catch(() => { /* Keep the whitespace-preserving plain text preview. */ });
 		return api("/api/messages", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -430,9 +442,10 @@ async function sendMessage() {
 	state.sendAttempt = result.attempt;
 	saveSendAttempt(attemptStorage, result.attempt);
 	if (result.error) {
+		if (!ui.messageInput.value) ui.messageInput.value = content;
 		if (!result.attempt) state.pendingUserMessage = null;
 		updateSendControls();
-		showStatus(ui.chatStatus, `${result.error.message}. Your draft is kept; it was not sent again automatically.`, "error");
+		showStatus(ui.chatStatus, `${result.error.message}. The message was not sent again automatically.`, "error");
 		try {
 			const serverState = await refreshState();
 			if (serverState.sending) void pollServerTurn();
@@ -447,7 +460,6 @@ async function sendMessage() {
 		return;
 	}
 	state.pendingUserMessage = null;
-	ui.messageInput.value = clearSubmittedDraft(ui.messageInput.value, content);
 	state.sendAttempt = null;
 	updateSendControls();
 	await loadMessages();

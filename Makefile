@@ -24,7 +24,7 @@ web-build:
 
 ## web-test: run web UI state tests (requires Bun)
 web-test:
-	cd internal/web/ui && bun test state.test.js
+	cd internal/web/ui && bun test
 
 ## run: run the binary directly
 run-web:
