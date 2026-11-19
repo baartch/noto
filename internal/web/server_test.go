@@ -22,6 +22,28 @@ import (
 
 const testOrigin = "http://127.0.0.1:8080"
 
+func TestMarkdownPreviewUsesSanitizedHistoryFormatting(t *testing.T) {
+	h := NewHandler(nil, testOrigin)
+	content := "First\n\n**Second**\n\n<script>alert(1)</script>"
+	body, err := json.Marshal(map[string]string{"content": content})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := request(h, http.MethodPost, "/api/markdown", string(body), testOrigin)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var preview struct {
+		ContentHTML string `json:"content_html"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &preview); err != nil {
+		t.Fatal(err)
+	}
+	if preview.ContentHTML != RenderMarkdown(content) || !strings.Contains(preview.ContentHTML, "<strong>Second</strong>") || strings.Contains(preview.ContentHTML, "<script>") {
+		t.Fatalf("preview = %q", preview.ContentHTML)
+	}
+}
+
 func TestAPIStateHistoryAndMemory(t *testing.T) {
 	db := newWebTestDB(t)
 	profile := &store.Profile{ID: "p1", Name: "Artist", Slug: "artist"}

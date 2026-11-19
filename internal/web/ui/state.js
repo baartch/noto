@@ -69,10 +69,6 @@ export function mergeOlderMessages(current, older) {
 	return merged;
 }
 
-export function clearSubmittedDraft(currentDraft, submittedContent) {
-	return currentDraft === submittedContent ? "" : currentDraft;
-}
-
 export function createPendingUserMessage(attempt, createdAt = new Date()) {
 	return {
 		id: `pending:${attempt.requestID}`,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { clearSubmittedDraft, createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
+import { createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
 import * as clipboardHelpers from "./state.js";
 
 describe("chat UI state", () => {
@@ -66,11 +66,6 @@ describe("chat UI state", () => {
 		const viewport = { scrollTop: 0, scrollHeight: 720 };
 		scrollToBottom(viewport);
 		expect(viewport.scrollTop).toBe(720);
-	});
-
-	test("a newer draft typed while a send is in flight is not cleared", () => {
-		expect(clearSubmittedDraft("sent text", "sent text")).toBe("");
-		expect(clearSubmittedDraft("new draft", "sent text")).toBe("new draft");
 	});
 
 	test("uncertain request IDs survive a page reload without triggering a resend", () => {

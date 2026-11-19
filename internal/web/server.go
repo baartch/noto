@@ -51,6 +51,12 @@ func NewHandler(service *Service, origin string) http.Handler {
 			default:
 				writeMethodError(w, "GET, POST")
 			}
+		case "/api/markdown":
+			if r.Method != http.MethodPost {
+				writeMethodError(w, "POST")
+				return
+			}
+			handleMarkdownPreview(w, r)
 		case "/api/memory":
 			if r.Method != http.MethodGet {
 				writeMethodError(w, "GET")
@@ -65,6 +71,36 @@ func NewHandler(service *Service, origin string) http.Handler {
 			serveStatic(w, r)
 		}
 	})
+}
+
+func handleMarkdownPreview(w http.ResponseWriter, r *http.Request) {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		writeAPIError(w, http.StatusUnsupportedMediaType, "json_required", "request content type must be application/json")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	var request struct {
+		Content string `json:"content"`
+	}
+	if err := decoder.Decode(&request); err != nil {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			writeAPIError(w, http.StatusRequestEntityTooLarge, "body_too_large", "markdown request exceeds 64 KiB")
+			return
+		}
+		writeAPIError(w, http.StatusBadRequest, "invalid_json", "request body is invalid")
+		return
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		writeAPIError(w, http.StatusBadRequest, "invalid_json", "request body must contain one JSON object")
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		ContentHTML string `json:"content_html"`
+	}{ContentHTML: RenderMarkdown(request.Content)})
 }
 
 func handleMessagesGet(w http.ResponseWriter, r *http.Request, service *Service) {

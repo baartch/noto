@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "bun run build.mjs",
-    "test": "bun test state.test.js"
+		"test": "bun test"
   },
   "devDependencies": {
     "@tailwindcss/cli": "4.3.3",
