@@ -78,19 +78,19 @@
 
 **Interfaces:** The view reads `GET /api/settings` and `GET /api/settings/models?profile=<slug>`; Save sends the draft and opening revision to `POST /api/settings`; Cancel only discards local draft. Use accessible labels `Settings`, `Profile`, `LLM model`, `Save`, and `Cancel`.
 
-- [ ] Add UI tests for the visible top-right gear, switching to the settings view, loading the active profile's model, and choosing profile B without making a POST. Verify a delayed profile A models response cannot overwrite a newer profile B selection.
-- [ ] Add tests for Cancel (no POST, return to the unchanged chat), Save (one POST, then return to refreshed chat), provider/model-list and save errors (stay on settings, show safe message), missing provider (empty disabled model selector with setup guidance), and saving while sending (disabled UI and server conflict handling).
-- [ ] Run `make web-test`; confirm the new tests fail before the view exists.
-- [ ] Add a responsive settings view and gear, using existing colors and Lucide icons. Hide chat/navigation while settings is open; return focus to the gear when leaving. Keep the gear accessible on mobile, where the model label is currently hidden.
-- [ ] Implement draft state, async profile-model lookup with abort or request identity checks, error/loading states, and Save/Cancel handlers. If fetching models fails, do not submit stale choices; retain the page and allow retry. For an unconfigured profile submit an empty model.
-- [ ] On successful Save, clear stale profile-specific messages, memory, cursors and optimistic state before loading the returned profile; do not automatically resend a pending draft. Leave the page open on failure.
-- [ ] Run `make web-test`; confirm all UI tests pass.
+- [x] Add UI tests for the visible top-right gear, switching to the settings view, loading the active profile's model, and choosing profile B without making a POST. Verify a delayed profile A models response cannot overwrite a newer profile B selection.
+- [x] Add tests for Cancel (no POST, return to the unchanged chat), Save (one POST, then return to refreshed chat), provider/model-list and save errors (stay on settings, show safe message), missing provider (empty disabled model selector with setup guidance), and saving while sending (disabled UI and server conflict handling).
+- [x] Run `make web-test`; confirm the new tests fail before the view exists.
+- [x] Add a responsive settings view and gear, using existing colors and Lucide icons. Hide chat/navigation while settings is open; return focus to the gear when leaving. Keep the gear accessible on mobile, where the model label is currently hidden.
+- [x] Implement draft state, async profile-model lookup with abort or request identity checks, error/loading states, and Save/Cancel handlers. If fetching models fails, do not submit stale choices; retain the page and allow retry. For an unconfigured profile submit an empty model.
+- [x] On successful Save, clear stale profile-specific messages, memory, cursors and optimistic state before loading the returned profile; do not automatically resend a pending draft. Leave the page open on failure.
+- [x] Run `make web-test`; confirm all UI tests pass.
 
 ## Task 4: Cross-tab consistency and verification
 
 **Files:** `internal/web/ui/app.js`, `internal/web/ui/state.js`, `internal/web/ui/app.test.js`, `internal/web/ui/state.test.js`, `internal/web/server_test.go`, `internal/web/static/*`.
 
-- [ ] Add tests simulating tab A switching profiles while tab B is idle, drafting, viewing settings, loading older messages, or receiving a delayed memory response. Assert B detects the changed revision, clears old profile data, reloads state/history/memory, preserves unsent text without sending it, and cannot overwrite the newer selection from an outdated settings draft.
+- [ ] Add tests simulating tab A switching profiles while tab B is idle, drafting, viewing settings (including a stale-revision reload), loading older messages, or receiving a delayed memory response. Assert B detects the changed revision, clears old profile data and stale chat status, reloads state/history/memory, preserves unsent text without sending it, and cannot overwrite the newer selection from an outdated settings draft.
 - [ ] Run `make web-test`; confirm the cross-tab tests fail before implementation.
 - [ ] Refresh `/api/state` on a bounded timer while the page is visible and on focus/visibility return. On a revision change abort or invalidate outstanding profile-scoped requests and polling, reset pagination and pending display, and reload the new profile. Use the message profile guard from Task 2 so a stale tab cannot send to the wrong profile between polls. On a settings revision conflict, retain the view, show an explanatory error and reload choices before another save.
 - [ ] Rebuild embedded assets with `make web-build`; run `make web-test` and `go test -race ./internal/web ./internal/app` and confirm they pass.
