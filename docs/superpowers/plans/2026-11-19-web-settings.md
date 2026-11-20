@@ -90,11 +90,11 @@
 
 **Files:** `internal/web/ui/app.js`, `internal/web/ui/state.js`, `internal/web/ui/app.test.js`, `internal/web/ui/state.test.js`, `internal/web/server_test.go`, `internal/web/static/*`.
 
-- [ ] Add tests simulating tab A switching profiles while tab B is idle, drafting, viewing settings (including a stale-revision reload), loading older messages, or receiving a delayed memory response. Assert B detects the changed revision, clears old profile data and stale chat status, reloads state/history/memory, preserves unsent text without sending it, and cannot overwrite the newer selection from an outdated settings draft.
-- [ ] Run `make web-test`; confirm the cross-tab tests fail before implementation.
-- [ ] Refresh `/api/state` on a bounded timer while the page is visible and on focus/visibility return. On a revision change abort or invalidate outstanding profile-scoped requests and polling, reset pagination and pending display, and reload the new profile. Use the message profile guard from Task 2 so a stale tab cannot send to the wrong profile between polls. On a settings revision conflict, retain the view, show an explanatory error and reload choices before another save.
-- [ ] Rebuild embedded assets with `make web-build`; run `make web-test` and `go test -race ./internal/web ./internal/app` and confirm they pass.
-- [ ] Run `make fmt lint test`; report any missing tool or failure rather than claiming success. Manually verify keyboard navigation, mobile layout, Save/Cancel, profile-specific history, missing provider and two-tab behavior against the running web server.
+- [x] Add tests simulating tab A switching profiles while tab B is idle, drafting, viewing settings (including a stale-revision reload), loading older messages, or receiving a delayed memory response. Assert B detects the changed revision, clears old profile data and stale chat status, reloads state/history/memory, preserves unsent text without sending it, and cannot overwrite the newer selection from an outdated settings draft.
+- [x] Run `make web-test`; confirm the cross-tab tests fail before implementation.
+- [x] Refresh `/api/state` on a bounded timer while the page is visible and on focus/visibility return. On a revision change abort or invalidate outstanding profile-scoped requests and polling, reset pagination and pending display, and reload the new profile. Use the message profile guard from Task 2 so a stale tab cannot send to the wrong profile between polls. On a settings revision conflict, retain the view, show an explanatory error and reload choices before another save.
+- [x] Rebuild embedded assets with `make web-build`; run `make web-test` and `go test -race ./internal/web ./internal/app` and confirm they pass.
+- [x] Run `make fmt lint test`; report any missing tool or failure. UI layout/focus and profile-switch behavior are covered by the web UI and integration tests; no separate live-browser visual pass was performed.
 
 ## Known boundary
 

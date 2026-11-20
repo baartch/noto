@@ -37,19 +37,44 @@ class Element {
 	get options() { return this.children; }
 }
 
+function renderedText(element) {
+	return [element.textContent || "", element.innerHTML || "", ...(element.children || []).map(renderedText)].join(" ");
+}
+
 test("submission clears the input and formats the pending bubble before the reply", async () => {
 	const elements = new Map();
+	const windowListeners = {};
+	const documentListeners = {};
+	const memoryTabs = ["daily", "weekly", "monthly"].map((tab) => {
+		const button = new Element();
+		button.dataset = { memoryTab: tab };
+		return button;
+	});
 	globalThis.document = {
+		visibilityState: "visible",
 		querySelector(selector) {
 			if (!elements.has(selector)) elements.set(selector, new Element());
 			return elements.get(selector);
 		},
-		querySelectorAll: () => [],
+		querySelectorAll(selector) { return selector === "[data-memory-tab]" ? memoryTabs : []; },
+		addEventListener(name, callback) { documentListeners[name] = callback; },
 		createElement: () => new Element(),
 		createTextNode: (text) => ({ textContent: text }),
 	};
 	const sessionValues = new Map();
-	globalThis.window = { sessionStorage: { getItem: (key) => sessionValues.get(key) ?? null, setItem: (key, value) => sessionValues.set(key, value), removeItem: (key) => sessionValues.delete(key) }, matchMedia: () => ({ matches: true }), addEventListener() {} };
+	let profileSyncCallback;
+	let profileSyncInterval = 0;
+	let syncTimeout;
+	let syncTimeoutMs = 0;
+	globalThis.window = {
+		sessionStorage: { getItem: (key) => sessionValues.get(key) ?? null, setItem: (key, value) => sessionValues.set(key, value), removeItem: (key) => sessionValues.delete(key) },
+		matchMedia: () => ({ matches: true }),
+		addEventListener(name, callback) { windowListeners[name] = callback; },
+		setInterval(callback, interval) { profileSyncCallback = callback; profileSyncInterval = interval; return 1; },
+		clearInterval() {},
+		setTimeout(callback, ms) { syncTimeout = callback; syncTimeoutMs = ms; return 1; },
+		clearTimeout() {},
+	};
 	let finishSend;
 	const messageRequests = [];
 	const settingsSaves = [];
@@ -60,8 +85,18 @@ test("submission clears the input and formats the pending bubble before the repl
 	let failedModelsProfile = "";
 	let failSave = false;
 	let saveErrorCode = "settings_save_failed";
+	let stateGets = 0;
+	let deferNextStateResponse = false;
+	let resolveDeferredState;
+	let hangNextState = false;
+	let delayedMemoryProfile = "";
+	let resolveDelayedMemory;
+	let delayedHistoryProfile = "";
+	let resolveDelayedHistory;
 	let historyLoads = 0;
 	let memoryLoads = 0;
+	const historyProfiles = [];
+	const memoryProfiles = [];
 	globalThis.fetch = async (url, options = {}) => {
 		if (url === "/api/messages") {
 			messageRequests.push(JSON.parse(options.body));
@@ -69,18 +104,39 @@ test("submission clears the input and formats the pending bubble before the repl
 		}
 		if (url.startsWith("/api/messages?")) {
 			historyLoads++;
-			return { ok: true, json: async () => ({ items: [], next_cursor: null }) };
+			const profile = activeState.profile.slug;
+			historyProfiles.push(profile);
+			if (profile === delayedHistoryProfile && url.includes("before=")) return new Promise((resolve) => { resolveDelayedHistory = resolve; });
+			const items = profile === "beta" ? [{ id: "beta-history", role: "user", content: "beta history", content_html: "<p>beta history</p>", created_at: "2026-11-20T00:00:00Z", conversation_id: "beta-conv" }] : [];
+			return { ok: true, json: async () => ({ items, next_cursor: profile === "gamma" ? "gamma-cursor" : null }) };
 		}
 		if (url.startsWith("/api/memory?")) {
 			memoryLoads++;
-			return { ok: true, json: async () => ({ items: [], next_offset: null }) };
+			const profile = activeState.profile.slug;
+			memoryProfiles.push(profile);
+			if (profile === delayedMemoryProfile) return new Promise((resolve) => { resolveDelayedMemory = resolve; });
+			const items = profile === "beta" ? [{ id: "beta-memory", content: "beta memory", content_html: "<p>beta memory</p>", created_at: "2026-11-20T00:00:00Z" }] : [];
+			return { ok: true, json: async () => ({ items, next_offset: null }) };
 		}
-		if (url === "/api/state") return { ok: true, json: async () => activeState };
+		if (url === "/api/state") {
+			stateGets++;
+			if (hangNextState) {
+				hangNextState = false;
+				return new Promise((_, reject) => { options.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true }); });
+			}
+			if (deferNextStateResponse) {
+				deferNextStateResponse = false;
+				const snapshot = { ...activeState, profile: { ...activeState.profile } };
+				return new Promise((resolve) => { resolveDeferredState = () => resolve({ ok: true, json: async () => snapshot }); });
+			}
+			return { ok: true, json: async () => activeState };
+		}
 		if (url === "/api/settings" && options.method === "POST") {
 			const request = JSON.parse(options.body);
 			settingsSaves.push(request);
 			if (failSave) return { ok: false, status: saveErrorCode === "settings_changed" ? 409 : saveErrorCode === "settings_save_failed" ? 500 : 503, json: async () => ({ error: { message: "settings failed", code: saveErrorCode } }) };
-			activeState = { ...activeState, profile: { slug: request.profile_slug, name: request.profile_slug === "beta" ? "Beta" : request.profile_slug }, model: request.model, setup_required: request.profile_slug === "gamma", revision: activeState.revision + 1 };
+			const profileName = request.profile_slug === "beta" ? "Beta" : request.profile_slug === "artist" ? "Artist" : "Gamma";
+			activeState = { ...activeState, profile: { slug: request.profile_slug, name: profileName }, model: request.model, setup_required: request.profile_slug === "gamma", revision: activeState.revision + 1 };
 			return { ok: true, json: async () => activeState };
 		}
 		if (url === "/api/settings") return { ok: true, json: async () => ({ active_profile_slug: activeState.profile.slug, profiles: [{ slug: "artist", name: "Artist" }, { slug: "beta", name: "Beta" }, { slug: "gamma", name: "Gamma" }] }) };
@@ -246,6 +302,104 @@ test("submission clears the input and formats the pending bubble before the repl
 	expect(settingsSaves.at(-1)).toEqual({ profile_slug: "gamma", model: "", revision: 4 });
 	expect(activeState.setup_required).toBe(true);
 	expect(elements.get("#settings-panel").classList.contains("hidden")).toBe(true);
+
+	expect(typeof windowListeners.focus).toBe("function");
+	expect(typeof documentListeners.visibilitychange).toBe("function");
+	expect(profileSyncInterval).toBeGreaterThan(0);
+	input.value = "cross-tab unsent draft";
+	delayedHistoryProfile = "gamma";
+	const olderButton = elements.get("#message-list").children.find((child) => child.innerHTML?.includes("Load older messages"));
+	expect(olderButton).toBeDefined();
+	olderButton.listeners.click();
+	delayedMemoryProfile = "gamma";
+	memoryTabs[0].listeners.click();
+	await Bun.sleep(0);
+	expect(typeof resolveDelayedHistory).toBe("function");
+	expect(typeof resolveDelayedMemory).toBe("function");
+	const crossTabMessagePosts = messageRequests.length;
+	elements.get("#chat-status").classList.remove("hidden");
+	elements.get("#chat-status").replaceChildren(Object.assign(new Element(), { textContent: "stale profile error" }));
+	elements.get("#memory-status").classList.remove("hidden");
+	elements.get("#memory-status").replaceChildren(Object.assign(new Element(), { textContent: "stale memory status" }));
+	activeState = { setup_required: false, profile: { slug: "beta", name: "Beta" }, model: "beta-model-2", revision: 6, pending_notes: 0 };
+	document.visibilityState = "hidden";
+	const stateGetsWhileHidden = stateGets;
+	await windowListeners.focus();
+	await documentListeners.visibilitychange();
+	await profileSyncCallback();
+	expect(stateGets).toBe(stateGetsWhileHidden);
+	expect(elements.get("#profile-name").textContent).toBe("Gamma");
+	document.visibilityState = "visible";
+	await documentListeners.visibilitychange();
+	expect(elements.get("#profile-name").textContent).toBe("Beta");
+	expect(input.value).toBe("cross-tab unsent draft");
+	expect(elements.get("#chat-status").classList.contains("hidden")).toBe(true);
+	expect(elements.get("#memory-status").classList.contains("hidden")).toBe(true);
+	expect(renderedText(elements.get("#message-list"))).toContain("beta history");
+	expect(renderedText(elements.get("#memory-list"))).toContain("beta memory");
+	expect(messageRequests).toHaveLength(crossTabMessagePosts);
+	expect(historyProfiles.at(-1)).toBe("beta");
+	expect(memoryProfiles.at(-1)).toBe("beta");
+	activeState = { ...activeState, model: "beta-model-1", revision: 7 };
+	await profileSyncCallback();
+	expect(elements.get("#model-name").textContent).toBe("beta-model-1");
+	activeState = { ...activeState, model: "beta-model-2", revision: 8 };
+	await documentListeners.visibilitychange();
+	expect(elements.get("#model-name").textContent).toBe("beta-model-2");
+	resolveDelayedHistory({ ok: true, json: async () => ({ items: [{ id: "stale-gamma", role: "user", content: "stale gamma history", content_html: "<p>stale gamma history</p>", created_at: "2026-11-19T00:00:00Z", conversation_id: "gamma-conv" }], next_cursor: null }) });
+	resolveDelayedMemory({ ok: true, json: async () => ({ items: [{ id: "stale-gamma-note", content: "stale gamma memory", content_html: "<p>stale gamma memory</p>", created_at: "2026-11-19T00:00:00Z" }], next_offset: null }) });
+	await Bun.sleep(0);
+	expect(renderedText(elements.get("#message-list"))).not.toContain("stale gamma history");
+	expect(renderedText(elements.get("#memory-list"))).not.toContain("stale gamma memory");
+	delayedHistoryProfile = "";
+	delayedMemoryProfile = "";
+
+	await settingsButton.listeners.click();
+	profileSelect.value = "artist";
+	await profileSelect.listeners.change();
+	activeState = { setup_required: true, profile: { slug: "gamma", name: "Gamma" }, model: "", revision: 9, pending_notes: 0 };
+	await windowListeners.focus();
+	expect(elements.get("#profile-name").textContent).toBe("Gamma");
+	expect(elements.get("#settings-save").disabled).toBe(true);
+	expect(elements.get("#settings-status").children[0]?.textContent).toContain("changed in another tab");
+	const settingsReload = elements.get("#settings-status").children.at(-1);
+	await settingsReload.listeners.click();
+	expect(profileSelect.value).toBe("gamma");
+	expect(modelSelect.options).toHaveLength(0);
+	expect(elements.get("#settings-save").disabled).toBe(false);
+	elements.get("#settings-cancel").listeners.click();
+
+	activeState = { setup_required: false, profile: { slug: "beta", name: "Beta" }, model: "beta-model-2", revision: 10, pending_notes: 0 };
+	await windowListeners.focus();
+	expect(elements.get("#profile-name").textContent).toBe("Beta");
+	deferNextStateResponse = true;
+	const stalePoll = windowListeners.focus();
+	await Bun.sleep(0);
+	expect(typeof resolveDeferredState).toBe("function");
+	await settingsButton.listeners.click();
+	profileSelect.value = "artist";
+	await profileSelect.listeners.change();
+	await elements.get("#settings-form").listeners.submit({ preventDefault() {} });
+	expect(activeState.profile.slug).toBe("artist");
+	expect(elements.get("#profile-name").textContent).toBe("Artist");
+	resolveDeferredState();
+	await stalePoll;
+	expect(elements.get("#profile-name").textContent).toBe("Artist");
+	activeState = { ...activeState, profile: { slug: "beta", name: "Beta" }, model: "beta-model-2", revision: 12, setup_required: false };
+	await windowListeners.focus();
+	expect(elements.get("#profile-name").textContent).toBe("Beta");
+	hangNextState = true;
+	const hungSync = windowListeners.focus();
+	await Bun.sleep(0);
+	expect(syncTimeoutMs).toBe(5000);
+	const stateGetsWhileHung = stateGets;
+	await windowListeners.focus();
+	expect(stateGets).toBe(stateGetsWhileHung);
+	syncTimeout();
+	await hungSync;
+	activeState = { ...activeState, revision: 13 };
+	await windowListeners.focus();
+	expect(elements.get("#profile-name").textContent).toBe("Beta");
 
 	await settingsButton.listeners.click();
 	profileSelect.value = "beta";

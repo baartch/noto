@@ -60,6 +60,7 @@ const state = {
 	pendingUserMessage: null,
 	nextCursor: null,
 	loadingOlder: false,
+	messageRequestID: 0,
 	memoryTab: "daily",
 	memoryOffset: 0,
 	memoryNextOffset: null,
@@ -83,6 +84,9 @@ const state = {
 	settingsModelRequestID: 0,
 	settingsOpenRequestID: 0,
 	settingsModelController: null,
+	profileSyncing: false,
+	profileSyncTimer: null,
+	profileSyncController: null,
 };
 let attemptStorage = null;
 try {
@@ -294,9 +298,17 @@ async function reloadSettings() {
 	showStatus(ui.settingsStatus, "Reloading latest settings…");
 	updateSettingsControls();
 	try {
+		const previousProfileSlug = state.profileSlug;
 		const serverState = await refreshState();
+		if (previousProfileSlug && previousProfileSlug !== serverState.profile?.slug) {
+			await loadMessages();
+			if (serverState.pending_notes > 0) void pollMemoryExtraction();
+			else await loadMemory(state.memoryTab);
+		}
 		const settings = await api("/api/settings");
 		if (!state.settingsOpen || requestID !== state.settingsOpenRequestID) return;
+		state.settingsConflict = false;
+		showStatus(ui.settingsStatus, "");
 		state.settingsProfiles = settings.profiles || [];
 		state.draftProfileSlug = settings.active_profile_slug || serverState.profile?.slug || "";
 		state.draftRevision = serverState.revision;
@@ -490,6 +502,7 @@ function escapeHTML(value) {
 
 async function loadMessages({ older = false } = {}) {
 	if (state.loadingOlder || (older && !state.nextCursor)) return;
+	const requestID = ++state.messageRequestID;
 	state.loadingOlder = older;
 	const profileSlug = state.profileSlug;
 	const revision = state.revision;
@@ -499,7 +512,7 @@ async function loadMessages({ older = false } = {}) {
 		const query = new URLSearchParams({ limit: "50" });
 		if (older) query.set("before", state.nextCursor);
 		const page = await api(`/api/messages?${query}`);
-		if (profileSlug !== state.profileSlug || revision !== state.revision) return;
+		if (requestID !== state.messageRequestID || profileSlug !== state.profileSlug || revision !== state.revision) return;
 		state.messages = older ? mergeOlderMessages(state.messages, page.items) : page.items;
 		state.nextCursor = page.next_cursor;
 		renderMessages({ scrollToBottom: !older });
@@ -507,7 +520,7 @@ async function loadMessages({ older = false } = {}) {
 	} catch (error) {
 		showStatus(ui.chatStatus, `Could not load conversation: ${error.message}`, "error");
 	} finally {
-		state.loadingOlder = false;
+		if (requestID === state.messageRequestID) state.loadingOlder = false;
 	}
 }
 
@@ -620,8 +633,94 @@ function updateMemoryTabs() {
 
 async function refreshState() {
 	const serverState = await api("/api/state");
+	const { stale } = applyServerState(serverState);
+	if (!stale) return serverState;
+	return {
+		...serverState,
+		profile: { name: state.profile, slug: state.profileSlug },
+		model: state.model,
+		revision: state.revision,
+		setup_required: state.setupRequired,
+		sending: state.sending,
+		pending_notes: state.pendingNotes,
+		recovery_required: state.recoveryRequired,
+	};
+}
+
+function clearProfileScopedData() {
+	state.memoryRequest?.abort();
+	state.memoryRequest = null;
+	state.memoryPoll?.abort();
+	state.memoryPoll = null;
+	state.statePoll?.abort();
+	state.statePoll = null;
+	state.messageRequestID++;
+	state.messages = [];
+	state.pendingUserMessage = null;
+	state.nextCursor = null;
+	state.loadingOlder = false;
+	state.memoryItems = [];
+	state.memoryOffset = 0;
+	state.memoryNextOffset = null;
+	showStatus(ui.chatStatus, "");
+	showStatus(ui.memoryStatus, "");
+	renderMessages();
+	renderMemory();
+}
+
+function applyServerState(serverState) {
+	const profileSlug = serverState.profile?.slug || "";
+	const revision = Number(serverState.revision || 0);
+	if (state.revision > 0 && revision < state.revision) return { profileChanged: false, revisionChanged: false, stale: true };
+	const profileChanged = Boolean(state.profileSlug && profileSlug && profileSlug !== state.profileSlug);
+	const revisionChanged = revision !== state.revision;
+	if (profileChanged) clearProfileScopedData();
+	if (state.settingsOpen && revisionChanged && !state.settingsSaving) {
+		state.settingsConflict = true;
+		state.settingsModelsLoaded = false;
+		showStatus(ui.settingsStatus, "Settings changed in another tab. Reload the latest settings before saving.", "error", { label: "Reload settings", run: reloadSettings });
+		updateSettingsControls();
+	}
 	renderState(serverState);
-	return serverState;
+	return { profileChanged, revisionChanged, stale: false };
+}
+
+async function checkActiveProfile() {
+	if (state.profileSyncing || state.settingsSaving) return;
+	state.profileSyncing = true;
+	const controller = new AbortController();
+	state.profileSyncController = controller;
+	const timeout = window.setTimeout(() => controller.abort(), 5000);
+	try {
+		const serverState = await api("/api/state", { signal: controller.signal });
+		if (controller.signal.aborted) return;
+		const { profileChanged, stale } = applyServerState(serverState);
+		if (stale) return;
+		if (profileChanged) {
+			await loadMessages();
+			if (serverState.pending_notes > 0) void pollMemoryExtraction();
+			else await loadMemory(state.memoryTab);
+		}
+	} catch (error) {
+		if (error.name !== "AbortError") showStatus(ui.chatStatus, `Could not sync profile state: ${error.message}`, "error");
+	} finally {
+		window.clearTimeout(timeout);
+		if (state.profileSyncController === controller) {
+			state.profileSyncController = null;
+			state.profileSyncing = false;
+		}
+	}
+}
+
+function startProfileSync() {
+	const onVisible = () => {
+		if (document.visibilityState === "visible") return checkActiveProfile();
+	};
+	if (typeof window.setInterval === "function" && state.profileSyncTimer === null) {
+		state.profileSyncTimer = window.setInterval(onVisible, 2000);
+	}
+	window.addEventListener("focus", onVisible);
+	document.addEventListener("visibilitychange", onVisible);
 }
 
 async function pollServerTurn() {
@@ -635,11 +734,13 @@ async function pollServerTurn() {
 			signal: controller.signal,
 		});
 		if (!controller.signal.aborted && settled) {
-			renderState(settled);
-			state.pendingUserMessage = null;
-			await loadMessages();
-			if (settled.pending_notes > 0) void pollMemoryExtraction();
-			else await loadMemory(state.memoryTab);
+			const { stale } = applyServerState(settled);
+			if (!stale) {
+				state.pendingUserMessage = null;
+				await loadMessages();
+				if (settled.pending_notes > 0) void pollMemoryExtraction();
+				else await loadMemory(state.memoryTab);
+			}
 		} else if (!controller.signal.aborted) {
 			showStatus(ui.chatStatus, "The chat is still processing.", "muted", { label: "Check again", run: () => void pollServerTurn() });
 		}
@@ -661,8 +762,11 @@ async function pollMemoryExtraction() {
 			signal: controller.signal,
 		});
 		if (!controller.signal.aborted && settled) {
-			renderState(settled);
-			await loadMemory(state.memoryTab);
+			const { profileChanged, stale } = applyServerState(settled);
+			if (!stale) {
+				if (profileChanged) await loadMessages();
+				await loadMemory(state.memoryTab);
+			}
 		} else if (!controller.signal.aborted) {
 			showStatus(ui.memoryStatus, "Memory extraction is still running.", "muted", { label: "Refresh notes", run: () => void loadMemory(state.memoryTab) });
 		}
@@ -718,6 +822,8 @@ async function sendMessage() {
 			else {
 				state.pendingUserMessage = null;
 				await loadMessages();
+				if (serverState.pending_notes > 0) void pollMemoryExtraction();
+				else await loadMemory(state.memoryTab);
 			}
 		} catch {
 			// Keep the draft and request ID so a manual retry cannot duplicate an accepted turn.
@@ -728,9 +834,9 @@ async function sendMessage() {
 	state.pendingUserMessage = null;
 	state.sendAttempt = null;
 	updateSendControls();
-	await loadMessages();
 	try {
 		const serverState = await refreshState();
+		await loadMessages();
 		if (serverState.pending_notes > 0) void pollMemoryExtraction();
 		else await loadMemory(state.memoryTab);
 	} catch (error) {
@@ -802,6 +908,7 @@ async function initialize() {
 		showStatus(ui.chatStatus, `Noto could not start: ${error.message}`, "error");
 	}
 	setMobileView("chat");
+	startProfileSync();
 }
 
 void initialize();
