@@ -41,6 +41,10 @@ func TestSettingsBackendListsProfilesAndModelsWithoutMutation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	emptyModelProfile, err := profiles.Create(context.Background(), "Epsilon")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := config.WriteActiveProfile(active.Slug, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -137,10 +141,24 @@ func TestSettingsBackendListsProfilesAndModelsWithoutMutation(t *testing.T) {
 	if err := keylessDB.Close(); err != nil {
 		t.Fatal(err)
 	}
+	emptyModelDB, err := openProfileDB(emptyModelProfile.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.NewProviderConfigRepo(emptyModelDB).Upsert(context.Background(), &store.ProviderConfig{
+		ID: "provider-epsilon", ProfileID: emptyModelProfile.ID, ProviderType: "openai_compatible",
+		Endpoint: providerServer.URL + "/v1", CredentialRef: credential, IsActive: true,
+	}); err != nil {
+		_ = emptyModelDB.Close()
+		t.Fatal(err)
+	}
+	if err := emptyModelDB.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	backend := newWebSettingsBackend()
 	choices, err := backend.Profiles(context.Background())
-	if err != nil || len(choices) != 4 {
+	if err != nil || len(choices) != 5 {
 		t.Fatalf("Profiles() = %+v, err=%v", choices, err)
 	}
 	models, err := backend.Models(context.Background(), configured.Slug)
@@ -194,6 +212,34 @@ func TestSettingsBackendListsProfilesAndModelsWithoutMutation(t *testing.T) {
 	}
 	_ = chatOnlyDB.Close()
 	failEmbeddingModelList.Store(false)
+	failModels.Store(true)
+	chatModelsUnavailable, err := backend.Models(context.Background(), configured.Slug)
+	if err != nil || !chatModelsUnavailable.ModelsUnavailable || chatModelsUnavailable.SavedModel != "saved-model" || chatModelsUnavailable.SavedExtractorModel != "extractor-saved" || chatModelsUnavailable.SavedEmbeddingsModel != "embedding-saved" || len(chatModelsUnavailable.Models) != 0 {
+		t.Fatalf("settings after chat model list failure = %+v, %v; want saved values and unavailable flag", chatModelsUnavailable, err)
+	}
+	chatOnlyDB, err = openProfileDB(active.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chatOnlyRuntime = web.NewProfileRuntime(chatOnlyDB, active, nil, "", true)
+	unchangedChatPreparation, err := newWebSettingsBackend().PrepareModels(context.Background(), chatOnlyRuntime, configured.Slug, web.ModelSettingsSelection{Model: "saved-model"})
+	if err != nil {
+		_ = chatOnlyDB.Close()
+		t.Fatalf("unchanged chat model could not be saved when list unavailable: %v", err)
+	}
+	unchangedChatPreparation.Abort()
+	if _, err := newWebSettingsBackend().PrepareModels(context.Background(), chatOnlyRuntime, configured.Slug, web.ModelSettingsSelection{Model: "model-a"}); !errors.Is(err, web.ErrSettingsModelListUnavailable) {
+		t.Fatalf("changed chat model without model list = %v, want ErrSettingsModelListUnavailable", err)
+	}
+	changedExtractor := "model-a"
+	if _, err := newWebSettingsBackend().PrepareModels(context.Background(), chatOnlyRuntime, configured.Slug, web.ModelSettingsSelection{Model: "saved-model", ExtractorModel: &changedExtractor}); !errors.Is(err, web.ErrSettingsModelListUnavailable) {
+		t.Fatalf("changed extractor model without model list = %v, want ErrSettingsModelListUnavailable", err)
+	}
+	if _, err := newWebSettingsBackend().PrepareModels(context.Background(), chatOnlyRuntime, emptyModelProfile.Slug, web.ModelSettingsSelection{}); !errors.Is(err, web.ErrSettingsModelNotFound) {
+		t.Fatalf("empty saved chat model with unavailable list = %v, want ErrSettingsModelNotFound", err)
+	}
+	_ = chatOnlyDB.Close()
+	failModels.Store(false)
 
 	unchangedDB, err := openProfileDB(configured.Slug)
 	if err != nil {
@@ -489,8 +535,9 @@ func TestSettingsBackendListsProfilesAndModelsWithoutMutation(t *testing.T) {
 	}
 
 	failModels.Store(true)
-	if _, err := backend.Models(context.Background(), configured.Slug); err == nil || strings.Contains(err.Error(), "secret-upstream-error") {
-		t.Fatalf("upstream error = %v, want sanitized error", err)
+	chatModels, err := backend.Models(context.Background(), configured.Slug)
+	if err != nil || !chatModels.ModelsUnavailable || chatModels.SavedModel == "" || chatModels.SavedEmbeddingsModel != "embedding-b" || chatModels.SavedExtractorModel != "" {
+		t.Fatalf("settings after provider list failure = %+v, %v; want saved values", chatModels, err)
 	}
 }
 

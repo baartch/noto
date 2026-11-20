@@ -101,23 +101,73 @@
 					<div>
 						<p class="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">Workspace</p>
 						<h1 id="settings-title" class="mt-1 text-2xl font-semibold">Settings</h1>
-						<p class="mt-2 text-sm text-muted">Choose a profile and language model for your next chat turns.</p>
+						<p class="mt-2 text-sm text-muted">Choose the models used for chat, memory embeddings, and extraction.</p>
 					</div>
 				</div>
 
 				<form id="settings-form" class="rounded-2xl border border-line bg-panel p-5 shadow-xl shadow-black/10 sm:p-7">
 					<div class="space-y-6">
 						<div>
-							<label for="settings-profile" class="mb-2 block text-sm font-medium">Profile</label>
-							<select id="settings-profile" class="w-full rounded-xl border border-line bg-raised px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50"></select>
+							<label for="settings-profile-search" class="mb-2 block text-sm font-medium">Profile</label>
+							<div class="relative">
+								<input id="settings-profile-search" class="w-full rounded-xl border border-line bg-raised px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="settings-profile-options" autocomplete="off" placeholder="Search profiles…" />
+								<div id="settings-profile-options" class="absolute z-20 mt-1 hidden max-h-60 w-full overflow-y-auto rounded-xl border border-line bg-panel p-1 shadow-2xl" role="listbox" aria-label="Profiles"></div>
+								<select id="settings-profile" class="hidden" aria-hidden="true" tabindex="-1"></select>
+							</div>
 						</div>
 						<div>
-							<label for="settings-model" class="mb-2 block text-sm font-medium">LLM model</label>
-							<select id="settings-model" class="w-full rounded-xl border border-line bg-raised px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50"></select>
+							<label for="settings-model-search" class="mb-2 block text-sm font-medium">LLM model</label>
+							<div class="relative">
+								<input id="settings-model-search" class="w-full rounded-xl border border-line bg-raised px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="settings-model-options" aria-describedby="settings-model-help" autocomplete="off" placeholder="Search chat models…" />
+								<div id="settings-model-options" class="absolute z-20 mt-1 hidden max-h-60 w-full overflow-y-auto rounded-xl border border-line bg-panel p-1 shadow-2xl" role="listbox" aria-label="Chat models"></div>
+								<select id="settings-model" class="hidden" aria-hidden="true" tabindex="-1"></select>
+							</div>
 							<div class="mt-2 flex items-center justify-between gap-3">
 								<p id="settings-model-help" class="text-xs text-muted" aria-live="polite"></p>
 								<button id="settings-retry-models" class="hidden shrink-0 rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="button">Retry</button>
 							</div>
+						</div>
+						<div>
+							<div class="mb-2 flex items-center gap-2">
+								<label for="settings-embeddings-search" class="block text-sm font-medium">Embeddings model</label>
+								<button id="settings-embeddings-info-button" class="grid size-6 place-items-center rounded-full text-muted hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" type="button" aria-label="Why does changing the embeddings model rebuild the index?" aria-expanded="false" aria-controls="settings-embeddings-info">
+									<i data-lucide="info" class="size-4" aria-hidden="true"></i>
+								</button>
+							</div>
+							<div id="settings-embeddings-info" class="mb-3 hidden rounded-xl border border-line bg-raised p-4 text-xs leading-5 text-muted" role="note">
+								<p>Yes, generally you need to rebuild it. The index stores numerical representations—embeddings—of your memories. A model creates those numbers so that related text lands close together in its particular mathematical space.</p>
+								<p class="mt-2">When you search, the app turns your question into a vector and compares it with the stored vectors. That comparison only makes sense when the question and memories were embedded using compatible models.</p>
+								<p class="mt-2">Think of it like coordinates on a map: two maps can both use pairs of numbers, but the same coordinates don’t necessarily point to the same place. Likewise, two models may produce vectors of the same length, but their meanings can differ. Some models also produce vectors of different lengths, which can make comparison impossible altogether.</p>
+								<p class="mt-2">Changing models therefore usually means:</p>
+								<ol class="mt-1 list-decimal pl-5">
+									<li>Keep the original memories.</li>
+									<li>Generate new embeddings for each memory using the new model.</li>
+									<li>Build a new index from those embeddings.</li>
+								</ol>
+								<p class="mt-2">The original text isn’t lost, but generating embeddings can take time and may cost money. There are exceptions when models explicitly share a compatible embedding space, but it’s safest not to assume that.</p>
+							</div>
+							<div class="relative">
+								<input id="settings-embeddings-search" class="w-full rounded-xl border border-line bg-raised px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="settings-embeddings-options" aria-describedby="settings-embeddings-help settings-embedding-warning" autocomplete="off" placeholder="Search embeddings models…" />
+								<div id="settings-embeddings-options" class="absolute z-20 mt-1 hidden max-h-60 w-full overflow-y-auto rounded-xl border border-line bg-panel p-1 shadow-2xl" role="listbox" aria-label="Embeddings models"></div>
+								<select id="settings-embeddings" class="hidden" aria-hidden="true" tabindex="-1"></select>
+							</div>
+							<p id="settings-embeddings-help" class="mt-2 text-xs text-muted" aria-live="polite"></p>
+							<div id="settings-embedding-warning" class="mt-3 hidden rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-xs text-amber-100" role="alert" aria-live="polite">
+								<p>Changing this model rebuilds the vector index from your memories. This can take time and may incur provider costs.</p>
+								<label class="mt-2 flex items-start gap-2">
+									<input id="settings-confirm-embedding-rebuild" class="mt-0.5 accent-amber-300" type="checkbox" />
+									<span>Continue and rebuild the index</span>
+								</label>
+							</div>
+						</div>
+						<div>
+							<label for="settings-extractor-search" class="mb-2 block text-sm font-medium">Extractor model</label>
+							<div class="relative">
+								<input id="settings-extractor-search" class="w-full rounded-xl border border-line bg-raised px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="settings-extractor-options" autocomplete="off" placeholder="Search extractor models…" />
+								<div id="settings-extractor-options" class="absolute z-20 mt-1 hidden max-h-60 w-full overflow-y-auto rounded-xl border border-line bg-panel p-1 shadow-2xl" role="listbox" aria-label="Extractor models"></div>
+								<select id="settings-extractor" class="hidden" aria-hidden="true" tabindex="-1"></select>
+							</div>
+							<p id="settings-extractor-help" class="mt-2 text-xs text-muted" aria-live="polite">Choose a completion model, or use the chat model as the fallback.</p>
 						</div>
 					</div>
 					<div id="settings-status" class="mt-5 hidden text-sm text-muted" role="status" aria-live="polite"></div>

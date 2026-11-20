@@ -1,7 +1,8 @@
 import { expect, mock, test } from "bun:test";
+import { readFile } from "node:fs/promises";
 
 mock.module("lucide", () => ({
-	ArrowUp: {}, Bot: {}, ChevronDown: {}, Copy: {}, LoaderCircle: {}, MessagesSquare: {}, NotebookPen: {}, Settings: {}, Sparkles: {},
+	ArrowUp: {}, Bot: {}, ChevronDown: {}, Copy: {}, Info: {}, LoaderCircle: {}, MessagesSquare: {}, NotebookPen: {}, Settings: {}, Sparkles: {},
 	createIcons() {},
 }));
 
@@ -83,6 +84,7 @@ test("submission clears the input and formats the pending bubble before the repl
 	let delayedArtistModels = false;
 	let resolveArtistModels;
 	let failedModelsProfile = "";
+	let unavailableModelsProfile = "";
 	let failSave = false;
 	let saveErrorCode = "settings_save_failed";
 	let stateGets = 0;
@@ -149,8 +151,17 @@ test("submission clears the input and formats the pending bubble before the repl
 			}
 			const savedModel = profile === activeState.profile.slug ? activeState.model : profile === "artist" ? "model-a" : "beta-model-1";
 			const body = profile === "gamma"
-				? { profile_slug: profile, saved_model: "", models: [], setup_required: true }
-				: { profile_slug: profile, saved_model: savedModel, models: profile === "artist" ? ["model-a"] : ["beta-model-1", "beta-model-2"], setup_required: false };
+				? { profile_slug: profile, saved_model: "", models: [], saved_embeddings_model: "", embedding_models: [], saved_extractor_model: "", setup_required: true }
+				: {
+					profile_slug: profile,
+					saved_model: savedModel,
+					models: profile === unavailableModelsProfile ? [] : profile === "artist" ? ["model-a"] : ["beta-model-1", "beta-model-2"],
+					models_unavailable: profile === unavailableModelsProfile,
+					saved_embeddings_model: profile === "artist" ? "embed-a" : "embed-b",
+					embedding_models: ["embed-a", "embed-b"],
+					saved_extractor_model: profile === "artist" ? "extractor-a" : "",
+					setup_required: false,
+				};
 			return { ok: true, json: async () => body };
 		}
 		const body = url === "/api/markdown" ? { content_html: "<p>First</p>\n<p><strong>Second</strong></p>\n" } : { items: [], next_cursor: null, next_offset: null };
@@ -194,6 +205,15 @@ test("submission clears the input and formats the pending bubble before the repl
 	await settingsButton.listeners.click();
 	expect(elements.get("#settings-profile").value).toBe("artist");
 	expect(elements.get("#settings-model").value).toBe("model-a");
+	for (const id of ["settings-profile-search", "settings-model-search", "settings-embeddings-search", "settings-extractor-search"]) {
+		expect(elements.get(`#${id}`).attributes.role).toBe("combobox");
+	}
+	const embeddingInfoButton = elements.get("#settings-embeddings-info-button");
+	expect(embeddingInfoButton.attributes["aria-label"]).toContain("embedding");
+	embeddingInfoButton.listeners.click();
+	expect(elements.get("#settings-embeddings-info").classList.contains("hidden")).toBe(false);
+	expect(embeddingInfoButton.attributes["aria-expanded"]).toBe("true");
+	embeddingInfoButton.listeners.click();
 	expect(elements.get("#settings-panel").classList.contains("hidden")).toBe(false);
 	expect(elements.get("#settings-save").disabled).toBe(true);
 	elements.get("#settings-cancel").listeners.click();
@@ -207,14 +227,63 @@ test("submission clears the input and formats the pending bubble before the repl
 	await Bun.sleep(0);
 	expect(typeof resolveArtistModels).toBe("function");
 	const profileSelect = elements.get("#settings-profile");
+	const profileSearch = elements.get("#settings-profile-search");
+	profileSearch.value = "no-such-profile";
+	profileSearch.listeners.input();
+	expect(renderedText(elements.get("#settings-profile-options"))).toContain("No matching options");
+	expect(elements.get("#settings-profile-options").children[0].attributes.role).toBe("option");
+	expect(elements.get("#settings-profile-options").children[0].attributes["aria-disabled"]).toBe("true");
+	profileSearch.listeners.blur();
+	expect(profileSearch.value).toBe("Artist");
+	expect(elements.get("#settings-profile-options").classList.contains("hidden")).toBe(true);
+	profileSearch.value = "no-such-profile";
+	profileSearch.listeners.input();
+	profileSearch.listeners.keydown({ key: "Escape", preventDefault() {} });
+	expect(profileSearch.attributes["aria-expanded"]).toBe("false");
+	profileSearch.value = "bet";
+	profileSearch.listeners.input();
+	expect(renderedText(elements.get("#settings-profile-options"))).toContain("Beta");
+	const betaOption = elements.get("#settings-profile-options").children[0];
+	expect(betaOption.attributes.tabindex).toBe("-1");
+	let preventedMouseFocus = false;
+	betaOption.listeners.mousedown({ preventDefault() { preventedMouseFocus = true; } });
+	expect(preventedMouseFocus).toBe(true);
+	profileSearch.listeners.keydown({ key: "ArrowDown", preventDefault() {} });
+	expect(profileSearch.attributes["aria-activedescendant"]).toContain("settings-profile-options-option-");
+	expect(elements.get("#settings-profile-options").children[0].classList.contains("bg-raised")).toBe(true);
+	profileSearch.listeners.keydown({ key: "Enter", preventDefault() {} });
+	expect(profileSelect.value).toBe("beta");
+	await Bun.sleep(0);
+	profileSearch.listeners.click();
+	expect(elements.get("#settings-profile-options").classList.contains("hidden")).toBe(false);
+	profileSearch.listeners.keydown({ key: "Escape", preventDefault() {} });
+	expect(elements.get("#settings-profile-options").classList.contains("hidden")).toBe(true);
 	expect(profileSelect.disabled).toBe(false);
-	profileSelect.value = "beta";
-	await profileSelect.listeners.change();
 	const modelSelect = elements.get("#settings-model");
+	const embeddingSelect = elements.get("#settings-embeddings");
+	const extractorSelect = elements.get("#settings-extractor");
 	expect(modelSelect.value).toBe("beta-model-1");
+	expect(embeddingSelect.value).toBe("embed-b");
+	expect(extractorSelect.value).toBe("");
+	const modelSearch = elements.get("#settings-model-search");
+	modelSearch.value = "model-2";
+	modelSearch.listeners.input();
+	expect(renderedText(elements.get("#settings-model-options"))).toContain("beta-model-2");
+	let preventedListboxBlur = false;
+	elements.get("#settings-model-options").listeners.mousedown({ preventDefault() { preventedListboxBlur = true; } });
+	expect(preventedListboxBlur).toBe(true);
+	modelSearch.listeners.blur();
+	expect(modelSelect.value).toBe("beta-model-1");
+	expect(modelSearch.value).toBe("beta-model-1");
+	expect(elements.get("#settings-model-options").classList.contains("hidden")).toBe(true);
+	modelSearch.value = "model-2";
+	modelSearch.listeners.input();
+	modelSearch.listeners.keydown({ key: "ArrowDown", preventDefault() {} });
+	modelSearch.listeners.keydown({ key: "Enter", preventDefault() {} });
+	expect(modelSelect.value).toBe("beta-model-2");
 	resolveArtistModels({ ok: true, json: async () => ({ profile_slug: "artist", saved_model: "model-a", models: ["model-a"], setup_required: false }) });
 	await opening;
-	expect(modelSelect.value).toBe("beta-model-1");
+	expect(modelSelect.value).toBe("beta-model-2");
 	profileSelect.value = "beta";
 	elements.get("#settings-cancel").listeners.click();
 	expect(settingsSaves.length).toBe(0);
@@ -228,15 +297,40 @@ test("submission clears the input and formats the pending bubble before the repl
 	await settingsButton.listeners.click();
 	profileSelect.value = "beta";
 	await profileSelect.listeners.change();
-	modelSelect.value = "beta-model-2";
-	modelSelect.listeners.change();
+	modelSearch.value = "model-2";
+	modelSearch.listeners.input();
+	modelSearch.listeners.keydown({ key: "ArrowDown", preventDefault() {} });
+	modelSearch.listeners.keydown({ key: "Enter", preventDefault() {} });
+	const embeddingSearch = elements.get("#settings-embeddings-search");
+	embeddingSearch.value = "disabled";
+	embeddingSearch.listeners.input();
+	embeddingSearch.listeners.keydown({ key: "ArrowDown", preventDefault() {} });
+	embeddingSearch.listeners.keydown({ key: "Enter", preventDefault() {} });
+	expect(embeddingSelect.value).toBe("");
+	expect(elements.get("#settings-embedding-warning").classList.contains("hidden")).toBe(true);
+	expect(elements.get("#settings-save").disabled).toBe(false);
+	embeddingSearch.value = "embed-a";
+	embeddingSearch.listeners.input();
+	expect(renderedText(elements.get("#settings-embeddings-options"))).toContain("embed-a");
+	embeddingSearch.listeners.keydown({ key: "ArrowDown", preventDefault() {} });
+	embeddingSearch.listeners.keydown({ key: "Enter", preventDefault() {} });
+	const extractorSearch = elements.get("#settings-extractor-search");
+	extractorSearch.value = "fallback";
+	extractorSearch.listeners.input();
+	extractorSearch.listeners.keydown({ key: "ArrowDown", preventDefault() {} });
+	extractorSearch.listeners.keydown({ key: "Enter", preventDefault() {} });
+	expect(elements.get("#settings-embedding-warning").classList.contains("hidden")).toBe(false);
+	expect(elements.get("#settings-save").disabled).toBe(true);
+	const rebuildConfirm = elements.get("#settings-confirm-embedding-rebuild");
+	rebuildConfirm.checked = true;
+	rebuildConfirm.listeners.change();
 	const oldHistoryLoads = historyLoads;
 	const oldMemoryLoads = memoryLoads;
 	const sentMessagesBeforeSave = messageRequests.length;
 	input.value = "unsent prompt to preserve";
 	await elements.get("#settings-form").listeners.submit({ preventDefault() {} });
 	expect(settingsSaves).toHaveLength(1);
-	expect(settingsSaves[0]).toEqual({ profile_slug: "beta", model: "beta-model-2", revision: 1 });
+	expect(settingsSaves[0]).toEqual({ profile_slug: "beta", model: "beta-model-2", embeddings_model: "embed-a", extractor_model: "", revision: 1 });
 	expect(activeState.profile.slug).toBe("beta");
 	expect(activeState.model).toBe("beta-model-2");
 	expect(input.value).toBe("unsent prompt to preserve");
@@ -245,6 +339,15 @@ test("submission clears the input and formats the pending bubble before the repl
 	expect(memoryLoads).toBeGreaterThan(oldMemoryLoads);
 	expect(elements.get("#settings-panel").classList.contains("hidden")).toBe(true);
 	expect(elements.get("#profile-name").textContent).toBe("Beta");
+
+	unavailableModelsProfile = "beta";
+	await settingsButton.listeners.click();
+	expect(modelSelect.value).toBe("beta-model-2");
+	expect(modelSearch.value).toContain("saved, unavailable");
+	expect(elements.get("#settings-model-help").textContent).toContain("Saved chat and extractor choices are kept");
+	expect(elements.get("#settings-retry-models").classList.contains("hidden")).toBe(false);
+	elements.get("#settings-cancel").listeners.click();
+	unavailableModelsProfile = "";
 
 	failedModelsProfile = "beta";
 	await settingsButton.listeners.click();
@@ -299,7 +402,7 @@ test("submission clears the input and formats the pending bubble before the repl
 	expect(modelSelect.options).toHaveLength(0);
 	expect(elements.get("#settings-model-help").textContent).toContain("no configured provider");
 	await elements.get("#settings-form").listeners.submit({ preventDefault() {} });
-	expect(settingsSaves.at(-1)).toEqual({ profile_slug: "gamma", model: "", revision: 4 });
+	expect(settingsSaves.at(-1)).toEqual({ profile_slug: "gamma", model: "", embeddings_model: "", extractor_model: "", revision: 4 });
 	expect(activeState.setup_required).toBe(true);
 	expect(elements.get("#settings-panel").classList.contains("hidden")).toBe(true);
 
@@ -420,4 +523,18 @@ test("submission clears the input and formats the pending bubble before the repl
 	expect(elements.get("#setup-banner").classList.contains("hidden")).toBe(false);
 	expect(elements.get("#send-button").disabled).toBe(true);
 	expect(elements.get("#message-input").disabled).toBe(true);
+});
+
+test("settings explanation describes incompatible embedding spaces and index rebuild costs", async () => {
+	const html = await readFile(new URL("./index.html", import.meta.url), "utf8");
+	for (const phrase of [
+		"The index stores numerical representations—embeddings—of your memories.",
+		"That comparison only makes sense when the question and memories were embedded using compatible models.",
+		"Think of it like coordinates on a map",
+		"Generate new embeddings for each memory using the new model.",
+		"generating embeddings can take time and may cost money",
+		"it’s safest not to assume that.",
+	]) {
+		expect(html).toContain(phrase);
+	}
 });

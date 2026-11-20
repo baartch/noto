@@ -107,6 +107,7 @@ type ProfileModelsDTO struct {
 	ProfileSlug                string   `json:"profile_slug"`
 	SavedModel                 string   `json:"saved_model"`
 	Models                     []string `json:"models"`
+	ModelsUnavailable          bool     `json:"models_unavailable"`
 	SavedEmbeddingsModel       string   `json:"saved_embeddings_model"`
 	EmbeddingModels            []string `json:"embedding_models"`
 	EmbeddingModelsUnavailable bool     `json:"embedding_models_unavailable"`

@@ -3,6 +3,7 @@ import {
 	Bot,
 	ChevronDown,
 	Copy,
+	Info,
 	LoaderCircle,
 	MessagesSquare,
 	NotebookPen,
@@ -12,7 +13,7 @@ import {
 } from "lucide";
 import { copyRichTextToClipboard, createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
 
-const icons = { ArrowUp, Bot, ChevronDown, Copy, LoaderCircle, MessagesSquare, NotebookPen, Settings, Sparkles };
+const icons = { ArrowUp, Bot, ChevronDown, Copy, Info, LoaderCircle, MessagesSquare, NotebookPen, Settings, Sparkles };
 const $ = (selector) => document.querySelector(selector);
 const ui = {
 	profile: $("#profile-name"),
@@ -23,8 +24,24 @@ const ui = {
 	settingsPanel: $("#settings-panel"),
 	settingsForm: $("#settings-form"),
 	settingsProfile: $("#settings-profile"),
+	settingsProfileSearch: $("#settings-profile-search"),
+	settingsProfileOptions: $("#settings-profile-options"),
 	settingsModel: $("#settings-model"),
+	settingsModelSearch: $("#settings-model-search"),
+	settingsModelOptions: $("#settings-model-options"),
 	settingsModelHelp: $("#settings-model-help"),
+	settingsEmbeddings: $("#settings-embeddings"),
+	settingsEmbeddingsSearch: $("#settings-embeddings-search"),
+	settingsEmbeddingsOptions: $("#settings-embeddings-options"),
+	settingsEmbeddingsHelp: $("#settings-embeddings-help"),
+	settingsEmbeddingsInfoButton: $("#settings-embeddings-info-button"),
+	settingsEmbeddingsInfo: $("#settings-embeddings-info"),
+	settingsEmbeddingWarning: $("#settings-embedding-warning"),
+	settingsConfirmEmbeddingRebuild: $("#settings-confirm-embedding-rebuild"),
+	settingsExtractor: $("#settings-extractor"),
+	settingsExtractorSearch: $("#settings-extractor-search"),
+	settingsExtractorOptions: $("#settings-extractor-options"),
+	settingsExtractorHelp: $("#settings-extractor-help"),
 	settingsRetryModels: $("#settings-retry-models"),
 	settingsStatus: $("#settings-status"),
 	settingsSave: $("#settings-save"),
@@ -75,11 +92,17 @@ const state = {
 	settingsModelLoading: false,
 	settingsSaving: false,
 	settingsModelsLoaded: false,
+	settingsChatModelsUnavailable: false,
+	settingsEmbeddingModelsUnavailable: false,
 	settingsSetupRequired: false,
 	settingsConflict: false,
 	settingsProfiles: [],
 	draftProfileSlug: "",
 	draftModel: "",
+	draftEmbeddingsModel: "",
+	draftExtractorModel: "",
+	savedEmbeddingsModel: "",
+	embeddingRebuildConfirmed: false,
 	draftRevision: 0,
 	settingsModelRequestID: 0,
 	settingsOpenRequestID: 0,
@@ -88,6 +111,47 @@ const state = {
 	profileSyncTimer: null,
 	profileSyncController: null,
 };
+
+const searchableDropdowns = [];
+const settingsProfileDropdown = createSearchableDropdown({
+	input: ui.settingsProfileSearch, select: ui.settingsProfile, listbox: ui.settingsProfileOptions,
+	listboxID: "settings-profile-options",
+	onChange(value) {
+		state.draftProfileSlug = value;
+		state.settingsModelsLoaded = false;
+		return loadSettingsModels(value);
+	},
+});
+const settingsModelDropdown = createSearchableDropdown({
+	input: ui.settingsModelSearch, select: ui.settingsModel, listbox: ui.settingsModelOptions,
+	listboxID: "settings-model-options",
+	onChange(value) {
+		state.draftModel = value;
+		updateSettingsControls();
+	},
+});
+const settingsEmbeddingsDropdown = createSearchableDropdown({
+	input: ui.settingsEmbeddingsSearch, select: ui.settingsEmbeddings, listbox: ui.settingsEmbeddingsOptions,
+	listboxID: "settings-embeddings-options",
+	onChange(value) {
+		state.draftEmbeddingsModel = value;
+		state.embeddingRebuildConfirmed = false;
+		ui.settingsConfirmEmbeddingRebuild.checked = false;
+		updateSettingsControls();
+	},
+});
+const settingsExtractorDropdown = createSearchableDropdown({
+	input: ui.settingsExtractorSearch, select: ui.settingsExtractor, listbox: ui.settingsExtractorOptions,
+	listboxID: "settings-extractor-options",
+	onChange(value) {
+		state.draftExtractorModel = value;
+		updateSettingsControls();
+	},
+});
+ui.settingsEmbeddingsInfo.classList.add("hidden");
+ui.settingsEmbeddingsInfoButton.setAttribute("aria-expanded", "false");
+ui.settingsEmbeddingsInfoButton.setAttribute("aria-label", "Why does changing the embeddings model rebuild the index?");
+ui.settingsEmbeddingWarning.classList.add("hidden");
 let attemptStorage = null;
 try {
 	attemptStorage = window.sessionStorage;
@@ -178,8 +242,16 @@ function updateSettingsControls() {
 	const draftLocked = busy || state.settingsConflict;
 	ui.settingsProfile.disabled = draftLocked;
 	ui.settingsModel.disabled = draftLocked || state.settingsModelLoading || !state.settingsModelsLoaded || state.settingsSetupRequired || !ui.settingsModel.options?.length;
+	ui.settingsEmbeddings.disabled = draftLocked || state.settingsModelLoading || !state.settingsModelsLoaded || state.settingsSetupRequired || !ui.settingsEmbeddings.options?.length;
+	ui.settingsExtractor.disabled = draftLocked || state.settingsModelLoading || !state.settingsModelsLoaded || state.settingsSetupRequired || !ui.settingsExtractor.options?.length;
+	ui.settingsProfileSearch.disabled = draftLocked;
+	ui.settingsModelSearch.disabled = ui.settingsModel.disabled;
+	ui.settingsEmbeddingsSearch.disabled = ui.settingsEmbeddings.disabled;
+	ui.settingsExtractorSearch.disabled = ui.settingsExtractor.disabled;
 	ui.settingsRetryModels.disabled = busy || state.settingsModelLoading;
-	ui.settingsSave.disabled = draftLocked || state.settingsModelLoading || !state.settingsModelsLoaded || !state.draftProfileSlug || state.recoveryRequired || (!state.settingsSetupRequired && !state.draftModel);
+	const embeddingRebuildRequired = !state.settingsSetupRequired && state.draftEmbeddingsModel !== state.savedEmbeddingsModel && Boolean(state.draftEmbeddingsModel);
+	ui.settingsEmbeddingWarning.classList.toggle("hidden", !embeddingRebuildRequired);
+	ui.settingsSave.disabled = draftLocked || state.settingsModelLoading || !state.settingsModelsLoaded || !state.draftProfileSlug || state.recoveryRequired || (!state.settingsSetupRequired && !state.draftModel) || (embeddingRebuildRequired && !state.embeddingRebuildConfirmed);
 	ui.settingsSave.textContent = state.settingsSaving ? "Saving…" : "Save";
 	ui.settingsCancel.disabled = state.settingsSaving;
 }
@@ -203,9 +275,121 @@ function settingsOption(value, label) {
 	return option;
 }
 
+function createSearchableDropdown({ input, select, listbox, listboxID, onChange }) {
+	let options = [];
+	let matches = [];
+	let activeIndex = -1;
+	input.setAttribute("role", "combobox");
+	input.setAttribute("aria-autocomplete", "list");
+	input.setAttribute("aria-haspopup", "listbox");
+	input.setAttribute("aria-controls", listboxID);
+	input.setAttribute("aria-expanded", "false");
+	listbox.setAttribute("role", "listbox");
+	listbox.addEventListener("mousedown", (event) => event.preventDefault());
+	const selectedOption = () => options.find((option) => option.value === select.value);
+	const close = () => {
+		listbox.classList.add("hidden");
+		input.setAttribute("aria-expanded", "false");
+		input.setAttribute("aria-activedescendant", "");
+		activeIndex = -1;
+	};
+	const updateActiveOption = () => {
+		Array.from(listbox.children).forEach((item, index) => item.classList.toggle("bg-raised", index === activeIndex));
+		input.setAttribute("aria-activedescendant", activeIndex >= 0 ? `${listboxID}-option-${activeIndex}` : "");
+	};
+	const choose = (option) => {
+		if (!option) return;
+		select.value = option.value;
+		input.value = option.label;
+		close();
+		onChange(option.value);
+	};
+	const setOptions = (nextOptions, selectedValue) => {
+		options = nextOptions.map(({ value, label }) => ({ value: String(value), label: String(label) }));
+		select.replaceChildren(...options.map((option) => settingsOption(option.value, option.label)));
+		select.value = selectedValue == null ? "" : String(selectedValue);
+		input.value = selectedOption()?.label || "";
+		close();
+	};
+	const render = () => {
+		const query = input.value.trim().toLocaleLowerCase();
+		matches = options.filter((option) => !query || `${option.label} ${option.value}`.toLocaleLowerCase().includes(query));
+		activeIndex = matches.length > 0 ? 0 : -1;
+		listbox.replaceChildren();
+		if (matches.length === 0) {
+			const empty = document.createElement("div");
+			empty.setAttribute("role", "option");
+			empty.setAttribute("aria-selected", "false");
+			empty.setAttribute("aria-disabled", "true");
+			empty.setAttribute("tabindex", "-1");
+			empty.className = "px-3 py-2 text-sm text-muted";
+			empty.textContent = "No matching options.";
+			listbox.append(empty);
+		} else {
+			for (const [index, option] of matches.entries()) {
+				const item = document.createElement("button");
+				item.type = "button";
+				item.id = `${listboxID}-option-${index}`;
+				item.setAttribute("role", "option");
+				item.setAttribute("aria-selected", String(option.value === select.value));
+				item.setAttribute("tabindex", "-1");
+				item.className = "block w-full rounded-lg px-3 py-2 text-left text-sm text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus";
+				item.textContent = option.label;
+				item.addEventListener("mousedown", (event) => event.preventDefault());
+				item.addEventListener("click", () => choose(option));
+				listbox.append(item);
+			}
+		}
+		listbox.classList.remove("hidden");
+		input.setAttribute("aria-expanded", "true");
+		updateActiveOption();
+	};
+	input.addEventListener("focus", () => {
+		for (const dropdown of searchableDropdowns) dropdown.close();
+		input.select?.();
+		render();
+	});
+	input.addEventListener("click", () => {
+		if (listbox.classList.contains("hidden")) render();
+	});
+	input.addEventListener("input", render);
+	input.addEventListener("blur", () => {
+		close();
+		input.value = selectedOption()?.label || "";
+	});
+	input.addEventListener("keydown", (event) => {
+		if (event.key === "Escape") {
+			event.preventDefault();
+			close();
+			input.value = selectedOption()?.label || "";
+			return;
+		}
+		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+			event.preventDefault();
+			if (listbox.classList.contains("hidden")) render();
+			if (matches.length === 0) return;
+			const delta = event.key === "ArrowDown" ? 1 : -1;
+			activeIndex = (activeIndex + delta + matches.length) % matches.length;
+			updateActiveOption();
+			return;
+		}
+		if (event.key === "Enter" && !listbox.classList.contains("hidden")) {
+			event.preventDefault();
+			choose(matches[activeIndex] || matches[0]);
+		}
+	});
+	select.addEventListener("change", () => {
+		input.value = selectedOption()?.label || "";
+		close();
+		return onChange(select.value);
+	});
+	const dropdown = { setOptions, close };
+	searchableDropdowns.push(dropdown);
+	return dropdown;
+}
+
 function renderSettingsProfiles() {
-	ui.settingsProfile.replaceChildren(...state.settingsProfiles.map((profile) => settingsOption(profile.slug, profile.name)));
-	ui.settingsProfile.value = state.draftProfileSlug;
+	settingsProfileDropdown.setOptions(state.settingsProfiles.map((profile) => ({ value: profile.slug, label: profile.name })), state.draftProfileSlug);
 }
 
 async function loadSettingsModels(profileSlug) {
@@ -215,11 +399,22 @@ async function loadSettingsModels(profileSlug) {
 	state.settingsModelController = controller;
 	state.settingsModelLoading = true;
 	state.settingsModelsLoaded = false;
+	state.settingsChatModelsUnavailable = false;
 	state.draftModel = "";
+	state.draftEmbeddingsModel = "";
+	state.draftExtractorModel = "";
+	state.savedEmbeddingsModel = "";
+	state.settingsEmbeddingModelsUnavailable = false;
+	state.embeddingRebuildConfirmed = false;
 	state.settingsSetupRequired = false;
-	ui.settingsModel.replaceChildren();
+	settingsModelDropdown.setOptions([], "");
+	settingsEmbeddingsDropdown.setOptions([], "");
+	settingsExtractorDropdown.setOptions([], "");
+	ui.settingsConfirmEmbeddingRebuild.checked = false;
 	ui.settingsRetryModels.classList.add("hidden");
 	ui.settingsModelHelp.textContent = "Loading available models…";
+	ui.settingsEmbeddingsHelp.textContent = "Loading embeddings models…";
+	ui.settingsExtractorHelp.textContent = "Loading extractor models…";
 	showStatus(ui.settingsStatus, "");
 	updateSettingsControls();
 	if (!profileSlug) {
@@ -232,16 +427,47 @@ async function loadSettingsModels(profileSlug) {
 		const query = new URLSearchParams({ profile: profileSlug });
 		const details = await api(`/api/settings/models?${query}`, { signal: controller.signal });
 		if (controller.signal.aborted || requestID !== state.settingsModelRequestID || profileSlug !== state.draftProfileSlug || details.profile_slug !== profileSlug) return;
-		const models = [...(details.models || [])];
+		const availableModels = [...(details.models || [])];
+		const models = [...availableModels];
 		if (details.saved_model && !models.includes(details.saved_model)) models.unshift(details.saved_model);
-		ui.settingsModel.replaceChildren(...models.map((model) => settingsOption(model, model)));
+		settingsModelDropdown.setOptions(models.map((model) => ({
+			value: model,
+			label: model === details.saved_model && (details.models_unavailable || !availableModels.includes(model)) ? `${model} (saved, unavailable)` : model,
+		})), details.saved_model || models[0] || "");
 		state.draftModel = details.saved_model || models[0] || "";
-		ui.settingsModel.value = state.draftModel;
+		state.settingsChatModelsUnavailable = Boolean(details.models_unavailable);
+		const savedEmbeddingsModel = details.saved_embeddings_model || "";
+		state.savedEmbeddingsModel = savedEmbeddingsModel;
+		state.draftEmbeddingsModel = savedEmbeddingsModel;
+		state.settingsEmbeddingModelsUnavailable = Boolean(details.embedding_models_unavailable);
+		const embeddingModels = [...(details.embedding_models || [])];
+		if (savedEmbeddingsModel && !embeddingModels.includes(savedEmbeddingsModel)) embeddingModels.unshift(savedEmbeddingsModel);
+		settingsEmbeddingsDropdown.setOptions([
+			{ value: "", label: "Disabled" },
+			...embeddingModels.map((model) => ({ value: model, label: model === savedEmbeddingsModel && !(details.embedding_models || []).includes(model) ? `${model} (saved, unavailable)` : model })),
+		], savedEmbeddingsModel);
+		const savedExtractorModel = details.saved_extractor_model || "";
+		const extractorModels = [...availableModels];
+		if (savedExtractorModel && !extractorModels.includes(savedExtractorModel)) extractorModels.unshift(savedExtractorModel);
+		settingsExtractorDropdown.setOptions([
+			{ value: "", label: "Use chat model (fallback)" },
+			...extractorModels.map((model) => ({ value: model, label: model === savedExtractorModel && (details.models_unavailable || !availableModels.includes(model)) ? `${model} (saved, unavailable)` : model })),
+		], savedExtractorModel);
+		state.draftExtractorModel = savedExtractorModel;
 		state.settingsSetupRequired = Boolean(details.setup_required);
 		state.settingsModelsLoaded = true;
+		ui.settingsRetryModels.classList.toggle("hidden", !state.settingsChatModelsUnavailable && !state.settingsEmbeddingModelsUnavailable);
 		ui.settingsModelHelp.textContent = state.settingsSetupRequired
 			? "This profile has no configured provider. You can save the profile and configure chat later in the terminal."
+			: state.settingsChatModelsUnavailable
+				? "Chat model choices could not be loaded. Saved chat and extractor choices are kept; retry to load more."
 			: "The selected model is saved with this profile.";
+		ui.settingsEmbeddingsHelp.textContent = state.settingsEmbeddingModelsUnavailable
+			? "Embeddings model choices could not be loaded. Your saved choice is kept; clearing it remains available."
+			: "Used to turn memories and searches into vectors.";
+		ui.settingsExtractorHelp.textContent = savedExtractorModel
+			? "Used to extract memories from chat."
+			: "No extractor model is saved; the chat model is used as the fallback.";
 		showStatus(ui.settingsStatus, "");
 	} catch (error) {
 		if (error.name !== "AbortError" && requestID === state.settingsModelRequestID) {
@@ -264,6 +490,7 @@ async function openSettings() {
 	setSettingsPage(true);
 	state.settingsLoading = true;
 	state.settingsModelsLoaded = false;
+	state.settingsChatModelsUnavailable = false;
 	state.draftModel = "";
 	state.draftRevision = state.revision;
 	showStatus(ui.settingsStatus, "Loading settings…");
@@ -276,7 +503,7 @@ async function openSettings() {
 		renderSettingsProfiles();
 		state.settingsLoading = false;
 		updateSettingsControls();
-		ui.settingsProfile.focus();
+		ui.settingsProfileSearch.focus();
 		await loadSettingsModels(state.draftProfileSlug);
 		if (state.recoveryRequired) showStatus(ui.settingsStatus, "Settings require recovery; further changes are disabled.", "error");
 	} catch (error) {
@@ -315,7 +542,7 @@ async function reloadSettings() {
 		renderSettingsProfiles();
 		state.settingsLoading = false;
 		updateSettingsControls();
-		ui.settingsProfile.focus();
+		ui.settingsProfileSearch.focus();
 		await loadSettingsModels(state.draftProfileSlug);
 	} catch (error) {
 		if (state.settingsOpen && requestID === state.settingsOpenRequestID) showStatus(ui.settingsStatus, `Could not reload settings: ${error.message}`, "error", { label: "Retry", run: () => void reloadSettings() });
@@ -343,6 +570,12 @@ function closeSettings() {
 	state.settingsConflict = false;
 	state.draftProfileSlug = "";
 	state.draftModel = "";
+	state.draftEmbeddingsModel = "";
+	state.draftExtractorModel = "";
+	state.savedEmbeddingsModel = "";
+	state.settingsEmbeddingModelsUnavailable = false;
+	state.embeddingRebuildConfirmed = false;
+	ui.settingsConfirmEmbeddingRebuild.checked = false;
 	showStatus(ui.settingsStatus, "");
 	setSettingsPage(false);
 }
@@ -356,7 +589,13 @@ async function saveSettings(event) {
 		const savedState = await api("/api/settings", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ profile_slug: state.draftProfileSlug, model: state.draftModel, revision: state.draftRevision }),
+			body: JSON.stringify({
+				profile_slug: state.draftProfileSlug,
+				model: state.draftModel,
+				embeddings_model: state.draftEmbeddingsModel,
+				extractor_model: state.draftExtractorModel,
+				revision: state.draftRevision,
+			}),
 		});
 		const profileChanged = savedState.profile?.slug !== state.profileSlug;
 		if (profileChanged) {
@@ -864,15 +1103,14 @@ function setMobileView(view) {
 ui.settingsButton.addEventListener("click", openSettings);
 ui.settingsCancel.addEventListener("click", cancelSettings);
 ui.settingsForm.addEventListener("submit", saveSettings);
-ui.settingsProfile.addEventListener("change", async () => {
-	state.draftProfileSlug = ui.settingsProfile.value;
-	state.settingsModelsLoaded = false;
-	state.draftModel = "";
-	await loadSettingsModels(state.draftProfileSlug);
-});
-ui.settingsModel.addEventListener("change", () => {
-	state.draftModel = ui.settingsModel.value;
+ui.settingsConfirmEmbeddingRebuild.addEventListener("change", () => {
+	state.embeddingRebuildConfirmed = ui.settingsConfirmEmbeddingRebuild.checked;
 	updateSettingsControls();
+});
+ui.settingsEmbeddingsInfoButton.addEventListener("click", () => {
+	const open = ui.settingsEmbeddingsInfo.classList.contains("hidden");
+	ui.settingsEmbeddingsInfo.classList.toggle("hidden", !open);
+	ui.settingsEmbeddingsInfoButton.setAttribute("aria-expanded", String(open));
 });
 ui.settingsRetryModels.addEventListener("click", async () => await loadSettingsModels(state.draftProfileSlug));
 

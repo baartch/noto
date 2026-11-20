@@ -99,11 +99,11 @@ func (b *webSettingsBackend) Models(ctx context.Context, slug string) (web.Profi
 		APIKey:       apiKey,
 	})
 	if err != nil {
-		return web.ProfileModelsDTO{}, web.ErrSettingsModelListUnavailable
-	}
-	result.Models = make([]string, 0, len(models))
-	for _, model := range models {
-		result.Models = append(result.Models, model.ID)
+		result.ModelsUnavailable = true
+	} else {
+		for _, model := range models {
+			result.Models = append(result.Models, model.ID)
+		}
 	}
 	embeddingModels, err := b.listEmbeddingModels(ctx, provider.Config{
 		ProviderType: providerCfg.ProviderType,
@@ -188,6 +188,7 @@ func (b *webSettingsBackend) PrepareModels(ctx context.Context, current web.Prof
 	}
 	var modelInfos []provider.ModelInfo
 	var embeddingModelInfos []provider.ModelInfo
+	chatModelsUnavailable := false
 	embeddingModelsUnavailable := false
 	switch {
 	case providerCfg == nil:
@@ -206,10 +207,7 @@ func (b *webSettingsBackend) PrepareModels(ctx context.Context, current web.Prof
 		setupRequired = true
 	default:
 		modelInfos, err = b.listModels(ctx, provider.Config{ProviderType: providerCfg.ProviderType, Endpoint: providerCfg.Endpoint, APIKey: apiKey})
-		if err != nil {
-			closeCandidate(nil)
-			return nil, web.ErrSettingsModelListUnavailable
-		}
+		chatModelsUnavailable = err != nil
 		embeddingModelInfos, err = b.listEmbeddingModels(ctx, provider.Config{ProviderType: providerCfg.ProviderType, Endpoint: providerCfg.Endpoint, APIKey: apiKey})
 		if err != nil {
 			embeddingModelsUnavailable = true
@@ -223,16 +221,27 @@ func (b *webSettingsBackend) PrepareModels(ctx context.Context, current web.Prof
 		if selectedModel == "" {
 			selectedModel = providerCfg.EffectiveModel()
 		}
-		if selectedModel == "" || (selectedModel != providerCfg.EffectiveModel() && !containsModel(modelInfos, selectedModel)) {
-			closeCandidate(nil)
-			return nil, web.ErrSettingsModelNotFound
+		if chatModelsUnavailable {
+			if selectedModel == "" {
+				closeCandidate(nil)
+				return nil, web.ErrSettingsModelNotFound
+			}
+			if selectedModel != providerCfg.EffectiveModel() || (selectedExtractorModel != providerCfg.ExtractorModel && selectedExtractorModel != "") {
+				closeCandidate(nil)
+				return nil, web.ErrSettingsModelListUnavailable
+			}
+		} else {
+			if selectedModel == "" || (selectedModel != providerCfg.EffectiveModel() && !containsModel(modelInfos, selectedModel)) {
+				closeCandidate(nil)
+				return nil, web.ErrSettingsModelNotFound
+			}
+			// Extractor models are completion models, so validate them against /models.
+			if selectedExtractorModel != "" && selectedExtractorModel != providerCfg.ExtractorModel && !containsModel(modelInfos, selectedExtractorModel) {
+				closeCandidate(nil)
+				return nil, web.ErrSettingsModelNotFound
+			}
 		}
 		if !embeddingModelsUnavailable && selectedEmbeddingsModel != "" && selectedEmbeddingsModel != providerCfg.EmbeddingsModel && !containsModel(embeddingModelInfos, selectedEmbeddingsModel) {
-			closeCandidate(nil)
-			return nil, web.ErrSettingsModelNotFound
-		}
-		// Extractor models are completion models, so validate them against /models.
-		if selectedExtractorModel != "" && selectedExtractorModel != providerCfg.ExtractorModel && !containsModel(modelInfos, selectedExtractorModel) {
 			closeCandidate(nil)
 			return nil, web.ErrSettingsModelNotFound
 		}
@@ -290,7 +299,7 @@ func (b *webSettingsBackend) PrepareModels(ctx context.Context, current web.Prof
 			closeCandidate(candidateSession)
 			return nil, err
 		}
-		if session, ok := candidateSession.(*chatpkg.Session); ok {
+		if session, ok := candidateSession.(*chatpkg.Session); ok && !chatModelsUnavailable {
 			extractorModel := selectedExtractorModel
 			extractorFallback := extractorModel == ""
 			if extractorFallback {
@@ -314,7 +323,8 @@ func (b *webSettingsBackend) PrepareModels(ctx context.Context, current web.Prof
 		setupRequired:       setupRequired,
 		previousActiveModel: previousActiveModel, previousEmbeddingsModel: previousEmbeddingsModel, previousExtractorModel: previousExtractorModel,
 		modelChanged: modelChanged, chatModelChanged: chatModelChanged, embeddingsModelChanged: embeddingsModelChanged, extractorModelChanged: extractorModelChanged,
-		candidateSession: candidateSession,
+		modelListUnavailable: chatModelsUnavailable,
+		candidateSession:     candidateSession,
 	}, nil
 }
 
@@ -339,6 +349,7 @@ type webSettingsPreparation struct {
 	chatModelChanged        bool
 	embeddingsModelChanged  bool
 	extractorModelChanged   bool
+	modelListUnavailable    bool
 	candidateSession        web.ChatSession
 	finished                bool
 }
@@ -436,9 +447,15 @@ func (p *webSettingsPreparation) Commit(ctx context.Context) (web.ProfileRuntime
 		if p.extractorModelChanged {
 			if session, ok := p.current.Session.(interface{ SetExtractorAdapter(provider.Adapter) }); ok {
 				session.SetExtractorAdapter(p.selectedExtractorAdapter())
+				if p.modelListUnavailable {
+					// Without model metadata, keep structured extraction disabled until eligibility can be refreshed.
+					if eligible, ok := p.current.Session.(interface{ SetExtractorEligible(bool) }); ok {
+						eligible.SetExtractorEligible(false)
+					}
+				}
 			}
 		}
-		if session, ok := p.current.Session.(*chatpkg.Session); ok {
+		if session, ok := p.current.Session.(*chatpkg.Session); ok && !p.modelListUnavailable {
 			extractorModel := p.selectedExtractorModel
 			extractorFallback := extractorModel == ""
 			if extractorFallback {

@@ -489,16 +489,16 @@ func (b *testSettingsBackend) Prepare(_ context.Context, current ProfileRuntime,
 }
 
 func (b *testSettingsBackend) PrepareModels(ctx context.Context, current ProfileRuntime, slug string, selection ModelSettingsSelection) (PreparedSettings, error) {
-	copy := selection
+	selectionCopy := selection
 	if selection.EmbeddingsModel != nil {
 		value := *selection.EmbeddingsModel
-		copy.EmbeddingsModel = &value
+		selectionCopy.EmbeddingsModel = &value
 	}
 	if selection.ExtractorModel != nil {
 		value := *selection.ExtractorModel
-		copy.ExtractorModel = &value
+		selectionCopy.ExtractorModel = &value
 	}
-	b.selection = &copy
+	b.selection = &selectionCopy
 	return b.Prepare(ctx, current, slug, selection.Model)
 }
 
