@@ -239,14 +239,20 @@ func runChat(cmd *cobra.Command, _ []string) error {
 			return nil
 		}
 		embeddingModelSelectedFn = func(modelID string) error {
+			previousModel := embeddingModel
 			if err := cfgRepo.SetEmbeddingsModel(ctx, activeProfile.ID, modelID); err != nil {
 				return err
 			}
+			if sess != nil {
+				if err := sess.ChangeEmbeddingModel(ctx, modelID); err != nil {
+					if rollbackErr := cfgRepo.SetEmbeddingsModel(ctx, activeProfile.ID, previousModel); rollbackErr != nil {
+						return fmt.Errorf("embedding model change failed (%v) and configuration rollback failed: %w", err, rollbackErr)
+					}
+					return err
+				}
+			}
 			embeddingModelMissing = modelID == ""
 			embeddingModel = modelID
-			if sess != nil {
-				sess.SetEmbeddingModel(modelID)
-			}
 			return nil
 		}
 		extractorModelSelectedFn = func(modelID string) error {
@@ -462,14 +468,20 @@ func runChat(cmd *cobra.Command, _ []string) error {
 					return nil
 				}
 				embeddingModelSelectedFn = func(modelID string) error {
+					previousModel := embeddingModel
 					if err := cfgRepo.SetEmbeddingsModel(ctx, p.ID, modelID); err != nil {
 						return err
 					}
+					if sess != nil {
+						if err := sess.ChangeEmbeddingModel(ctx, modelID); err != nil {
+							if rollbackErr := cfgRepo.SetEmbeddingsModel(ctx, p.ID, previousModel); rollbackErr != nil {
+								return fmt.Errorf("embedding model change failed (%v) and configuration rollback failed: %w", err, rollbackErr)
+							}
+							return err
+						}
+					}
 					embeddingModelMissing = modelID == ""
 					embeddingModel = modelID
-					if sess != nil {
-						sess.SetEmbeddingModel(modelID)
-					}
 					return nil
 				}
 				extractorModelSelectedFn = func(modelID string) error {

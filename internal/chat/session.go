@@ -77,6 +77,7 @@ type Session struct {
 	adapterMu           sync.RWMutex
 	statsMu             sync.Mutex
 	vectorSyncMu        sync.Mutex
+	embeddingChangeMu   sync.RWMutex
 
 	backupStop   chan struct{}
 	pendingNotes int
@@ -290,6 +291,8 @@ type SendResult struct {
 // Send sends a user message, persists both turns, calls the provider, and
 // triggers background note extraction.
 func (s *Session) Send(ctx context.Context, userMsg string) (*SendResult, error) {
+	s.embeddingChangeMu.RLock()
+	defer s.embeddingChangeMu.RUnlock()
 	start := time.Now()
 
 	// Persist user message.
@@ -526,6 +529,9 @@ func (s *Session) syncVectorIndex(ctx context.Context, notes []*store.MemoryNote
 				return err
 			}
 		}
+		if fileIndex.EmbeddingModel() != embeddingModel {
+			needsRebuild = true
+		}
 	}
 
 	manifestRepo := store.NewVectorManifestRepo(s.db)
@@ -590,7 +596,7 @@ func (s *Session) ensureVectorCompaction(ctx context.Context) error {
 	if err != nil {
 		return nil
 	}
-	if manifest.Status != store.VectorManifestStale && manifest.Status != store.VectorManifestFailed {
+	if manifest.Status != store.VectorManifestStale && manifest.Status != store.VectorManifestFailed && manifest.Status != store.VectorManifestRebuilding {
 		return nil
 	}
 
@@ -609,11 +615,14 @@ func (s *Session) ensureVectorCompaction(ctx context.Context) error {
 	}
 	rebuilder := vector.NewRebuilder(manifestRepo, s.vectorIndex, s.profileID).
 		WithManifest(manifestRepo).
-		WithEmbedder(embedder, s.embeddingModelSnapshot())
+		WithEmbedder(embedder, s.embeddingModelSnapshot()).
+		WithPreviousStatus(string(manifest.Status))
 	return rebuilder.Rebuild(ctx, records)
 }
 
 func (s *Session) extractAsync(userMsg, assistantMsg string, sourceIDs []string, toolSaved, toolUpdated int) {
+	s.embeddingChangeMu.RLock()
+	defer s.embeddingChangeMu.RUnlock()
 	if s.onNotesSaving != nil {
 		s.onNotesSaving()
 	}
@@ -837,33 +846,87 @@ func (s *Session) setReferenceWarning(warning bool) {
 	}
 }
 
-// SetEmbeddingModel updates the embeddings model used for vector operations.
-func (s *Session) SetEmbeddingModel(model string) {
+// ChangeEmbeddingModel rebuilds every stored memory vector before switching
+// the session to a different embedding space.
+func (s *Session) ChangeEmbeddingModel(ctx context.Context, model string) error {
+	s.embeddingChangeMu.Lock()
+	defer s.embeddingChangeMu.Unlock()
+	s.vectorSyncMu.Lock()
+	defer s.vectorSyncMu.Unlock()
+
+	current := s.embeddingModelSnapshot()
+	if model == current {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.db == nil || s.noteRepo == nil || s.vectorIndex == nil {
+		return errors.New("session: embedding index is unavailable")
+	}
+	notes, err := s.noteRepo.ListByProfile(ctx, s.profileID)
+	if err != nil {
+		return fmt.Errorf("session: list notes for embedding rebuild: %w", err)
+	}
+	manifestRepo := store.NewVectorManifestRepo(s.db)
+	if err := s.ensureVectorManifest(ctx, manifestRepo); err != nil {
+		return fmt.Errorf("session: prepare vector manifest: %w", err)
+	}
+	manifest, err := manifestRepo.GetManifest(ctx, s.profileID)
+	if err != nil {
+		return fmt.Errorf("session: read vector manifest: %w", err)
+	}
+	records := make([]vector.MemoryNoteRecord, 0, len(notes))
+	if model != "" {
+		for _, note := range notes {
+			records = append(records, vector.MemoryNoteRecord{ID: note.ID, Content: note.Content})
+		}
+	}
+	s.adapterMu.RLock()
+	adapter := s.adapter
+	s.adapterMu.RUnlock()
+	var embedder vector.Embedder
+	if adapter != nil {
+		embedder = &usageReportingEmbedder{embedder: adapter, onUsage: s.recordAuxUsage}
+	}
+	if len(records) > 0 && embedder == nil {
+		return errors.New("session: embedding provider is unavailable")
+	}
+	validateNotes := func(validateCtx context.Context) error {
+		latest, err := s.noteRepo.ListByProfile(validateCtx, s.profileID)
+		if err != nil {
+			return err
+		}
+		if len(latest) != len(notes) {
+			return errors.New("memory notes changed during embedding rebuild")
+		}
+		byID := make(map[string]string, len(notes))
+		for _, note := range notes {
+			byID[note.ID] = vector.ContentHash(note.Content)
+		}
+		for _, note := range latest {
+			if byID[note.ID] != vector.ContentHash(note.Content) {
+				return errors.New("memory notes changed during embedding rebuild")
+			}
+		}
+		return nil
+	}
+	rebuilder := vector.NewRebuilder(manifestRepo, s.vectorIndex, s.profileID).
+		WithManifest(manifestRepo).
+		WithEmbedder(embedder, model).
+		WithPreviousStatus(string(manifest.Status)).
+		WithValidator(validateNotes)
+	if err := rebuilder.Rebuild(ctx, records); err != nil {
+		return fmt.Errorf("session: rebuild vector index: %w", err)
+	}
 	s.adapterMu.Lock()
 	s.embeddingModel = model
 	s.missingEmbedding = model == ""
 	s.adapterMu.Unlock()
-	if s.vectorIndex != nil {
-		if fileIndex, ok := s.vectorIndex.(*vector.FileIndex); ok {
-			fileIndex.WithProfile(s.profileID)
-			_ = fileIndex.Load()
-		}
+	if s.retrieval != nil {
+		s.retrieval.SetEmbeddingModel(model)
 	}
-	if s.db != nil {
-		manifestRepo := store.NewVectorManifestRepo(s.db)
-		if err := manifestRepo.SetManifestEmbeddingModel(context.Background(), s.profileID, model); err != nil {
-			_ = manifestRepo.UpsertManifest(context.Background(), &store.VectorManifest{
-				ID:                 fmt.Sprintf("vm-%x", time.Now().UnixNano()),
-				ProfileID:          s.profileID,
-				IndexPath:          s.vectorIndexPath,
-				IndexFormatVersion: "1",
-				EmbeddingModel:     model,
-				EmbeddingDim:       0,
-				SourceStateVersion: "",
-				Status:             store.VectorManifestReady,
-			})
-		}
-	}
+	return nil
 }
 
 // SetExtractorModel updates the model used for note extraction.

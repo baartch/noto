@@ -237,6 +237,25 @@ func (s *Service) SaveSettings(ctx context.Context, saver SettingsSaver, slug, m
 	return s.State(), nil
 }
 
+// SaveModelSettings applies a chat/embeddings/extractor selection using the same
+// runtime replacement protocol as legacy chat-model-only settings saves.
+func (s *Service) SaveModelSettings(ctx context.Context, saver ModelSettingsSaver, slug string, selection ModelSettingsSelection, revision uint64) (StateDTO, error) {
+	if saver == nil {
+		return StateDTO{}, errors.New("web: invalid settings request")
+	}
+	return s.SaveSettings(ctx, modelSettingsSaverAdapter{saver: saver, selection: selection}, slug, selection.Model, revision)
+}
+
+type modelSettingsSaverAdapter struct {
+	saver     ModelSettingsSaver
+	selection ModelSettingsSelection
+}
+
+func (a modelSettingsSaverAdapter) Prepare(ctx context.Context, current ProfileRuntime, slug, model string) (PreparedSettings, error) {
+	a.selection.Model = model
+	return a.saver.PrepareModels(ctx, current, slug, a.selection)
+}
+
 func (s *Service) clearSwitching() {
 	s.mu.Lock()
 	s.switching = false

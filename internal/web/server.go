@@ -141,9 +141,11 @@ func handleSettingsSave(w http.ResponseWriter, r *http.Request, service *Service
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	var request struct {
-		ProfileSlug string `json:"profile_slug"`
-		Model       string `json:"model"`
-		Revision    uint64 `json:"revision"`
+		ProfileSlug     string  `json:"profile_slug"`
+		Model           string  `json:"model"`
+		EmbeddingsModel *string `json:"embeddings_model"`
+		ExtractorModel  *string `json:"extractor_model"`
+		Revision        uint64  `json:"revision"`
 	}
 	if err := decoder.Decode(&request); err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
@@ -162,12 +164,27 @@ func handleSettingsSave(w http.ResponseWriter, r *http.Request, service *Service
 		writeAPIError(w, http.StatusBadRequest, "invalid_settings", "profile_slug and nonzero revision are required")
 		return
 	}
-	saver, ok := backend.(SettingsSaver)
-	if !ok || service == nil {
+	if service == nil {
 		writeAPIError(w, http.StatusServiceUnavailable, "settings_unavailable", "settings are unavailable")
 		return
 	}
-	state, err := service.SaveSettings(r.Context(), saver, request.ProfileSlug, request.Model, request.Revision)
+	var state StateDTO
+	if saver, ok := backend.(ModelSettingsSaver); ok {
+		state, err = service.SaveModelSettings(r.Context(), saver, request.ProfileSlug, ModelSettingsSelection{
+			Model: request.Model, EmbeddingsModel: request.EmbeddingsModel, ExtractorModel: request.ExtractorModel,
+		}, request.Revision)
+	} else {
+		if request.EmbeddingsModel != nil || request.ExtractorModel != nil {
+			writeAPIError(w, http.StatusServiceUnavailable, "settings_unavailable", "settings are unavailable")
+			return
+		}
+		saver, ok := backend.(SettingsSaver)
+		if !ok {
+			writeAPIError(w, http.StatusServiceUnavailable, "settings_unavailable", "settings are unavailable")
+			return
+		}
+		state, err = service.SaveSettings(r.Context(), saver, request.ProfileSlug, request.Model, request.Revision)
+	}
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrSettingsProfileNotFound):

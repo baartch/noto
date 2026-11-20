@@ -60,9 +60,23 @@ type Retrieval struct {
 	profileID            string
 	embedder             vector.Embedder
 	embeddingModel       string
+	embeddingMu          sync.RWMutex
 	l1mu                 sync.RWMutex
 	l1                   map[string]*store.ContextCacheEntry
 	diag                 *cache.Diagnostics
+}
+
+// SetEmbeddingModel updates the embedding model used in retrieval cache keys.
+func (r *Retrieval) SetEmbeddingModel(model string) {
+	r.embeddingMu.Lock()
+	r.embeddingModel = model
+	r.embeddingMu.Unlock()
+}
+
+func (r *Retrieval) embeddingModelSnapshot() string {
+	r.embeddingMu.RLock()
+	defer r.embeddingMu.RUnlock()
+	return r.embeddingModel
 }
 
 // RetrievalOption configures Retrieval behavior.
@@ -145,7 +159,7 @@ func (r *Retrieval) Assemble(ctx context.Context, profileID, systemPrompt string
 	rawNotes, weeklySummaries, monthlySummaries := r.assembleTimelineLayers(ctx, profileID, notes, window)
 	stateHash := hashTimelineState(rawNotes, weeklySummaries, monthlySummaries, settings)
 
-	cacheKey := cacheKeyFor(profileID, systemPrompt, stateHash, r.embeddingModel)
+	cacheKey := cacheKeyFor(profileID, systemPrompt, stateHash, r.embeddingModelSnapshot())
 
 	if entry, tier, servedStale, revalidating := r.getCached(ctx, profileID, cacheKey); entry != nil {
 		var cachedCtx RetrievalContext
