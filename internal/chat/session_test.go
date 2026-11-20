@@ -1,8 +1,10 @@
 package chat
 
 import (
+	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"noto/internal/reference"
 	"noto/internal/store"
@@ -25,6 +27,27 @@ func TestSessionPendingNotesSnapshot(t *testing.T) {
 	s.markNotesDone(1)
 	if got := s.PendingNotes(); got != 0 {
 		t.Fatalf("PendingNotes() after completion = %d, want 0", got)
+	}
+}
+
+func TestWaitForPendingNotesWaitsForExtractionCompletion(t *testing.T) {
+	s := &Session{pendingDone: make(chan struct{}, 1)}
+	s.markNotesPending()
+	done := make(chan error, 1)
+	go func() { done <- s.WaitForPendingNotes(context.Background()) }()
+	select {
+	case err := <-done:
+		t.Fatalf("WaitForPendingNotes returned before extraction completed: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	s.markNotesDone(1)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("WaitForPendingNotes: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("WaitForPendingNotes did not wake after extraction completed")
 	}
 }
 

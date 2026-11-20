@@ -45,7 +45,7 @@ func TestWebFlowSharesProfileHistoryNotesAndSummaries(t *testing.T) {
 	assertSummaryContent(t, process.url, "weekly", "existing weekly fixture")
 	assertSummaryContent(t, process.url, "monthly", "existing monthly fixture")
 
-	response := webPost(t, process.url, "web-flow-1", "Remember I live in Helsinki.")
+	response := webPost(t, process.url, profile.Slug, "web-flow-1", "Remember I live in Helsinki.")
 	var result struct {
 		Reply struct {
 			Content string `json:"content"`
@@ -108,7 +108,7 @@ func TestWebLaunchLifecycleMatchesChat(t *testing.T) {
 	if got := countWebConversations(t, dbPath, profile.ID); got != firstCount {
 		t.Fatalf("browser reload created conversations: got %d, want %d", got, firstCount)
 	}
-	_ = webPost(t, first.url, "lifecycle-1", "Remember I live in Helsinki.")
+	_ = webPost(t, first.url, profile.Slug, "lifecycle-1", "Remember I live in Helsinki.")
 	_ = awaitProviderRequest(t, provider, func(request providerChatRequest) bool {
 		return hasProviderMessage(request, "Remember I live in Helsinki.")
 	})
@@ -141,7 +141,7 @@ func TestWebLaunchLifecycleMatchesChat(t *testing.T) {
 	if secondCount != firstCount+1 {
 		t.Fatalf("conversation count at next process startup = %d, want %d", secondCount, firstCount+1)
 	}
-	_ = webPost(t, second.url, "lifecycle-2", "What did I tell you earlier?")
+	_ = webPost(t, second.url, profile.Slug, "lifecycle-2", "What did I tell you earlier?")
 	followup := awaitProviderRequest(t, provider, func(request providerChatRequest) bool {
 		return hasProviderMessage(request, "What did I tell you earlier?")
 	})
@@ -390,9 +390,9 @@ func webGet(t *testing.T, baseURL, path string) []byte {
 	return body.Bytes()
 }
 
-func webPost(t *testing.T, baseURL, requestID, content string) []byte {
+func webPost(t *testing.T, baseURL, profileSlug, requestID, content string) []byte {
 	t.Helper()
-	payload, err := json.Marshal(map[string]string{"request_id": requestID, "content": content})
+	payload, err := json.Marshal(map[string]string{"request_id": requestID, "content": content, "profile_slug": profileSlug})
 	if err != nil {
 		t.Fatal(err)
 	}

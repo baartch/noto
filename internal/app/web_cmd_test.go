@@ -78,7 +78,7 @@ func TestWebStartupPrintsActualPortAndServesReadOnlyWithoutProvider(t *testing.T
 	if response.StatusCode != http.StatusOK || !state.SetupRequired {
 		t.Fatalf("state status/setup = %d/%t", response.StatusCode, state.SetupRequired)
 	}
-	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/api/messages", strings.NewReader(`{"request_id":"no-provider","content":"hello"}`))
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/api/messages", strings.NewReader(`{"request_id":"no-provider","content":"hello","profile_slug":"default"}`))
 	if err != nil {
 		t.Fatal(err)
 	}

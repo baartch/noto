@@ -20,13 +20,18 @@
 					<div class="truncate text-xs text-muted">Local profile · <span id="profile-name">Loading…</span></div>
 				</div>
 			</div>
-			<div class="hidden items-center gap-2 text-xs text-muted sm:flex">
-				<span class="size-2 rounded-full bg-emerald-400" aria-hidden="true"></span>
-				<span id="model-name">Checking provider</span>
+			<div class="flex items-center gap-3">
+				<div class="hidden items-center gap-2 text-xs text-muted sm:flex">
+					<span class="size-2 rounded-full bg-emerald-400" aria-hidden="true"></span>
+					<span id="model-name">Checking provider</span>
+				</div>
+				<button id="settings-button" class="grid size-9 place-items-center rounded-xl border border-line bg-raised text-muted transition hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" type="button" aria-label="Settings" aria-expanded="false">
+					<i data-lucide="settings" class="size-4" aria-hidden="true"></i>
+				</button>
 			</div>
 		</header>
 
-		<nav class="grid h-11 grid-cols-2 border-b border-line bg-panel px-3 lg:hidden" aria-label="Workspace views">
+		<nav id="workspace-nav" class="grid h-11 grid-cols-2 border-b border-line bg-panel px-3 lg:hidden" aria-label="Workspace views">
 			<button id="mobile-chat-tab" class="mobile-tab border-b-2 border-accent text-sm font-medium text-ink" type="button" aria-pressed="true">
 				<i data-lucide="messages-square" class="mr-1.5 inline size-4 align-text-bottom" aria-hidden="true"></i>Workspace
 			</button>
@@ -85,6 +90,43 @@
 					<div id="memory-list" class="flex flex-col gap-3"></div>
 				</div>
 			</aside>
+		</main>
+
+		<main id="settings-panel" class="hidden h-[calc(100dvh-6.25rem)] overflow-y-auto bg-page px-4 py-8 sm:px-6 lg:h-[calc(100dvh-3.5rem)]" aria-labelledby="settings-title">
+			<section class="mx-auto w-full max-w-2xl">
+				<div class="mb-8 flex items-start gap-4">
+					<span class="grid size-11 shrink-0 place-items-center rounded-2xl border border-line bg-raised text-accent">
+						<i data-lucide="settings" class="size-5" aria-hidden="true"></i>
+					</span>
+					<div>
+						<p class="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">Workspace</p>
+						<h1 id="settings-title" class="mt-1 text-2xl font-semibold">Settings</h1>
+						<p class="mt-2 text-sm text-muted">Choose a profile and language model for your next chat turns.</p>
+					</div>
+				</div>
+
+				<form id="settings-form" class="rounded-2xl border border-line bg-panel p-5 shadow-xl shadow-black/10 sm:p-7">
+					<div class="space-y-6">
+						<div>
+							<label for="settings-profile" class="mb-2 block text-sm font-medium">Profile</label>
+							<select id="settings-profile" class="w-full rounded-xl border border-line bg-raised px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50"></select>
+						</div>
+						<div>
+							<label for="settings-model" class="mb-2 block text-sm font-medium">LLM model</label>
+							<select id="settings-model" class="w-full rounded-xl border border-line bg-raised px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50"></select>
+							<div class="mt-2 flex items-center justify-between gap-3">
+								<p id="settings-model-help" class="text-xs text-muted" aria-live="polite"></p>
+								<button id="settings-retry-models" class="hidden shrink-0 rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="button">Retry</button>
+							</div>
+						</div>
+					</div>
+					<div id="settings-status" class="mt-5 hidden text-sm text-muted" role="status" aria-live="polite"></div>
+					<div class="mt-8 flex flex-col-reverse gap-3 border-t border-line pt-5 sm:flex-row sm:justify-end">
+						<button id="settings-cancel" class="rounded-xl border border-line px-4 py-2.5 text-sm font-medium text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="button">Cancel</button>
+						<button id="settings-save" class="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="submit">Save</button>
+					</div>
+				</form>
+			</section>
 		</main>
 	</body>
 </html>

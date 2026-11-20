@@ -148,7 +148,7 @@ func TestAPIMissingProviderIsReadOnlyAndValidationErrors(t *testing.T) {
 	if recorder := request(h, http.MethodPost, "/api/state", `{}`, testOrigin); recorder.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("unsupported method status = %d, want 405", recorder.Code)
 	}
-	if recorder := request(h, http.MethodPost, "/api/messages", `{"request_id":"r1","content":"hello"}`, testOrigin); recorder.Code != http.StatusServiceUnavailable {
+	if recorder := request(h, http.MethodPost, "/api/messages", `{"request_id":"r1","content":"hello","profile_slug":"artist"}`, testOrigin); recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("send without provider status = %d, want 503", recorder.Code)
 	}
 }
@@ -179,7 +179,7 @@ func TestAPISecurityAndSendErrors(t *testing.T) {
 		t.Fatalf("CSP = %q", policy)
 	}
 
-	if recorder := request(h, http.MethodPost, "/api/messages", `{"request_id":"r1","content":"hello"}`, testOrigin); recorder.Code != http.StatusBadGateway {
+	if recorder := request(h, http.MethodPost, "/api/messages", `{"request_id":"r1","content":"hello","profile_slug":"artist"}`, testOrigin); recorder.Code != http.StatusBadGateway {
 		t.Fatalf("provider failure status = %d, want 502", recorder.Code)
 	} else if strings.Contains(recorder.Body.String(), "secret-value") || strings.Contains(recorder.Body.String(), "upstream rejected") {
 		t.Fatalf("provider details leaked in error: %s", recorder.Body.String())
@@ -187,17 +187,17 @@ func TestAPISecurityAndSendErrors(t *testing.T) {
 	if !strings.Contains(logOutput.String(), "category=chat_error") || strings.Contains(logOutput.String(), "secret-value") {
 		t.Fatalf("server error log = %q, want sanitized failure category without provider secret", logOutput.String())
 	}
-	if recorder := request(h, http.MethodPost, "/api/messages", `{"request_id":"r2","content":"   "}`, testOrigin); recorder.Code != http.StatusBadRequest {
+	if recorder := request(h, http.MethodPost, "/api/messages", `{"request_id":"r2","content":"   ","profile_slug":"artist"}`, testOrigin); recorder.Code != http.StatusBadRequest {
 		t.Fatalf("blank message status = %d, want 400", recorder.Code)
 	}
-	if recorder := request(h, http.MethodPost, "/api/messages", `{"request_id":"r3","content":"hello","unexpected":1}`, testOrigin); recorder.Code != http.StatusBadRequest {
+	if recorder := request(h, http.MethodPost, "/api/messages", `{"request_id":"r3","content":"hello","profile_slug":"artist","unexpected":1}`, testOrigin); recorder.Code != http.StatusBadRequest {
 		t.Fatalf("unknown JSON field status = %d, want 400", recorder.Code)
 	}
-	oversizedJSON := fmt.Sprintf(`{"request_id":"large","content":"%s"}`, strings.Repeat("x", 64*1024))
+	oversizedJSON := fmt.Sprintf(`{"request_id":"large","content":"%s","profile_slug":"artist"}`, strings.Repeat("x", 64*1024))
 	if recorder := request(h, http.MethodPost, "/api/messages", oversizedJSON, testOrigin); recorder.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("oversized body status = %d, want 413", recorder.Code)
 	}
-	if recorder := requestNoJSON(h, http.MethodPost, "/api/messages", `{ "request_id":"r4", "content":"hello" }`, testOrigin); recorder.Code != http.StatusUnsupportedMediaType {
+	if recorder := requestNoJSON(h, http.MethodPost, "/api/messages", `{ "request_id":"r4", "content":"hello", "profile_slug":"artist" }`, testOrigin); recorder.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("non-JSON content type status = %d, want 415", recorder.Code)
 	}
 }
@@ -205,7 +205,7 @@ func TestAPISecurityAndSendErrors(t *testing.T) {
 func TestProviderFailureStillPersistsUserMessageWithoutLeakingError(t *testing.T) {
 	t.Setenv("NOTO_APP_DIR", t.TempDir())
 	db := newWebTestDB(t)
-	profile := &store.Profile{ID: "p1", Name: "Artist", Slug: ""}
+	profile := &store.Profile{ID: "p1", Name: "Artist", Slug: "artist"}
 	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(`{"error":{"message":"upstream rejected secret-value"}}`))
@@ -225,7 +225,7 @@ func TestProviderFailureStillPersistsUserMessageWithoutLeakingError(t *testing.T
 	}
 	defer session.Close(context.Background())
 	h := NewHandler(NewService(db, profile, session, "model", false), testOrigin)
-	recorder := request(h, http.MethodPost, "/api/messages", `{"request_id":"persisted-failure","content":"keep this turn"}`, testOrigin)
+	recorder := request(h, http.MethodPost, "/api/messages", `{"request_id":"persisted-failure","content":"keep this turn","profile_slug":"artist"}`, testOrigin)
 	if recorder.Code != http.StatusBadGateway {
 		t.Fatalf("provider failure status = %d, want 502: %s", recorder.Code, recorder.Body.String())
 	}
@@ -267,10 +267,11 @@ func TestSendSingleFlightRequestIDReuseAndClientDisconnect(t *testing.T) {
 	db := newWebTestDB(t)
 	profile := &store.Profile{ID: "p1", Name: "Artist", Slug: "artist"}
 	session := newBlockingChatSession()
-	h := NewHandler(NewService(db, profile, session, "model", false), testOrigin)
+	service := NewService(db, profile, session, "model", false)
+	h := NewHandler(service, testOrigin)
 
 	firstRecorder := httptest.NewRecorder()
-	firstRequest := newAPIRequest(context.Background(), http.MethodPost, "/api/messages", `{"request_id":"r1","content":"hello"}`, testOrigin)
+	firstRequest := newAPIRequest(context.Background(), http.MethodPost, "/api/messages", `{"request_id":"r1","content":"hello","profile_slug":"artist"}`, testOrigin)
 	firstDone := make(chan struct{})
 	go func() {
 		h.ServeHTTP(firstRecorder, firstRequest)
@@ -282,15 +283,15 @@ func TestSendSingleFlightRequestIDReuseAndClientDisconnect(t *testing.T) {
 		t.Fatal("first send did not start")
 	}
 
-	if recorder := request(h, http.MethodPost, "/api/messages", `{"request_id":"r2","content":"different"}`, testOrigin); recorder.Code != http.StatusConflict {
+	if recorder := request(h, http.MethodPost, "/api/messages", `{"request_id":"r2","content":"different","profile_slug":"artist"}`, testOrigin); recorder.Code != http.StatusConflict {
 		t.Fatalf("competing send status = %d, want 409", recorder.Code)
 	}
-	if recorder := request(h, http.MethodPost, "/api/messages", `{"request_id":"r1","content":"different"}`, testOrigin); recorder.Code != http.StatusConflict {
+	if recorder := request(h, http.MethodPost, "/api/messages", `{"request_id":"r1","content":"different","profile_slug":"artist"}`, testOrigin); recorder.Code != http.StatusConflict {
 		t.Fatalf("request ID with different content status = %d, want 409", recorder.Code)
 	}
 
 	duplicateRecorder := httptest.NewRecorder()
-	duplicateRequest := newAPIRequest(context.Background(), http.MethodPost, "/api/messages", `{"request_id":"r1","content":"hello"}`, testOrigin)
+	duplicateRequest := newAPIRequest(context.Background(), http.MethodPost, "/api/messages", `{"request_id":"r1","content":"hello","profile_slug":"artist"}`, testOrigin)
 	duplicateDone := make(chan struct{})
 	go func() {
 		h.ServeHTTP(duplicateRecorder, duplicateRequest)
@@ -313,7 +314,7 @@ func TestSendSingleFlightRequestIDReuseAndClientDisconnect(t *testing.T) {
 	disconnected := httptest.NewRecorder()
 	disconnectedDone := make(chan struct{})
 	go func() {
-		h.ServeHTTP(disconnected, newAPIRequest(ctx, http.MethodPost, "/api/messages", `{"request_id":"r3","content":"still send"}`, testOrigin))
+		h.ServeHTTP(disconnected, newAPIRequest(ctx, http.MethodPost, "/api/messages", `{"request_id":"r3","content":"still send","profile_slug":"artist"}`, testOrigin))
 		close(disconnectedDone)
 	}()
 	select {
@@ -334,11 +335,32 @@ func TestSendSingleFlightRequestIDReuseAndClientDisconnect(t *testing.T) {
 	if err := json.Unmarshal(state, &status); err != nil || !status.Sending {
 		t.Fatalf("state after client disconnect = %+v, err=%v; send should continue", status, err)
 	}
+	stopCtx, cancelStop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelStop()
+	stopDone := make(chan error, 1)
+	go func() { stopDone <- service.Stop(stopCtx) }()
+	select {
+	case err := <-stopDone:
+		t.Fatalf("Stop returned before detached send drained: %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+	if err := db.PingContext(context.Background()); err != nil {
+		t.Fatalf("database closed while detached send was active: %v", err)
+	}
 	close(session.releaseSecond)
 	select {
 	case <-session.secondDone:
 	case <-time.After(2 * time.Second):
 		t.Fatal("accepted send did not finish after client disconnect")
+	}
+	if err := <-stopDone; err != nil {
+		t.Fatalf("Stop after detached send: %v", err)
+	}
+	if err := service.CloseRuntime(context.Background()); err != nil {
+		t.Fatalf("CloseRuntime after detached send: %v", err)
+	}
+	if err := db.PingContext(context.Background()); err == nil {
+		t.Fatal("database remained open after runtime close")
 	}
 }
 

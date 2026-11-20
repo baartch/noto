@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @source "./*.js";
+@source "./index.html";
 
 @theme inline {
 	--color-page: var(--theme-page);

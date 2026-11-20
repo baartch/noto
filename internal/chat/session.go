@@ -1023,6 +1023,23 @@ func (s *Session) waitForPendingNotes(timeout time.Duration) {
 	}
 }
 
+// WaitForPendingNotes waits until background memory extraction has released profile resources.
+func (s *Session) WaitForPendingNotes(ctx context.Context) error {
+	for {
+		s.pendingMu.Lock()
+		pending := s.pendingNotes
+		s.pendingMu.Unlock()
+		if pending == 0 {
+			return nil
+		}
+		select {
+		case <-s.pendingDone:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
 func (s *Session) startBackupTicker() {
 	ticker := time.NewTicker(30 * time.Minute)
 	go func() {
