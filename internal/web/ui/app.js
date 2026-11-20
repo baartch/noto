@@ -296,6 +296,7 @@ function createSearchableDropdown({ input, select, listbox, listboxID, onChange 
 	const updateActiveOption = () => {
 		Array.from(listbox.children).forEach((item, index) => item.classList.toggle("bg-raised", index === activeIndex));
 		input.setAttribute("aria-activedescendant", activeIndex >= 0 ? `${listboxID}-option-${activeIndex}` : "");
+		if (activeIndex >= 0) listbox.children[activeIndex]?.scrollIntoView?.({ block: "nearest" });
 	};
 	const choose = (option) => {
 		if (!option) return;

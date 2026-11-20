@@ -35,6 +35,7 @@ class Element {
 	setAttribute(name, value) { this.attributes[name] = value; }
 	addEventListener(name, callback) { this.listeners[name] = callback; }
 	focus() { this.focused = true; }
+	scrollIntoView(options) { this.scrollOptions = options; }
 	get options() { return this.children; }
 }
 
@@ -279,6 +280,7 @@ test("submission clears the input and formats the pending bubble before the repl
 	modelSearch.value = "model-2";
 	modelSearch.listeners.input();
 	modelSearch.listeners.keydown({ key: "ArrowDown", preventDefault() {} });
+	expect(elements.get("#settings-model-options").children[0].scrollOptions).toEqual({ block: "nearest" });
 	modelSearch.listeners.keydown({ key: "Enter", preventDefault() {} });
 	expect(modelSelect.value).toBe("beta-model-2");
 	resolveArtistModels({ ok: true, json: async () => ({ profile_slug: "artist", saved_model: "model-a", models: ["model-a"], setup_required: false }) });
