@@ -27,6 +27,19 @@ type SettingsSaver interface {
 	Prepare(context.Context, ProfileRuntime, string, string) (PreparedSettings, error)
 }
 
+// ModelSettingsSelection represents a chat-model choice and optional auxiliary model updates.
+// Nil auxiliary pointers preserve the profile's saved values; a pointer to an empty string clears it.
+type ModelSettingsSelection struct {
+	Model           string
+	EmbeddingsModel *string
+	ExtractorModel  *string
+}
+
+// ModelSettingsSaver prepares changes to the chat, embeddings, and extractor models.
+type ModelSettingsSaver interface {
+	PrepareModels(context.Context, ProfileRuntime, string, ModelSettingsSelection) (PreparedSettings, error)
+}
+
 // PreparedSettings commits or aborts a previously validated profile/model choice.
 type PreparedSettings interface {
 	Commit(context.Context) (ProfileRuntime, error)
@@ -91,8 +104,12 @@ type SettingsDTO struct {
 
 // ProfileModelsDTO contains the saved model and available models for one profile.
 type ProfileModelsDTO struct {
-	ProfileSlug   string   `json:"profile_slug"`
-	SavedModel    string   `json:"saved_model"`
-	Models        []string `json:"models"`
-	SetupRequired bool     `json:"setup_required"`
+	ProfileSlug                string   `json:"profile_slug"`
+	SavedModel                 string   `json:"saved_model"`
+	Models                     []string `json:"models"`
+	SavedEmbeddingsModel       string   `json:"saved_embeddings_model"`
+	EmbeddingModels            []string `json:"embedding_models"`
+	EmbeddingModelsUnavailable bool     `json:"embedding_models_unavailable"`
+	SavedExtractorModel        string   `json:"saved_extractor_model"`
+	SetupRequired              bool     `json:"setup_required"`
 }

@@ -42,6 +42,19 @@ func TestSettingsReadEndpoints(t *testing.T) {
 	}
 }
 
+func TestSaveSettingsPassesOptionalModelSelections(t *testing.T) {
+	backend := &testSettingsBackend{}
+	h := NewHandler(NewService(nil, &store.Profile{ID: "artist", Name: "Artist", Slug: "artist"}, nil, "model-a", false), testOrigin, backend)
+	body := `{"profile_slug":"artist","model":"model-b","embeddings_model":"embed-b","extractor_model":"","revision":1}`
+	recorder := request(h, http.MethodPost, "/api/settings", body, testOrigin)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("save status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+	}
+	if backend.selection == nil || backend.selection.Model != "model-b" || backend.selection.EmbeddingsModel == nil || *backend.selection.EmbeddingsModel != "embed-b" || backend.selection.ExtractorModel == nil || *backend.selection.ExtractorModel != "" {
+		t.Fatalf("model selection passed to backend = %#v", backend.selection)
+	}
+}
+
 func TestSettingsModelErrorsAndRequestSecurity(t *testing.T) {
 	backend := &testSettingsBackend{}
 	h := NewHandler(NewService(nil, &store.Profile{Name: "Artist", Slug: "artist"}, nil, "model-x", false), testOrigin, backend)
@@ -442,6 +455,7 @@ type testSettingsBackend struct {
 	releaseSave   chan struct{}
 	saveErr       error
 	nextSession   ChatSession
+	selection     *ModelSettingsSelection
 }
 
 func (*testSettingsBackend) Profiles(context.Context) ([]SettingsProfileDTO, error) {
@@ -472,6 +486,20 @@ func (b *testSettingsBackend) Prepare(_ context.Context, current ProfileRuntime,
 		return nil, b.saveErr
 	}
 	return &testPreparedSettings{runtime: NewProfileRuntime(nil, &store.Profile{ID: slug, Name: slug, Slug: slug}, b.nextSession, model, false)}, nil
+}
+
+func (b *testSettingsBackend) PrepareModels(ctx context.Context, current ProfileRuntime, slug string, selection ModelSettingsSelection) (PreparedSettings, error) {
+	copy := selection
+	if selection.EmbeddingsModel != nil {
+		value := *selection.EmbeddingsModel
+		copy.EmbeddingsModel = &value
+	}
+	if selection.ExtractorModel != nil {
+		value := *selection.ExtractorModel
+		copy.ExtractorModel = &value
+	}
+	b.selection = &copy
+	return b.Prepare(ctx, current, slug, selection.Model)
 }
 
 type testPreparedSettings struct {

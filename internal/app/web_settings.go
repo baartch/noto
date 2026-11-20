@@ -18,23 +18,27 @@ import (
 )
 
 type webSettingsBackend struct {
-	profiles         *profile.Service
-	openDB           func(string) (*store.DB, error)
-	writeActive      func(string, time.Time) error
-	listModels       func(context.Context, provider.Config) ([]provider.ModelInfo, error)
-	persistModel     func(context.Context, *store.DB, string, string) error
-	newSession       func(context.Context, *store.DB, *store.Profile, string, *store.ProviderConfig, string) (web.ChatSession, error)
-	mu               sync.Mutex
-	recoveryRequired bool
+	profiles            *profile.Service
+	openDB              func(string) (*store.DB, error)
+	writeActive         func(string, time.Time) error
+	listModels          func(context.Context, provider.Config) ([]provider.ModelInfo, error)
+	listEmbeddingModels func(context.Context, provider.Config) ([]provider.ModelInfo, error)
+	persistModel        func(context.Context, *store.DB, string, string) error
+	persistModels       func(context.Context, *store.DB, string, string, string, string) error
+	newSession          func(context.Context, *store.DB, *store.Profile, string, *store.ProviderConfig, string) (web.ChatSession, error)
+	mu                  sync.Mutex
+	recoveryRequired    bool
 }
 
 func newWebSettingsBackend() *webSettingsBackend {
 	return &webSettingsBackend{
-		profiles:     profile.NewService(nil),
-		openDB:       openProfileDB,
-		writeActive:  config.WriteActiveProfile,
-		listModels:   provider.ListModels,
-		persistModel: setActiveModelTx,
+		profiles:            profile.NewService(nil),
+		openDB:              openProfileDB,
+		writeActive:         config.WriteActiveProfile,
+		listModels:          provider.ListModels,
+		listEmbeddingModels: provider.ListEmbeddingModels,
+		persistModel:        setActiveModelTx,
+		persistModels:       setProviderModelsTx,
 		newSession: func(ctx context.Context, db *store.DB, p *store.Profile, prompt string, cfg *store.ProviderConfig, key string) (web.ChatSession, error) {
 			return newConfiguredSession(ctx, db, p, prompt, cfg, key, sessionCallbacks{})
 		},
@@ -79,9 +83,11 @@ func (b *webSettingsBackend) Models(ctx context.Context, slug string) (web.Profi
 	if err != nil {
 		return web.ProfileModelsDTO{}, err
 	}
-	result := web.ProfileModelsDTO{ProfileSlug: selected.Slug, Models: []string{}}
+	result := web.ProfileModelsDTO{ProfileSlug: selected.Slug, Models: []string{}, EmbeddingModels: []string{}}
 	if providerCfg != nil {
 		result.SavedModel = providerCfg.EffectiveModel()
+		result.SavedEmbeddingsModel = providerCfg.EmbeddingsModel
+		result.SavedExtractorModel = providerCfg.ExtractorModel
 	}
 	if providerCfg == nil || apiKey == "" || result.SavedModel == "" {
 		result.SetupRequired = true
@@ -99,10 +105,26 @@ func (b *webSettingsBackend) Models(ctx context.Context, slug string) (web.Profi
 	for _, model := range models {
 		result.Models = append(result.Models, model.ID)
 	}
+	embeddingModels, err := b.listEmbeddingModels(ctx, provider.Config{
+		ProviderType: providerCfg.ProviderType,
+		Endpoint:     providerCfg.Endpoint,
+		APIKey:       apiKey,
+	})
+	if err != nil {
+		result.EmbeddingModelsUnavailable = true
+		return result, nil
+	}
+	for _, model := range embeddingModels {
+		result.EmbeddingModels = append(result.EmbeddingModels, model.ID)
+	}
 	return result, nil
 }
 
 func (b *webSettingsBackend) Prepare(ctx context.Context, current web.ProfileRuntime, slug, model string) (web.PreparedSettings, error) {
+	return b.PrepareModels(ctx, current, slug, web.ModelSettingsSelection{Model: model})
+}
+
+func (b *webSettingsBackend) PrepareModels(ctx context.Context, current web.ProfileRuntime, slug string, selection web.ModelSettingsSelection) (web.PreparedSettings, error) {
 	b.mu.Lock()
 	if b.recoveryRequired {
 		b.mu.Unlock()
@@ -151,17 +173,32 @@ func (b *webSettingsBackend) Prepare(ctx context.Context, current web.ProfileRun
 		return nil, err
 	}
 	setupRequired := providerCfg == nil || apiKey == "" || providerCfg.EffectiveModel() == ""
-	selectedModel := model
+	selectedModel := selection.Model
+	selectedEmbeddingsModel := ""
+	selectedExtractorModel := ""
+	if providerCfg != nil {
+		selectedEmbeddingsModel = providerCfg.EmbeddingsModel
+		selectedExtractorModel = providerCfg.ExtractorModel
+	}
+	if selection.EmbeddingsModel != nil {
+		selectedEmbeddingsModel = *selection.EmbeddingsModel
+	}
+	if selection.ExtractorModel != nil {
+		selectedExtractorModel = *selection.ExtractorModel
+	}
 	var modelInfos []provider.ModelInfo
+	var embeddingModelInfos []provider.ModelInfo
+	embeddingModelsUnavailable := false
 	switch {
 	case providerCfg == nil:
-		if model != "" {
+		if selectedModel != "" || selectedEmbeddingsModel != "" || selectedExtractorModel != "" {
 			closeCandidate(nil)
 			return nil, web.ErrSettingsModelNotFound
 		}
 		selectedModel = ""
 	case apiKey == "":
-		if model != "" && model != providerCfg.EffectiveModel() {
+		if (selectedModel != "" && selectedModel != providerCfg.EffectiveModel()) ||
+			selectedEmbeddingsModel != providerCfg.EmbeddingsModel || selectedExtractorModel != providerCfg.ExtractorModel {
 			closeCandidate(nil)
 			return nil, web.ErrSettingsModelNotFound
 		}
@@ -173,6 +210,16 @@ func (b *webSettingsBackend) Prepare(ctx context.Context, current web.ProfileRun
 			closeCandidate(nil)
 			return nil, web.ErrSettingsModelListUnavailable
 		}
+		embeddingModelInfos, err = b.listEmbeddingModels(ctx, provider.Config{ProviderType: providerCfg.ProviderType, Endpoint: providerCfg.Endpoint, APIKey: apiKey})
+		if err != nil {
+			embeddingModelsUnavailable = true
+			// Clearing embeddings is a supported way to disable vector retrieval;
+			// it does not select an unavailable provider model.
+			if selectedEmbeddingsModel != providerCfg.EmbeddingsModel && selectedEmbeddingsModel != "" {
+				closeCandidate(nil)
+				return nil, web.ErrSettingsModelListUnavailable
+			}
+		}
 		if selectedModel == "" {
 			selectedModel = providerCfg.EffectiveModel()
 		}
@@ -180,27 +227,59 @@ func (b *webSettingsBackend) Prepare(ctx context.Context, current web.ProfileRun
 			closeCandidate(nil)
 			return nil, web.ErrSettingsModelNotFound
 		}
+		if !embeddingModelsUnavailable && selectedEmbeddingsModel != "" && selectedEmbeddingsModel != providerCfg.EmbeddingsModel && !containsModel(embeddingModelInfos, selectedEmbeddingsModel) {
+			closeCandidate(nil)
+			return nil, web.ErrSettingsModelNotFound
+		}
+		// Extractor models are completion models, so validate them against /models.
+		if selectedExtractorModel != "" && selectedExtractorModel != providerCfg.ExtractorModel && !containsModel(modelInfos, selectedExtractorModel) {
+			closeCandidate(nil)
+			return nil, web.ErrSettingsModelNotFound
+		}
 		setupRequired = false
 	}
 
 	previousActiveModel := ""
+	previousEmbeddingsModel := ""
+	previousExtractorModel := ""
 	if providerCfg != nil {
 		previousActiveModel = providerCfg.ActiveModel
+		previousEmbeddingsModel = providerCfg.EmbeddingsModel
+		previousExtractorModel = providerCfg.ExtractorModel
 	}
-	modelChanged := providerCfg != nil && apiKey != "" && selectedModel != providerCfg.EffectiveModel()
+	chatModelChanged := providerCfg != nil && apiKey != "" && selectedModel != providerCfg.EffectiveModel()
+	embeddingsModelChanged := providerCfg != nil && apiKey != "" && selectedEmbeddingsModel != providerCfg.EmbeddingsModel
+	extractorModelChanged := providerCfg != nil && apiKey != "" && selectedExtractorModel != providerCfg.ExtractorModel
+	modelChanged := chatModelChanged || embeddingsModelChanged || extractorModelChanged
 	if err := ctx.Err(); err != nil {
 		closeCandidate(nil)
 		return nil, err
 	}
-	if sameProfile && modelChanged && current.Session != nil {
+	if sameProfile && chatModelChanged && current.Session != nil {
 		if _, ok := current.Session.(interface{ SetModel(string) }); !ok {
 			return nil, errors.New("web: active session cannot change models")
+		}
+	}
+	if sameProfile && embeddingsModelChanged && current.Session != nil {
+		if _, ok := current.Session.(interface {
+			ChangeEmbeddingModel(context.Context, string) error
+		}); !ok {
+			return nil, errors.New("web: active session cannot change embeddings models")
+		}
+	}
+	if sameProfile && extractorModelChanged && current.Session != nil {
+		if _, ok := current.Session.(interface{ SetExtractorAdapter(provider.Adapter) }); !ok {
+			return nil, errors.New("web: active session cannot change extractor models")
 		}
 	}
 	var candidateSession web.ChatSession
 	if !sameProfile && !setupRequired {
 		cfgCopy := *providerCfg
 		cfgCopy.ActiveModel = selectedModel
+		// The candidate session must start from the currently persisted embedding
+		// space; Commit migrates it only after the profile marker is written.
+		cfgCopy.EmbeddingsModel = providerCfg.EmbeddingsModel
+		cfgCopy.ExtractorModel = selectedExtractorModel
 		prompt, _ := loadSystemPrompt(ctx, db, selected)
 		candidateSession, err = b.newSession(ctx, db, selected, prompt, &cfgCopy, apiKey)
 		if err != nil {
@@ -212,38 +291,56 @@ func (b *webSettingsBackend) Prepare(ctx context.Context, current web.ProfileRun
 			return nil, err
 		}
 		if session, ok := candidateSession.(*chatpkg.Session); ok {
-			extractorModel := providerCfg.ExtractorModel
+			extractorModel := selectedExtractorModel
 			extractorFallback := extractorModel == ""
 			if extractorFallback {
 				extractorModel = selectedModel
 			}
 			applySessionModelMetadata(session, modelInfos, selectedModel, extractorModel, extractorFallback)
 		}
+		if embeddingsModelChanged {
+			if _, ok := candidateSession.(interface {
+				ChangeEmbeddingModel(context.Context, string) error
+			}); !ok {
+				closeCandidate(candidateSession)
+				return nil, errors.New("web: candidate session cannot change embeddings models")
+			}
+		}
 	}
 	return &webSettingsPreparation{
 		backend: b, current: current, selected: selected, db: db, ownsDB: ownsDB,
-		providerCfg: providerCfg, modelInfos: modelInfos, apiKey: apiKey,
-		selectedModel: selectedModel, setupRequired: setupRequired,
-		previousActiveModel: previousActiveModel, modelChanged: modelChanged,
+		providerCfg: providerCfg, modelInfos: modelInfos, embeddingModelInfos: embeddingModelInfos, apiKey: apiKey,
+		selectedModel: selectedModel, selectedEmbeddingsModel: selectedEmbeddingsModel, selectedExtractorModel: selectedExtractorModel,
+		setupRequired:       setupRequired,
+		previousActiveModel: previousActiveModel, previousEmbeddingsModel: previousEmbeddingsModel, previousExtractorModel: previousExtractorModel,
+		modelChanged: modelChanged, chatModelChanged: chatModelChanged, embeddingsModelChanged: embeddingsModelChanged, extractorModelChanged: extractorModelChanged,
 		candidateSession: candidateSession,
 	}, nil
 }
 
 type webSettingsPreparation struct {
-	backend             *webSettingsBackend
-	current             web.ProfileRuntime
-	selected            *store.Profile
-	db                  *store.DB
-	ownsDB              bool
-	providerCfg         *store.ProviderConfig
-	modelInfos          []provider.ModelInfo
-	apiKey              string
-	selectedModel       string
-	setupRequired       bool
-	previousActiveModel string
-	modelChanged        bool
-	candidateSession    web.ChatSession
-	finished            bool
+	backend                 *webSettingsBackend
+	current                 web.ProfileRuntime
+	selected                *store.Profile
+	db                      *store.DB
+	ownsDB                  bool
+	providerCfg             *store.ProviderConfig
+	modelInfos              []provider.ModelInfo
+	embeddingModelInfos     []provider.ModelInfo
+	apiKey                  string
+	selectedModel           string
+	selectedEmbeddingsModel string
+	selectedExtractorModel  string
+	setupRequired           bool
+	previousActiveModel     string
+	previousEmbeddingsModel string
+	previousExtractorModel  string
+	modelChanged            bool
+	chatModelChanged        bool
+	embeddingsModelChanged  bool
+	extractorModelChanged   bool
+	candidateSession        web.ChatSession
+	finished                bool
 }
 
 func (p *webSettingsPreparation) Commit(ctx context.Context) (web.ProfileRuntime, error) {
@@ -259,13 +356,30 @@ func (p *webSettingsPreparation) Commit(ctx context.Context) (web.ProfileRuntime
 	if err := ctx.Err(); err != nil {
 		return web.ProfileRuntime{}, err
 	}
+	persist := func(ctx context.Context, activeModel, embeddingsModel, extractorModel string) error {
+		if p.embeddingsModelChanged || p.extractorModelChanged {
+			return p.backend.persistModels(ctx, p.db, p.selected.ID, activeModel, embeddingsModel, extractorModel)
+		}
+		return p.backend.persistModel(ctx, p.db, p.selected.ID, activeModel)
+	}
+	rollback := func() error {
+		return persist(context.Background(), p.previousActiveModel, p.previousEmbeddingsModel, p.previousExtractorModel)
+	}
+	rollbackProfileAndModels := func() error {
+		var markerErr, modelsErr error
+		markerErr = p.rollbackProfileMarker()
+		if p.modelChanged {
+			modelsErr = rollback()
+		}
+		return errors.Join(markerErr, modelsErr)
+	}
 	if p.modelChanged {
-		if err := p.backend.persistModel(ctx, p.db, p.selected.ID, p.selectedModel); err != nil {
-			return web.ProfileRuntime{}, errors.New("web: model could not be saved")
+		if err := persist(ctx, p.selectedModel, p.selectedEmbeddingsModel, p.selectedExtractorModel); err != nil {
+			return web.ProfileRuntime{}, errors.New("web: model settings could not be saved")
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		if p.modelChanged && p.backend.persistModel(context.Background(), p.db, p.selected.ID, p.previousActiveModel) != nil {
+		if p.modelChanged && rollback() != nil {
 			p.backend.markRecoveryRequired()
 			return web.ProfileRuntime{}, web.ErrSettingsRecoveryRequired
 		}
@@ -273,21 +387,59 @@ func (p *webSettingsPreparation) Commit(ctx context.Context) (web.ProfileRuntime
 	}
 	if p.current.Profile == nil || p.current.Profile.Slug != p.selected.Slug {
 		if err := p.backend.writeActive(p.selected.Slug, time.Now().UTC()); err != nil {
-			if p.modelChanged && p.backend.persistModel(context.Background(), p.db, p.selected.ID, p.previousActiveModel) != nil {
+			if p.modelChanged && rollback() != nil {
 				p.backend.markRecoveryRequired()
 				return web.ProfileRuntime{}, web.ErrSettingsRecoveryRequired
 			}
 			return web.ProfileRuntime{}, errors.New("web: profile could not be activated")
 		}
+		if err := ctx.Err(); err != nil {
+			if rollbackProfileAndModels() != nil {
+				p.backend.markRecoveryRequired()
+				return web.ProfileRuntime{}, web.ErrSettingsRecoveryRequired
+			}
+			return web.ProfileRuntime{}, err
+		}
+		if p.embeddingsModelChanged && p.candidateSession != nil {
+			changer := p.candidateSession.(interface {
+				ChangeEmbeddingModel(context.Context, string) error
+			})
+			if err := changer.ChangeEmbeddingModel(ctx, p.selectedEmbeddingsModel); err != nil {
+				if rollbackProfileAndModels() != nil {
+					p.backend.markRecoveryRequired()
+					return web.ProfileRuntime{}, web.ErrSettingsRecoveryRequired
+				}
+				return web.ProfileRuntime{}, err
+			}
+		}
 		p.finished = true
 		p.ownsDB = false
 		return web.NewProfileRuntime(p.db, p.selected, p.candidateSession, p.selectedModel, p.setupRequired), nil
 	}
+	if p.embeddingsModelChanged && p.current.Session != nil {
+		changer := p.current.Session.(interface {
+			ChangeEmbeddingModel(context.Context, string) error
+		})
+		if err := changer.ChangeEmbeddingModel(ctx, p.selectedEmbeddingsModel); err != nil {
+			if p.modelChanged && rollback() != nil {
+				p.backend.markRecoveryRequired()
+				return web.ProfileRuntime{}, web.ErrSettingsRecoveryRequired
+			}
+			return web.ProfileRuntime{}, err
+		}
+	}
 	if p.modelChanged && p.current.Session != nil {
-		setter := p.current.Session.(interface{ SetModel(string) })
-		setter.SetModel(p.selectedModel)
+		if p.chatModelChanged {
+			setter := p.current.Session.(interface{ SetModel(string) })
+			setter.SetModel(p.selectedModel)
+		}
+		if p.extractorModelChanged {
+			if session, ok := p.current.Session.(interface{ SetExtractorAdapter(provider.Adapter) }); ok {
+				session.SetExtractorAdapter(p.selectedExtractorAdapter())
+			}
+		}
 		if session, ok := p.current.Session.(*chatpkg.Session); ok {
-			extractorModel := p.providerCfg.ExtractorModel
+			extractorModel := p.selectedExtractorModel
 			extractorFallback := extractorModel == ""
 			if extractorFallback {
 				extractorModel = p.selectedModel
@@ -299,6 +451,25 @@ func (p *webSettingsPreparation) Commit(ctx context.Context) (web.ProfileRuntime
 	p.current.SetupRequired = p.setupRequired
 	p.finished = true
 	return p.current, nil
+}
+
+func (p *webSettingsPreparation) rollbackProfileMarker() error {
+	if p.current.Profile == nil {
+		return nil
+	}
+	return p.backend.writeActive(p.current.Profile.Slug, time.Now().UTC())
+}
+
+func (p *webSettingsPreparation) selectedExtractorAdapter() provider.Adapter {
+	if p.selectedExtractorModel == "" {
+		return nil
+	}
+	return provider.NewOpenAICompatible(provider.Config{
+		ProviderType: p.providerCfg.ProviderType,
+		Endpoint:     p.providerCfg.Endpoint,
+		Model:        p.selectedExtractorModel,
+		APIKey:       p.apiKey,
+	})
 }
 
 func (p *webSettingsPreparation) Abort() {
@@ -334,6 +505,27 @@ func containsModel(models []provider.ModelInfo, id string) bool {
 func setActiveModelTx(ctx context.Context, db *store.DB, profileID, model string) error {
 	return db.WithTx(ctx, func(tx *sql.Tx) error {
 		result, err := tx.ExecContext(ctx, `UPDATE provider_config SET active_model = ?, updated_at = datetime('now') WHERE profile_id = ? AND is_active = 1`, model, profileID)
+		if err != nil {
+			return err
+		}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return store.ErrProviderConfigNotFound
+		}
+		return nil
+	})
+}
+
+func setProviderModelsTx(ctx context.Context, db *store.DB, profileID, chatModel, embeddingsModel, extractorModel string) error {
+	return db.WithTx(ctx, func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `
+			UPDATE provider_config
+			SET active_model = ?, embeddings_model = ?, extractor_model = ?, updated_at = datetime('now')
+			WHERE profile_id = ? AND is_active = 1
+		`, chatModel, embeddingsModel, extractorModel, profileID)
 		if err != nil {
 			return err
 		}
