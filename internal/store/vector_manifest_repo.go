@@ -88,6 +88,23 @@ func (r *VectorManifestRepo) GetManifest(ctx context.Context, profileID string) 
 	return &m, nil
 }
 
+// GetEmbeddingState returns the manifest fields needed to restore an interrupted rebuild.
+func (r *VectorManifestRepo) GetEmbeddingState(ctx context.Context, profileID string) (string, int, string, error) {
+	var model, status string
+	var dim int
+	err := r.db.QueryRowContext(ctx, `
+		SELECT embedding_model, embedding_dim, status
+		FROM vector_index_manifest WHERE profile_id = ?
+	`, profileID).Scan(&model, &dim, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", 0, "", ErrManifestNotFound
+	}
+	if err != nil {
+		return "", 0, "", fmt.Errorf("store: get vector embedding state: %w", err)
+	}
+	return model, dim, status, nil
+}
+
 // UpsertManifest inserts or replaces the vector index manifest for a profile.
 func (r *VectorManifestRepo) UpsertManifest(ctx context.Context, m *VectorManifest) error {
 	if m.ProfileID == "" {
@@ -141,12 +158,12 @@ func (r *VectorManifestRepo) SetManifestStatus(ctx context.Context, profileID st
 }
 
 // SetManifestEmbeddingModel updates the embedding model field for a profile manifest.
-func (r *VectorManifestRepo) SetManifestEmbeddingModel(ctx context.Context, profileID, model string) error {
+func (r *VectorManifestRepo) SetManifestEmbeddingModel(ctx context.Context, profileID, model string, dim int) error {
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE vector_index_manifest
-		SET embedding_model = ?, updated_at = datetime('now')
+		SET embedding_model = ?, embedding_dim = ?, last_sync_at = datetime('now')
 		WHERE profile_id = ?
-	`, model, profileID)
+	`, model, dim, profileID)
 	if err != nil {
 		return fmt.Errorf("store: set manifest embedding model: %w", err)
 	}
@@ -155,6 +172,51 @@ func (r *VectorManifestRepo) SetManifestEmbeddingModel(ctx context.Context, prof
 		return ErrManifestNotFound
 	}
 	return nil
+}
+
+// ReplaceEntriesAndEmbedding atomically replaces the per-profile vector
+// manifest entries and embedding metadata after a staged re-index.
+func (r *VectorManifestRepo) ReplaceEntriesAndEmbedding(ctx context.Context, profileID, model string, dim int, entries []*vector.ManifestEntry) error {
+	if profileID == "" {
+		return errors.New("store: vector manifest missing profile_id")
+	}
+	for _, entry := range entries {
+		if entry == nil || entry.ProfileID != profileID || entry.SourceType == "" || entry.SourceID == "" || entry.VectorRef == "" {
+			return errors.New("store: invalid vector manifest entry")
+		}
+	}
+	return r.db.WithTx(ctx, func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `
+			UPDATE vector_index_manifest
+			SET embedding_model = ?, embedding_dim = ?, last_sync_at = datetime('now')
+			WHERE profile_id = ?
+		`, model, dim, profileID)
+		if err != nil {
+			return fmt.Errorf("store: update vector embedding metadata: %w", err)
+		}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return ErrManifestNotFound
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM vector_index_entries WHERE profile_id = ?`, profileID); err != nil {
+			return fmt.Errorf("store: replace vector entries: %w", err)
+		}
+		for _, entry := range entries {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO vector_index_entries
+					(id, profile_id, source_type, source_id, chunk_hash, embedding_model,
+					 embedding_dim, vector_ref, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`, entry.ID, entry.ProfileID, string(entry.SourceType), entry.SourceID, entry.ChunkHash,
+				entry.EmbeddingModel, entry.EmbeddingDim, entry.VectorRef, time.Now().UTC()); err != nil {
+				return fmt.Errorf("store: replace vector entry %s: %w", entry.SourceID, err)
+			}
+		}
+		return nil
+	})
 }
 
 // UpsertVectorEntry inserts or updates a vector index entry.

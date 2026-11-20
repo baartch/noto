@@ -176,7 +176,7 @@ func TestVectorRebuild_IndexFlushCalled(t *testing.T) {
 	}
 }
 
-func TestVectorRebuild_NonBlockingOnFailureSignal(t *testing.T) {
+func TestVectorRebuild_LeavesManifestUntouchedOnEmbeddingFailure(t *testing.T) {
 	ctx := context.Background()
 	setter := &stubManifestStatusSetter{}
 	index := &stubIndex{}
@@ -187,8 +187,8 @@ func TestVectorRebuild_NonBlockingOnFailureSignal(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected rebuild error")
 	}
-	if setter.lastStatus != string(vector.ManifestFailed) {
-		t.Fatalf("expected failed status, got %q", setter.lastStatus)
+	if setter.lastStatus != "" {
+		t.Fatalf("manifest status changed before staged publication, got %q", setter.lastStatus)
 	}
 }
 

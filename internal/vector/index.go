@@ -127,6 +127,13 @@ func (f *FileIndex) WithProfile(profileID string) {
 	f.profileID = profileID
 }
 
+// EmbeddingModel returns the model recorded in the loaded index header.
+func (f *FileIndex) EmbeddingModel() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.embeddingModel
+}
+
 // Load reads memory.vec into memory if it exists.
 // Supports V1 (NOTOVEC1 — vectors + graph only) and V2 (NOTOVEC2 — includes entry metadata).
 // V2 files fully restore f.entries and f.refToKey so Search works across sessions.
@@ -345,6 +352,107 @@ func (f *FileIndex) Rebuild(entries []Entry) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.rebuild(entries)
+}
+
+// PreparedRebuild is a complete index staged for later publication.
+type PreparedRebuild struct {
+	owner     *FileIndex
+	staged    *FileIndex
+	stagePath string
+	done      bool
+}
+
+// PrepareRebuild builds a complete replacement index without changing the
+// currently published index.
+func (f *FileIndex) PrepareRebuild(entries []Entry, model string) (*PreparedRebuild, error) {
+	f.mu.Lock()
+	path, codec, profileID := f.path, f.codec, f.profileID
+	f.mu.Unlock()
+
+	stagePath := ""
+	if path != "" {
+		dir := filepath.Dir(path)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("vector: ensure staging dir: %w", err)
+		}
+		file, err := os.CreateTemp(dir, ".memory-*.rebuild")
+		if err != nil {
+			return nil, fmt.Errorf("vector: create staging index: %w", err)
+		}
+		stagePath = file.Name()
+		if err := file.Close(); err != nil {
+			_ = os.Remove(stagePath)
+			return nil, fmt.Errorf("vector: close staging index: %w", err)
+		}
+	}
+
+	staged := NewFileIndex(stagePath, codec, hnsw.NewSimpleGraph(0))
+	staged.profileID = profileID
+	if err := staged.Rebuild(entries); err != nil {
+		_ = os.Remove(stagePath)
+		_ = os.Remove(stagePath + ".tmp")
+		return nil, fmt.Errorf("vector: build staging index: %w", err)
+	}
+	if len(entries) == 0 && model != "" {
+		staged.embeddingModel = model
+		if err := staged.Flush(); err != nil {
+			_ = os.Remove(stagePath)
+			_ = os.Remove(stagePath + ".tmp")
+			return nil, fmt.Errorf("vector: set empty index model: %w", err)
+		}
+	}
+	return &PreparedRebuild{owner: f, staged: staged, stagePath: stagePath}, nil
+}
+
+// Commit atomically publishes the staged index to disk and the live index.
+func (p *PreparedRebuild) Commit() error {
+	if p == nil || p.done || p.owner == nil || p.staged == nil {
+		return errors.New("vector: prepared rebuild is not active")
+	}
+	f := p.owner
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.path != "" {
+		if err := os.Rename(p.stagePath, f.path); err != nil {
+			return fmt.Errorf("vector: publish staging index: %w", err)
+		}
+	}
+	f.entries = p.staged.entries
+	f.refToKey = p.staged.refToKey
+	f.vectors = p.staged.vectors
+	f.embeddingModel = p.staged.embeddingModel
+	f.embeddingDim = p.staged.embeddingDim
+	f.graph = p.staged.graph
+	f.loaded = true
+	f.dirty = false
+	p.done = true
+	return nil
+}
+
+// Abort discards a staged replacement without affecting the live index.
+func (p *PreparedRebuild) Abort() {
+	if p == nil || p.done {
+		return
+	}
+	if p.stagePath != "" {
+		_ = os.Remove(p.stagePath)
+		_ = os.Remove(p.stagePath + ".tmp")
+	}
+	p.done = true
+}
+
+// RebuildAtomically builds and immediately publishes a complete replacement.
+func (f *FileIndex) RebuildAtomically(entries []Entry) error {
+	model := f.EmbeddingModel()
+	if len(entries) > 0 {
+		model = entries[0].EmbeddingModel
+	}
+	prepared, err := f.PrepareRebuild(entries, model)
+	if err != nil {
+		return err
+	}
+	defer prepared.Abort()
+	return prepared.Commit()
 }
 
 func (f *FileIndex) rebuild(entries []Entry) (err error) {
