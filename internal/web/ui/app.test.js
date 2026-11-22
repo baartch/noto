@@ -2,7 +2,7 @@ import { expect, mock, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 
 mock.module("lucide", () => ({
-	ArrowUp: {}, Bot: {}, ChevronDown: {}, Copy: {}, Info: {}, LoaderCircle: {}, MessagesSquare: {}, NotebookPen: {}, Settings: {}, Sparkles: {},
+	ArrowUp: {}, Bot: {}, ChevronDown: {}, Copy: {}, Info: {}, LoaderCircle: {}, MessagesSquare: {}, NotebookPen: {}, Settings: {}, Sparkles: {}, UserRound: {},
 	createIcons() {},
 }));
 
@@ -43,6 +43,15 @@ function renderedText(element) {
 	return [element.textContent || "", element.innerHTML || "", ...(element.children || []).map(renderedText)].join(" ");
 }
 
+function findByAttribute(element, name) {
+	if (element.attributes?.[name] !== undefined) return element;
+	for (const child of element.children || []) {
+		const match = findByAttribute(child, name);
+		if (match) return match;
+	}
+	return null;
+}
+
 test("submission clears the input and formats the pending bubble before the reply", async () => {
 	const elements = new Map();
 	const windowListeners = {};
@@ -78,6 +87,7 @@ test("submission clears the input and formats the pending bubble before the repl
 		clearTimeout() {},
 	};
 	let finishSend;
+	let rejectSend;
 	const messageRequests = [];
 	const settingsSaves = [];
 	const modelRequests = [];
@@ -103,7 +113,7 @@ test("submission clears the input and formats the pending bubble before the repl
 	globalThis.fetch = async (url, options = {}) => {
 		if (url === "/api/messages") {
 			messageRequests.push(JSON.parse(options.body));
-			return new Promise((resolve) => { finishSend = resolve; });
+			return new Promise((resolve, reject) => { finishSend = resolve; rejectSend = reject; });
 		}
 		if (url.startsWith("/api/messages?")) {
 			historyLoads++;
@@ -111,7 +121,7 @@ test("submission clears the input and formats the pending bubble before the repl
 			historyProfiles.push(profile);
 			if (profile === delayedHistoryProfile && url.includes("before=")) return new Promise((resolve) => { resolveDelayedHistory = resolve; });
 			const items = profile === "beta" ? [{ id: "beta-history", role: "user", content: "beta history", content_html: "<p>beta history</p>", created_at: "2026-11-20T00:00:00Z", conversation_id: "beta-conv" }] : [];
-			return { ok: true, json: async () => ({ items, next_cursor: profile === "gamma" ? "gamma-cursor" : null }) };
+			return { ok: true, json: async () => ({ items, next_cursor: ["artist", "gamma"].includes(profile) ? `${profile}-cursor` : null }) };
 		}
 		if (url.startsWith("/api/memory?")) {
 			memoryLoads++;
@@ -176,13 +186,15 @@ test("submission clears the input and formats the pending bubble before the repl
 	expect(input.value).toBe("");
 	expect(messageRequests[0]?.profile_slug).toBe("artist");
 	let row = elements.get("#message-list").children.find((child) => child.attributes?.["aria-label"] === "Your message");
-	expect(row.children[0].children[1].classes.has("whitespace-pre-wrap")).toBe(true);
-	expect(row.children[0].children[1].textContent).toBe("First\n\n**Second**");
+	let body = findByAttribute(row, "data-message-content");
+	expect(body.classes.has("whitespace-pre-wrap")).toBe(true);
+	expect(body.textContent).toBe("First\n\n**Second**");
 	await Bun.sleep(0);
 	row = elements.get("#message-list").children.find((child) => child.attributes?.["aria-label"] === "Your message");
-	expect(row.children[0].children[1].innerHTML).toBe("<p>First</p>\n<p><strong>Second</strong></p>\n");
+	body = findByAttribute(row, "data-message-content");
+	expect(body.innerHTML).toBe("<p>First</p>\n<p><strong>Second</strong></p>\n");
 	input.value = "new draft";
-	finishSend({ ok: false, status: 502, json: async () => ({ error: { message: "failed" } }) });
+	rejectSend(new TypeError("Failed to fetch"));
 	await Bun.sleep(0);
 	expect(input.value).toBe("new draft");
 
@@ -197,6 +209,17 @@ test("submission clears the input and formats the pending bubble before the repl
 	finishSend({ ok: true, json: async () => ({}) });
 	await Bun.sleep(0);
 	expect(input.value).toBe("new draft");
+
+	input.value = "retry this message";
+	elements.get("#message-form").listeners.submit({ preventDefault() {} });
+	const retryRequestID = messageRequests.at(-1).request_id;
+	rejectSend(new TypeError("Failed to fetch"));
+	await Bun.sleep(0);
+	expect(input.value).toBe("retry this message");
+	elements.get("#message-form").listeners.submit({ preventDefault() {} });
+	expect(messageRequests.at(-1).request_id).toBe(retryRequestID);
+	finishSend({ ok: true, json: async () => ({}) });
+	await Bun.sleep(0);
 	expect(Boolean(elements.get("#settings-button")?.listeners.click)).toBe(true);
 
 	const settingsButton = elements.get("#settings-button");
@@ -412,11 +435,14 @@ test("submission clears the input and formats the pending bubble before the repl
 	expect(typeof documentListeners.visibilitychange).toBe("function");
 	expect(profileSyncInterval).toBeGreaterThan(0);
 	input.value = "cross-tab unsent draft";
-	delayedHistoryProfile = "gamma";
+	activeState = { ...activeState, setup_required: false, profile: { slug: "artist", name: "Artist" }, model: "model-a", revision: activeState.revision + 1, pending_notes: 0 };
+	await windowListeners.focus();
+	expect(elements.get("#profile-name").textContent).toBe("Artist");
+	delayedHistoryProfile = "artist";
 	const olderButton = elements.get("#message-list").children.find((child) => child.innerHTML?.includes("Load older messages"));
 	expect(olderButton).toBeDefined();
 	olderButton.listeners.click();
-	delayedMemoryProfile = "gamma";
+	delayedMemoryProfile = "artist";
 	memoryTabs[0].listeners.click();
 	await Bun.sleep(0);
 	expect(typeof resolveDelayedHistory).toBe("function");
@@ -433,7 +459,7 @@ test("submission clears the input and formats the pending bubble before the repl
 	await documentListeners.visibilitychange();
 	await profileSyncCallback();
 	expect(stateGets).toBe(stateGetsWhileHidden);
-	expect(elements.get("#profile-name").textContent).toBe("Gamma");
+	expect(elements.get("#profile-name").textContent).toBe("Artist");
 	document.visibilityState = "visible";
 	await documentListeners.visibilitychange();
 	expect(elements.get("#profile-name").textContent).toBe("Beta");
@@ -451,11 +477,11 @@ test("submission clears the input and formats the pending bubble before the repl
 	activeState = { ...activeState, model: "beta-model-2", revision: 8 };
 	await documentListeners.visibilitychange();
 	expect(elements.get("#model-name").textContent).toBe("beta-model-2");
-	resolveDelayedHistory({ ok: true, json: async () => ({ items: [{ id: "stale-gamma", role: "user", content: "stale gamma history", content_html: "<p>stale gamma history</p>", created_at: "2026-11-19T00:00:00Z", conversation_id: "gamma-conv" }], next_cursor: null }) });
-	resolveDelayedMemory({ ok: true, json: async () => ({ items: [{ id: "stale-gamma-note", content: "stale gamma memory", content_html: "<p>stale gamma memory</p>", created_at: "2026-11-19T00:00:00Z" }], next_offset: null }) });
+	resolveDelayedHistory({ ok: true, json: async () => ({ items: [{ id: "stale-artist", role: "user", content: "stale artist history", content_html: "<p>stale artist history</p>", created_at: "2026-11-19T00:00:00Z", conversation_id: "artist-conv" }], next_cursor: null }) });
+	resolveDelayedMemory({ ok: true, json: async () => ({ items: [{ id: "stale-artist-note", content: "stale artist memory", content_html: "<p>stale artist memory</p>", created_at: "2026-11-19T00:00:00Z" }], next_offset: null }) });
 	await Bun.sleep(0);
-	expect(renderedText(elements.get("#message-list"))).not.toContain("stale gamma history");
-	expect(renderedText(elements.get("#memory-list"))).not.toContain("stale gamma memory");
+	expect(renderedText(elements.get("#message-list"))).not.toContain("stale artist history");
+	expect(renderedText(elements.get("#memory-list"))).not.toContain("stale artist memory");
 	delayedHistoryProfile = "";
 	delayedMemoryProfile = "";
 

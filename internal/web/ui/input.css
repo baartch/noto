@@ -66,6 +66,10 @@ button:focus-visible {
 	word-break: break-word;
 }
 
+.markdown-body.message-user-content a {
+	color: inherit;
+}
+
 .markdown-body pre {
 	max-width: 100%;
 	overflow-x: auto;

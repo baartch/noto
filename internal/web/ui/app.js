@@ -9,6 +9,7 @@ import {
 	NotebookPen,
 	Settings,
 	Sparkles,
+	UserRound,
 	createIcons,
 } from "lucide";
 import HSOverlay from "preline/plugins/overlay-non-auto";
@@ -16,7 +17,7 @@ import HSSelect from "preline/plugins/select-non-auto";
 import HSTabs from "preline/plugins/tabs-non-auto";
 import { copyRichTextToClipboard, createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
 
-const icons = { ArrowUp, Bot, ChevronDown, Copy, Info, LoaderCircle, MessagesSquare, NotebookPen, Settings, Sparkles };
+const icons = { ArrowUp, Bot, ChevronDown, Copy, Info, LoaderCircle, MessagesSquare, NotebookPen, Settings, Sparkles, UserRound };
 const $ = (selector) => document.querySelector(selector);
 const ui = {
 	profile: $("#profile-name"),
@@ -686,12 +687,24 @@ function renderMessages({ scrollToBottom: forceScrollToBottom = false } = {}) {
 function messageElement(message) {
 	const isUser = message.role === "user";
 	const row = document.createElement("article");
-	row.className = `flex ${isUser ? "justify-end" : "justify-start"}`;
+	row.className = isUser
+		? "max-w-2xl min-w-0 ms-auto flex justify-end gap-x-2 sm:gap-x-4"
+		: "flex min-w-0 gap-x-2 sm:gap-x-4";
 	row.setAttribute("aria-label", isUser ? "Your message" : "Noto response");
+	const avatar = document.createElement("span");
+	avatar.className = `mt-0.5 inline-flex size-9.5 shrink-0 items-center justify-center ${isUser ? "rounded-full bg-active text-ink" : "rounded-lg bg-accent text-white"}`;
+	avatar.setAttribute("data-message-avatar", isUser ? "user" : "assistant");
+	avatar.setAttribute("aria-hidden", "true");
+	avatar.innerHTML = isUser
+		? '<i data-lucide="user-round" class="size-4" aria-hidden="true"></i>'
+		: '<i data-lucide="bot" class="size-5" aria-hidden="true"></i>';
+	const content = document.createElement("div");
+	content.className = `min-w-0 space-y-3 ${isUser ? "grow text-end" : "w-full grow max-w-[90%] md:max-w-2xl"}`;
 	const bubble = document.createElement("div");
-	bubble.className = `max-w-[92%] rounded-2xl border px-4 py-3 sm:max-w-[82%] ${isUser ? "border-accent/30 bg-active" : "border-line bg-panel"}`;
+	bubble.className = `inline-block max-w-full rounded-lg p-4 shadow-2xs ${isUser ? "bg-accent text-white" : "border border-line bg-panel"}`;
+	bubble.setAttribute("data-message-bubble", isUser ? "user" : "assistant");
 	const meta = document.createElement("div");
-	meta.className = "mb-2 flex items-center justify-start gap-2 font-mono text-[10px] uppercase tracking-wide text-muted";
+	meta.className = `mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wide ${isUser ? "justify-end text-white/75" : "text-muted"}`;
 	const name = document.createElement("span");
 	name.textContent = isUser ? "You" : "Noto";
 	const timestamp = document.createElement("time");
@@ -699,23 +712,26 @@ function messageElement(message) {
 	timestamp.textContent = formatDate(message.created_at, { hour: "2-digit", minute: "2-digit" });
 	meta.append(name, document.createTextNode("·"), timestamp);
 	const body = document.createElement("div");
-	body.className = "markdown-body break-words text-sm leading-6 text-ink";
+	body.className = `markdown-body break-words text-start text-sm leading-6 ${isUser ? "message-user-content text-white" : "text-ink"}`;
+	body.setAttribute("data-message-content", "");
 	if (message.optimistic && message.content_html === undefined) {
 		body.classList.add("whitespace-pre-wrap");
 		body.textContent = message.content;
 	} else body.innerHTML = message.content_html || "";
 	const copyButton = document.createElement("button");
 	copyButton.type = "button";
-	copyButton.className = "grid size-6 place-items-center rounded text-muted hover:text-ink focus-visible:ring-2 focus-visible:ring-focus";
+	copyButton.className = `inline-flex items-center gap-x-2 rounded-full border border-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-focus ${isUser ? "text-white/80 hover:bg-white/10 hover:text-white" : "text-muted hover:bg-raised hover:text-ink"}`;
 	copyButton.setAttribute("aria-label", "Copy message");
 	copyButton.title = "Copy message";
-	copyButton.innerHTML = '<i data-lucide="copy" class="size-2.5" aria-hidden="true"></i>';
+	copyButton.innerHTML = '<i data-lucide="copy" class="size-4" aria-hidden="true"></i>Copy';
 	copyButton.addEventListener("click", () => void copyMessageContent(body, copyButton));
 	const actions = document.createElement("div");
-	actions.className = "mt-1 flex justify-end";
+	actions.className = `mt-2 flex ${isUser ? "justify-end" : "justify-start"}`;
 	actions.append(copyButton);
 	bubble.append(meta, body, actions);
-	row.append(bubble);
+	content.append(bubble);
+	if (isUser) row.append(content, avatar);
+	else row.append(avatar, content);
 	return row;
 }
 

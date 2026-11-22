@@ -10,22 +10,22 @@
 		<script src="/app.js" defer></script>
 	</head>
 	<body class="min-h-dvh overflow-hidden bg-page font-sans text-ink antialiased">
-		<header class="flex h-14 items-center justify-between border-b border-line bg-panel px-4 sm:px-6">
-			<div class="flex min-w-0 items-center gap-3">
-				<div class="grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-raised text-accent">
+		<header class="relative z-10 flex h-14 w-full items-center justify-between border-b border-line bg-panel px-4 sm:px-6">
+			<a href="/" class="flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label="Noto workspace">
+				<div class="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-line bg-raised text-accent">
 					<i data-lucide="bot" class="size-5" aria-hidden="true"></i>
 				</div>
 				<div class="min-w-0">
 					<div class="truncate text-sm font-semibold tracking-wide">Noto</div>
 					<div class="truncate text-xs text-muted">Local profile · <span id="profile-name">Loading…</span></div>
 				</div>
-			</div>
+			</a>
 			<div class="flex items-center gap-3">
 				<div class="hidden items-center gap-2 text-xs text-muted sm:flex">
 					<span class="size-2 rounded-full bg-emerald-400" aria-hidden="true"></span>
 					<span id="model-name">Checking provider</span>
 				</div>
-				<button id="settings-button" class="grid size-9 place-items-center rounded-xl border border-line bg-raised text-muted transition hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" type="button" aria-label="Settings" aria-expanded="false">
+				<button id="settings-button" class="inline-flex size-9 items-center justify-center rounded-lg border border-line bg-raised text-muted transition hover:bg-active hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" type="button" aria-label="Settings" aria-expanded="false">
 					<i data-lucide="settings" class="size-4" aria-hidden="true"></i>
 				</button>
 			</div>
@@ -51,12 +51,12 @@
 					<div id="message-list" class="mx-auto flex max-w-4xl flex-col gap-5"></div>
 				</div>
 
-				<div class="shrink-0 border-t border-line bg-panel/70 px-4 pb-3 pt-3 sm:px-7">
-					<form id="message-form" class="mx-auto max-w-4xl rounded-2xl border border-line bg-composer p-2 shadow-xl shadow-black/15">
+				<div class="shrink-0 border-t border-line bg-panel px-4 pb-3 pt-3 sm:px-7">
+					<form id="message-form" class="mx-auto max-w-4xl rounded-xl border border-line bg-composer p-2 shadow-lg shadow-black/15">
 						<label class="sr-only" for="message-input">Message Noto</label>
 						<div class="flex items-end gap-2">
 							<textarea id="message-input" rows="1" maxlength="65536" placeholder="Ask about your work…" class="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-3 text-sm leading-5 text-ink outline-none placeholder:text-muted" autocomplete="off"></textarea>
-							<button id="send-button" type="submit" class="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" aria-label="Send message">
+							<button id="send-button" type="submit" class="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" aria-label="Send message">
 								<span id="send-label">Send</span><i data-lucide="arrow-up" class="size-4" aria-hidden="true"></i>
 							</button>
 						</div>

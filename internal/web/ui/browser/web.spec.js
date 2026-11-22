@@ -62,3 +62,115 @@ test("gear opens the Settings dialog", async ({ page }) => {
 	await page.locator("#settings-button").click();
 	await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible({ timeout: 1000 });
 });
+
+const sampleConversation = [
+	{ id: "assistant-1", role: "assistant", content: "A useful answer", content_html: "<p>A useful <strong>answer</strong></p>", created_at: "2026-11-22T10:00:00Z", conversation_id: "conversation-1" },
+	{ id: "user-1", role: "user", content: "A follow-up", content_html: "<p>A follow-up</p>", created_at: "2026-11-22T10:01:00Z", conversation_id: "conversation-1" },
+];
+
+async function serveConversation(page, items = sampleConversation) {
+	await page.route("**/api/messages?*", (route) => route.fulfill({
+		status: 200,
+		contentType: "application/json",
+		body: JSON.stringify({ items, next_cursor: null }),
+	}));
+}
+
+test("chat layout uses alternating Preline user and assistant bubbles", async ({ page }) => {
+	await serveConversation(page);
+	await page.goto("/");
+	const assistant = page.getByRole("article", { name: "Noto response" });
+	const user = page.getByRole("article", { name: "Your message" });
+	await expect(assistant).toHaveClass(/gap-x-2/);
+	await expect(assistant.locator("[data-message-bubble=assistant]")).toHaveClass(/bg-panel/);
+	await expect(assistant.locator("[data-message-bubble=assistant]")).toHaveClass(/rounded-lg/);
+	await expect(assistant.locator("[data-message-avatar=assistant]")).toBeVisible();
+	await expect(user).toHaveClass(/justify-end/);
+	await expect(user.locator("[data-message-bubble=user]")).toHaveClass(/bg-accent/);
+	await expect(user.locator("[data-message-bubble=user]")).toHaveClass(/rounded-lg/);
+	await expect(user.locator("[data-message-avatar=user]")).toBeVisible();
+});
+
+test("copy preserves rich HTML and plain text formats", async ({ page }) => {
+	await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+	await serveConversation(page);
+	await page.goto("/");
+	const assistant = page.getByRole("article", { name: "Noto response" });
+	const copy = assistant.getByRole("button", { name: "Copy message" });
+	await copy.click();
+	await expect(assistant.getByRole("button", { name: "Message copied" })).toBeVisible();
+	const clipboard = await page.evaluate(async () => {
+		const [item] = await navigator.clipboard.read();
+		return {
+			html: await (await item.getType("text/html")).text(),
+			text: await (await item.getType("text/plain")).text(),
+		};
+	});
+	expect(clipboard.html).toContain("<strong>answer</strong>");
+	expect(clipboard.text).toContain("A useful answer");
+});
+
+test("optimistic message stays text until the Markdown preview returns", async ({ page }) => {
+	await page.addInitScript(() => { window.__xssExecuted = 0; });
+	let releaseMarkdown;
+	let markdownStarted;
+	const markdownRequestStarted = new Promise((resolve) => { markdownStarted = resolve; });
+	let releaseSend;
+	let sendStarted;
+	const sendRequestStarted = new Promise((resolve) => { sendStarted = resolve; });
+	await page.route("**/api/markdown", async (route) => {
+		markdownStarted();
+		await new Promise((resolve) => { releaseMarkdown = resolve; });
+		await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ content_html: "<p>Sanitized preview</p>" }) });
+	});
+	await page.route("**/api/messages**", async (route) => {
+		if (route.request().method() !== "POST") return route.continue();
+		sendStarted();
+		await new Promise((resolve) => { releaseSend = resolve; });
+		await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+	});
+	await page.goto("/");
+	const payload = '<img src="x" onerror="window.__xssExecuted++">';
+	await page.locator("#message-input").fill(payload);
+	await page.locator("#message-form").evaluate((form) => form.requestSubmit());
+	await Promise.all([markdownRequestStarted, sendRequestStarted]);
+	const user = page.getByRole("article", { name: "Your message" });
+	const content = user.locator("[data-message-content]");
+	await expect(content).toHaveText(payload);
+	await expect(user.locator("img")).toHaveCount(0);
+	expect(await page.evaluate(() => window.__xssExecuted)).toBe(0);
+	releaseMarkdown();
+	await expect(content).toHaveText("Sanitized preview");
+	await expect(user.locator("img")).toHaveCount(0);
+	expect(await page.evaluate(() => window.__xssExecuted)).toBe(0);
+	releaseSend();
+});
+
+test("long Markdown content does not widen the mobile viewport", async ({ page, isMobile }) => {
+	test.skip(!isMobile, "mobile horizontal overflow regression");
+	const longCell = "overflowcheck".repeat(48);
+	await serveConversation(page, [{
+		...sampleConversation[0],
+		content_html: `<pre><code>${longCell}</code></pre><table><tbody><tr><td>${longCell}</td></tr></tbody></table>`,
+	}]);
+	await page.goto("/");
+	const dimensions = await page.evaluate(() => ({
+		viewport: document.documentElement.clientWidth,
+		scroll: document.documentElement.scrollWidth,
+		pre: document.querySelector("pre") && {
+			clientWidth: document.querySelector("pre").clientWidth,
+			scrollWidth: document.querySelector("pre").scrollWidth,
+			overflowX: getComputedStyle(document.querySelector("pre")).overflowX,
+		},
+		table: document.querySelector("table") && {
+			clientWidth: document.querySelector("table").clientWidth,
+			scrollWidth: document.querySelector("table").scrollWidth,
+			overflowX: getComputedStyle(document.querySelector("table")).overflowX,
+		},
+	}));
+	expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.viewport);
+	expect(dimensions.pre.overflowX).toMatch(/auto|scroll/);
+	expect(dimensions.pre.scrollWidth).toBeGreaterThan(dimensions.pre.clientWidth);
+	expect(dimensions.table.overflowX).toMatch(/auto|scroll/);
+	expect(dimensions.table.scrollWidth).toBeGreaterThan(dimensions.table.clientWidth);
+});
