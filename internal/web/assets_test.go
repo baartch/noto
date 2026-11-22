@@ -1,7 +1,10 @@
 package web
 
 import (
+	"io"
 	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -27,5 +30,58 @@ func TestEmbeddedAssetsAvailable(t *testing.T) {
 	}
 	if recorder := request(h, http.MethodGet, "/missing.js", "", ""); recorder.Code != http.StatusNotFound {
 		t.Fatalf("unknown asset status = %d, want 404", recorder.Code)
+	}
+}
+
+func TestEmbeddedBrowserBundleIsLocalBunIIFE(t *testing.T) {
+	manifest, err := os.ReadFile("ui/package.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(manifest), `"esbuild"`) {
+		t.Fatal("web UI package still depends on esbuild")
+	}
+
+	bundle, err := staticFS.Open("app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bundle.Close()
+	data, err := io.ReadAll(bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := strings.TrimSpace(string(data))
+	if !strings.HasPrefix(code, "(()=>{") {
+		t.Fatal("embedded app.js is not a classic Bun IIFE bundle")
+	}
+	if strings.Contains(code, `from"preline`) || strings.Contains(code, `from"lucide`) {
+		t.Fatal("embedded app.js contains unresolved package imports")
+	}
+	if !strings.Contains(code, "data-hs-overlay") {
+		t.Fatal("embedded app.js does not include the Preline overlay runtime")
+	}
+}
+
+func TestBrowserFixtureUsesProductionCSP(t *testing.T) {
+	fixture, err := os.ReadFile("ui/browser/fixture-server.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const marker = `"Content-Security-Policy": "`
+	start := strings.Index(string(fixture), marker)
+	if start < 0 {
+		t.Fatal("browser fixture has no Content-Security-Policy header")
+	}
+	policy := string(fixture)[start+len(marker):]
+	end := strings.IndexByte(policy, '"')
+	if end < 0 {
+		t.Fatal("browser fixture CSP value is not terminated")
+	}
+
+	recorder := httptest.NewRecorder()
+	setSecurityHeaders(recorder)
+	if got := recorder.Header().Get("Content-Security-Policy"); got != policy[:end] {
+		t.Fatalf("browser fixture CSP = %q, production CSP = %q", policy[:end], got)
 	}
 }

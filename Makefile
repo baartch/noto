@@ -1,4 +1,4 @@
-.PHONY: all build test lint fmt vet tidy clean get web-build web-test web-run
+.PHONY: all build test lint fmt vet tidy clean get web-build web-test web-browser-test web-run
 
 BINARY := noto
 CMD     := ./cmd/noto
@@ -24,7 +24,11 @@ web-build:
 
 ## web-test: run web UI state tests (requires Bun)
 web-test:
-	cd internal/web/ui && bun test
+	cd internal/web/ui && bun test app.test.js state.test.js
+
+## web-browser-test: run browser tests with Node and Chrome (dialog check is pending Task 4)
+web-browser-test:
+	cd internal/web/ui && node node_modules/@playwright/test/cli.js test --grep-invert "gear opens the Settings dialog"
 
 ## run: run the binary directly
 run-web:

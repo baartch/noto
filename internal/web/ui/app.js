@@ -11,6 +11,9 @@ import {
 	Sparkles,
 	createIcons,
 } from "lucide";
+import HSOverlay from "preline/plugins/overlay-non-auto";
+import HSSelect from "preline/plugins/select-non-auto";
+import HSTabs from "preline/plugins/tabs-non-auto";
 import { copyRichTextToClipboard, createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
 
 const icons = { ArrowUp, Bot, ChevronDown, Copy, Info, LoaderCircle, MessagesSquare, NotebookPen, Settings, Sparkles };
@@ -1137,6 +1140,9 @@ window.addEventListener("resize", () => setMobileView(state.mobileView));
 
 async function initialize() {
 	createIcons({ icons });
+	HSOverlay.autoInit();
+	HSTabs.autoInit();
+	HSSelect.autoInit();
 	try {
 		const serverState = await refreshState();
 		await loadMessages();

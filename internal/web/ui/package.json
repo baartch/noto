@@ -4,12 +4,16 @@
   "type": "module",
   "scripts": {
     "build": "bun run build.mjs",
-		"test": "bun test"
+    "test": "bun test app.test.js state.test.js",
+    "test:browser": "node node_modules/@playwright/test/cli.js test --grep-invert \"gear opens the Settings dialog\""
   },
   "devDependencies": {
+    "@playwright/test": "1.65.1",
     "@tailwindcss/cli": "4.3.3",
-    "esbuild": "0.28.2",
     "lucide": "1.60.0",
     "tailwindcss": "4.3.3"
+  },
+  "dependencies": {
+    "preline": "5.1.0"
   }
 }
