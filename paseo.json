@@ -1,4 +1,7 @@
 {
+  "worktree": {
+    "setup": "bun i --frozen-lockfile --cwd ./internal/web/ui"
+  },
   "metadataGeneration": {
     "commitMessage": {
       "instructions": "use git-commit skill"
