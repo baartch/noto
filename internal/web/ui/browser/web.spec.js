@@ -154,6 +154,8 @@ test("long Markdown content does not widen the mobile viewport", async ({ page, 
 		content_html: `<pre><code>${longCell}</code></pre><table><tbody><tr><td>${longCell}</td></tr></tbody></table>`,
 	}]);
 	await page.goto("/");
+	await expect(page.locator("#message-list pre")).toBeVisible();
+	await expect(page.locator("#message-list table")).toBeVisible();
 	const dimensions = await page.evaluate(() => ({
 		viewport: document.documentElement.clientWidth,
 		scroll: document.documentElement.scrollWidth,
@@ -173,4 +175,44 @@ test("long Markdown content does not widen the mobile viewport", async ({ page, 
 	expect(dimensions.pre.scrollWidth).toBeGreaterThan(dimensions.pre.clientWidth);
 	expect(dimensions.table.overflowX).toMatch(/auto|scroll/);
 	expect(dimensions.table.scrollWidth).toBeGreaterThan(dimensions.table.clientWidth);
+});
+
+test("notes sidebar stays on the right and period tabs support keyboard navigation", async ({ page, isMobile }) => {
+	const memoryRequests = [];
+	await page.route("**/api/memory?*", async (route) => {
+		const url = new URL(route.request().url());
+		const tab = url.searchParams.get("tab");
+		memoryRequests.push(tab);
+		await route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({
+				items: [{ id: `${tab}-note`, content: `${tab} note`, content_html: `<p>${tab} note</p>`, created_at: "2026-11-22T10:00:00Z", period_key: tab }],
+				next_offset: null,
+			}),
+		});
+	});
+	await page.goto("/");
+	const notes = page.locator("#memory-panel");
+	if (isMobile) {
+		await page.locator("#mobile-memory-tab").click();
+		await expect(notes).toBeVisible();
+	} else {
+		const geometry = await page.evaluate(() => ({
+			chatRight: document.querySelector("#chat-panel").getBoundingClientRect().right,
+			notesLeft: document.querySelector("#memory-panel").getBoundingClientRect().left,
+			chatOverflow: getComputedStyle(document.querySelector("#message-scroll")).overflowY,
+			notesOverflow: getComputedStyle(document.querySelector("#memory-scroll")).overflowY,
+		}));
+		expect(geometry.notesLeft).toBeGreaterThanOrEqual(geometry.chatRight - 1);
+		expect(geometry.chatOverflow).toMatch(/auto|scroll/);
+		expect(geometry.notesOverflow).toMatch(/auto|scroll/);
+	}
+	const daily = notes.getByRole("tab", { name: "Daily" });
+	const weekly = notes.getByRole("tab", { name: "Weekly" });
+	await daily.focus();
+	await daily.press("ArrowRight");
+	await expect(weekly).toHaveAttribute("aria-selected", "true");
+	await expect.poll(() => memoryRequests.at(-1)).toBe("weekly");
+	await expect(notes.locator("#memory-list")).toContainText("weekly note");
 });

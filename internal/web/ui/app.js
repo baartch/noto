@@ -54,6 +54,7 @@ const ui = {
 	chatStatus: $("#chat-status"),
 	chatPanel: $("#chat-panel"),
 	memoryPanel: $("#memory-panel"),
+	memoryPanelContent: $("#memory-panel-content"),
 	messageScroll: $("#message-scroll"),
 	messageList: $("#message-list"),
 	messageForm: $("#message-form"),
@@ -822,7 +823,7 @@ function renderMemory() {
 
 function memoryCard(item) {
 	const card = document.createElement("article");
-	card.className = "rounded-xl border border-line bg-raised p-3.5 shadow-lg shadow-black/10";
+	card.className = "min-w-0 rounded-lg border border-line bg-raised p-4 shadow-sm";
 	const meta = document.createElement("div");
 	meta.className = "mb-2 flex items-center justify-between gap-2 font-mono text-[10px] uppercase tracking-wide text-muted";
 	const left = document.createElement("span");
@@ -883,11 +884,13 @@ function loadOlderMemory() {
 function updateMemoryTabs() {
 	for (const button of document.querySelectorAll("[data-memory-tab]")) {
 		const selected = button.dataset.memoryTab === state.memoryTab;
+		button.classList.toggle("active", selected);
 		button.setAttribute("aria-selected", String(selected));
 		button.classList.toggle("bg-active", selected);
 		button.classList.toggle("text-ink", selected);
 		button.classList.toggle("text-muted", !selected);
 	}
+	ui.memoryPanelContent.setAttribute("aria-labelledby", `memory-tab-${state.memoryTab}`);
 }
 
 async function refreshState() {

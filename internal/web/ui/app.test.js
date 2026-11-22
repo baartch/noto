@@ -104,12 +104,16 @@ test("submission clears the input and formats the pending bubble before the repl
 	let hangNextState = false;
 	let delayedMemoryProfile = "";
 	let resolveDelayedMemory;
+	let failedMemoryTab = "";
+	let deferOlderMemory = false;
+	let resolveOlderMemory;
 	let delayedHistoryProfile = "";
 	let resolveDelayedHistory;
 	let historyLoads = 0;
 	let memoryLoads = 0;
 	const historyProfiles = [];
 	const memoryProfiles = [];
+	const memoryTabRequests = [];
 	globalThis.fetch = async (url, options = {}) => {
 		if (url === "/api/messages") {
 			messageRequests.push(JSON.parse(options.body));
@@ -127,8 +131,21 @@ test("submission clears the input and formats the pending bubble before the repl
 			memoryLoads++;
 			const profile = activeState.profile.slug;
 			memoryProfiles.push(profile);
+			const query = new URLSearchParams(url.split("?")[1]);
+			const tab = query.get("tab");
+			const offset = query.get("offset");
+			memoryTabRequests.push({ profile, tab, offset });
 			if (profile === delayedMemoryProfile) return new Promise((resolve) => { resolveDelayedMemory = resolve; });
-			const items = profile === "beta" ? [{ id: "beta-memory", content: "beta memory", content_html: "<p>beta memory</p>", created_at: "2026-11-20T00:00:00Z" }] : [];
+			if (failedMemoryTab === tab) return { ok: false, status: 500, json: async () => ({ error: { message: "memory unavailable" } }) };
+			if (profile === "artist" && tab === "weekly" && offset === "1" && deferOlderMemory) {
+				return new Promise((resolve) => { resolveOlderMemory = resolve; });
+			}
+			if (profile === "artist" && tab === "weekly") {
+				const olderPage = offset === "1";
+				const items = [{ id: olderPage ? "weekly-older" : "weekly-newer", content: olderPage ? "weekly older note" : "weekly newer note", content_html: `<p>${olderPage ? "weekly older note" : "weekly newer note"}</p>`, period_start: olderPage ? "2026-11-16" : "2026-11-22", period_key: "week" }];
+				return { ok: true, json: async () => ({ items, next_offset: olderPage ? null : 1 }) };
+			}
+			const items = profile === "beta" ? [{ id: "beta-memory", content: "beta memory", content_html: "<p>beta memory</p>", created_at: "2026-11-20T00:00:00Z", freshness_state: "stale" }] : [];
 			return { ok: true, json: async () => ({ items, next_offset: null }) };
 		}
 		if (url === "/api/state") {
@@ -179,6 +196,41 @@ test("submission clears the input and formats the pending bubble before the repl
 		return { ok: true, json: async () => body };
 	};
 	await import("./app.js");
+	await Bun.sleep(0);
+	expect(memoryTabs[0].attributes["aria-selected"]).toBe("true");
+	expect(elements.get("#memory-panel-content").attributes["aria-labelledby"]).toBe("memory-tab-daily");
+	expect(renderedText(elements.get("#memory-list"))).toContain("No notes captured yet.");
+	failedMemoryTab = "weekly";
+	memoryTabs[1].listeners.click();
+	expect(renderedText(elements.get("#memory-status"))).toContain("Loading memory");
+	await Bun.sleep(0);
+	expect(renderedText(elements.get("#memory-status"))).toContain("Could not load memory: memory unavailable");
+	failedMemoryTab = "";
+	memoryTabs[1].listeners.click();
+	await Bun.sleep(0);
+	expect(memoryTabs[1].attributes["aria-selected"]).toBe("true");
+	expect(memoryTabRequests.at(-1)).toMatchObject({ tab: "weekly", offset: "0" });
+	expect(renderedText(elements.get("#memory-list"))).toContain("weekly newer note");
+	const memoryScroll = elements.get("#memory-scroll");
+	memoryScroll.scrollTop = 40;
+	memoryScroll.scrollHeight = 120;
+	deferOlderMemory = true;
+	const loadOlderMemory = elements.get("#memory-list").children.find((child) => child.textContent === "Load older memory");
+	loadOlderMemory.listeners.click();
+	await Bun.sleep(0);
+	expect(typeof resolveOlderMemory).toBe("function");
+	memoryScroll.scrollHeight = 260;
+	resolveOlderMemory({ ok: true, json: async () => ({ items: [{ id: "weekly-older", content: "weekly older note", content_html: "<p>weekly older note</p>", period_start: "2026-11-16", period_key: "week" }], next_offset: null }) });
+	await Bun.sleep(0);
+	const weeklyContent = renderedText(elements.get("#memory-list"));
+	expect(weeklyContent.indexOf("weekly older note")).toBeLessThan(weeklyContent.indexOf("weekly newer note"));
+	expect(memoryScroll.scrollTop).toBe(180);
+	deferOlderMemory = false;
+	memoryTabs[2].listeners.click();
+	await Bun.sleep(0);
+	expect(memoryTabs[2].attributes["aria-selected"]).toBe("true");
+	expect(renderedText(elements.get("#memory-list"))).toContain("No summaries available yet.");
+	memoryTabs[0].listeners.click();
 	await Bun.sleep(0);
 	const input = elements.get("#message-input");
 	input.value = "First\n\n**Second**";
@@ -468,6 +520,7 @@ test("submission clears the input and formats the pending bubble before the repl
 	expect(elements.get("#memory-status").classList.contains("hidden")).toBe(true);
 	expect(renderedText(elements.get("#message-list"))).toContain("beta history");
 	expect(renderedText(elements.get("#memory-list"))).toContain("beta memory");
+	expect(renderedText(elements.get("#memory-list"))).toContain("stale");
 	expect(messageRequests).toHaveLength(crossTabMessagePosts);
 	expect(historyProfiles.at(-1)).toBe("beta");
 	expect(memoryProfiles.at(-1)).toBe("beta");
