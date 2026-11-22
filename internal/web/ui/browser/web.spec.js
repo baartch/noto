@@ -279,6 +279,36 @@ test("chat layout uses alternating Preline user and assistant bubbles", async ({
 	await expect(user.locator("[data-message-avatar=user]")).toBeVisible();
 });
 
+test("message metadata and copy control sit below and align with each bubble", async ({ page }) => {
+	await serveConversation(page);
+	await page.goto("/");
+	for (const [role, expectedName, align] of [["assistant", "Noto", "left"], ["user", "You", "right"]]) {
+		const message = page.locator(`[data-message-bubble=${role}]`).locator("xpath=ancestor::article");
+		const bubble = message.locator(`[data-message-bubble=${role}]`);
+		const footer = message.locator("[data-message-footer]");
+		const meta = message.locator("[data-message-meta]");
+		const copy = message.getByRole("button", { name: "Copy message" });
+		await expect(meta).toContainText(expectedName);
+		await expect(meta.locator("time")).toBeVisible();
+		await expect(meta.locator("xpath=ancestor::*[@data-message-bubble]")).toHaveCount(0);
+		const [bubbleBox, footerBox, copyBox, footerParent, metaParent, copyParent] = await Promise.all([
+			bubble.boundingBox(),
+			footer.boundingBox(),
+			copy.boundingBox(),
+			footer.evaluate((element) => element.parentElement),
+			meta.evaluate((element) => element.parentElement),
+			copy.evaluate((element) => element.parentElement),
+		]);
+		expect(footerBox.y).toBeGreaterThanOrEqual(bubbleBox.y + bubbleBox.height);
+		expect(metaParent).toBe(footerParent);
+		expect(copyParent).toBe(metaParent);
+		expect(copyBox.width).toBeLessThanOrEqual(16);
+		expect(copyBox.height).toBeLessThanOrEqual(16);
+		if (align === "left") expect(footerBox.x).toBeCloseTo(bubbleBox.x, 0);
+		else expect(footerBox.x + footerBox.width).toBeCloseTo(bubbleBox.x + bubbleBox.width, 0);
+	}
+});
+
 test("dark app palette matches Preline surfaces and primary colors", async ({ page }) => {
 	await serveConversation(page, [
 		{ ...sampleConversation[0], content_html: '<p><a href="/docs">Reference link</a></p>' },
