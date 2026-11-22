@@ -48,14 +48,17 @@ jobs:
         include:
           - goos: linux
             goarch: amd64
+            cgo: "1"
             ext: ""
             archive: tar.gz
           - goos: windows
             goarch: amd64
+            cgo: "0"
             ext: .exe
             archive: zip
           - goos: darwin
             goarch: amd64
+            cgo: "0"
             ext: ""
             archive: tar.gz
     steps:
@@ -73,16 +76,66 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: ${{ matrix.cgo }}
         run: |
           mkdir -p dist
           CURRENT_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           go build -ldflags "-X noto/internal/version.Version=${{ github.ref_name }} -X noto/internal/version.Commit=${{ github.sha}} -X noto/internal/version.Date=$CURRENT_DATE" -o dist/noto${{ matrix.ext }} ./cmd/noto
+
+      - name: Bundle Linux sherpa runtime
+        if: matrix.goos == 'linux'
+        run: |
+          SHERPA_DIR=$(go list -m -f '{{.Dir}}' github.com/k2-fsa/sherpa-onnx-go-linux/v2)
+          mkdir -p dist/lib
+          cp "$SHERPA_DIR"/lib/x86_64-unknown-linux-gnu/*.so dist/lib/
+          ./dist/noto --help >/dev/null
+
+      - name: Smoke test bundled sherpa runtime
+        if: matrix.goos == 'linux'
+        run: |
+          set -euo pipefail
+          go test -c -o dist/voice-runtime-smoke ./internal/voice
+          readelf -d dist/voice-runtime-smoke | grep -F '$ORIGIN/lib'
+          DEPENDENCIES=$(env -u LD_LIBRARY_PATH ldd dist/voice-runtime-smoke)
+          SHERPA_DEPENDENCIES=$(printf '%s\n' "$DEPENDENCIES" | grep -E '^[[:space:]]*(libsherpa|libonnxruntime)')
+          if [ -z "$SHERPA_DEPENDENCIES" ]; then
+            echo "sherpa runtime dependencies are missing from ldd output" >&2
+            exit 1
+          fi
+          printf '%s\n' "$SHERPA_DEPENDENCIES"
+          if printf '%s\n' "$SHERPA_DEPENDENCIES" | grep -vF "=> $PWD/dist/lib/"; then
+            echo "sherpa runtime resolved outside the release bundle" >&2
+            exit 1
+          fi
+          for library in libsherpa-onnx-c-api.so libonnxruntime.so; do
+            if ! printf '%s\n' "$SHERPA_DEPENDENCIES" | grep -F "$library => $PWD/dist/lib/$library " >/dev/null; then
+              echo "sherpa runtime dependency $library is not bundled" >&2
+              exit 1
+            fi
+          done
+          if printf '%s\n' "$SHERPA_DEPENDENCIES" | grep -vF "=> $PWD/dist/lib/"; then
+            echo "a sherpa/onnx runtime dependency resolved outside the release bundle" >&2
+            exit 1
+          fi
+          env -i PATH="$PATH" HOME="$HOME" dist/voice-runtime-smoke -test.run '^TestSherpaRuntimeLoadsWithoutModelFiles$'
+          NOTO_DEPENDENCIES=$(env -u LD_LIBRARY_PATH ldd dist/noto)
+          NOTO_SHERPA_DEPENDENCIES=$(printf '%s\n' "$NOTO_DEPENDENCIES" | grep -E '^[[:space:]]*(libsherpa|libonnxruntime)' || true)
+          if [ -n "$NOTO_SHERPA_DEPENDENCIES" ]; then
+            readelf -d dist/noto | grep -F '$ORIGIN/lib'
+            if printf '%s\n' "$NOTO_SHERPA_DEPENDENCIES" | grep -vF "=> $PWD/dist/lib/"; then
+              echo "noto resolved a sherpa/onnx dependency outside the release bundle" >&2
+              exit 1
+            fi
+          fi
+          env -i PATH="$PATH" HOME="$HOME" dist/noto --help >/dev/null
 
       - name: Package artifact
         run: |
           cd dist
           if [ "${{ matrix.archive }}" = "zip" ]; then
             zip noto-${{ matrix.goos }}-${{ matrix.goarch }}.zip noto${{ matrix.ext }}
+          elif [ "${{ matrix.goos }}" = "linux" ]; then
+            tar -czf noto-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz noto lib
           else
             tar -czf noto-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz noto${{ matrix.ext }}
           fi

@@ -57,6 +57,14 @@ github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUq
 github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSow5/V2vxeg=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
+github.com/k2-fsa/sherpa-onnx-go-linux/v2 v2.0.3 h1:yv5TRJNxMjpu+y03ynUpkGGs19PdS2d1Naq0CuqLNJA=
+github.com/k2-fsa/sherpa-onnx-go-linux/v2 v2.0.3/go.mod h1:zfoI5ANNAiKCZFyWC9NfZATijClmbT1UqZ+ycvcMKCY=
+github.com/k2-fsa/sherpa-onnx-go-macos/v2 v2.0.3 h1:5suKY8zH14x7vjX+lR4dKHe+pNXBsbq9dNdPk9AguGI=
+github.com/k2-fsa/sherpa-onnx-go-macos/v2 v2.0.3/go.mod h1:RnFSuUrQNs+AlqEV7WiO0UIBZ1L4Ka2X5QxW8A0wCbY=
+github.com/k2-fsa/sherpa-onnx-go-windows/v2 v2.0.3 h1:UguEAT5+kpFHhzQqahuk+lYrCDdLssCoPQ/NChSTaPw=
+github.com/k2-fsa/sherpa-onnx-go-windows/v2 v2.0.3/go.mod h1:4T8q8/N4uaTxf7acMYaJrafG69HJRdlDRDstAODHz2Q=
+github.com/k2-fsa/sherpa-onnx-go/v2 v2.0.3 h1:/9m/o5bhMoR8Mho5h+Pn/jJ1JJgwlJA2xPwuWOfE4c4=
+github.com/k2-fsa/sherpa-onnx-go/v2 v2.0.3/go.mod h1:OoL9C0RP4TFhPIqNWh1JHfPHwG/grFjlb65ukNb2EpI=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/ledongthuc/pdf v0.0.0-20261020125853-5e46805f718e h1:U2Z+V2xqvjJg0azbxHnhOmz2DrpYq0WKpItMPKR6FhY=
