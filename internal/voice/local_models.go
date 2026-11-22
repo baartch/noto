@@ -25,7 +25,9 @@ import (
 )
 
 const (
-	localModelDirectoryName = "parakeet-tdt-0.6b-v3-int8"
+	// LocalModelID is the stable profile-selection ID for the bundled Parakeet model.
+	LocalModelID            = "parakeet-tdt-0.6b-v3-int8"
+	localModelDirectoryName = LocalModelID
 	parakeetV3ArchiveRoot   = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8"
 	parakeetV3ArchiveURL    = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2"
 	parakeetV3DownloadBytes = int64(487_211_443)

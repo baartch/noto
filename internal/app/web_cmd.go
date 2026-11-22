@@ -20,6 +20,7 @@ import (
 	"noto/internal/provider"
 	startupprogress "noto/internal/startup"
 	"noto/internal/store"
+	"noto/internal/voice"
 	"noto/internal/web"
 )
 
@@ -141,8 +142,9 @@ func runWeb(cmd *cobra.Command, port int) error {
 	}
 	service = web.NewService(profileDB, activeProfile, webSession, activeModel, setupRequired)
 	settingsBackend := newWebSettingsBackend()
+	voiceBackend := newWebVoiceBackend(ctx, voice.NewModelManager())
 	server := &http.Server{
-		Handler:           web.NewHandler(service, origin, settingsBackend),
+		Handler:           web.NewHandlerWithVoice(service, origin, settingsBackend, voiceBackend),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
@@ -160,11 +162,17 @@ func runWeb(cmd *cobra.Command, port int) error {
 			runErr = fmt.Errorf("web: HTTP server: %w", serveErr)
 		}
 	}
+	stopSignals()
 
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelShutdown()
+	closeRuntime := func(ctx context.Context) error {
+		waitErr := voiceBackend.Wait(ctx)
+		closeErr := service.CloseRuntime(ctx)
+		return errors.Join(waitErr, closeErr)
+	}
 	cleanupErr := cleanupWeb(shutdownCtx, server, service,
-		service.CloseRuntime,
+		closeRuntime,
 		nil,
 	)
 	if cleanupErr != nil {

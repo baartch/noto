@@ -6,7 +6,6 @@ import (
 	"io"
 	"mime"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -19,10 +18,10 @@ func NewHandler(service *Service, origin string, settingsBackends ...SettingsBac
 	if len(settingsBackends) > 0 {
 		settingsBackend = settingsBackends[0]
 	}
-	expectedHost := ""
-	if parsed, err := url.Parse(origin); err == nil && parsed.Scheme == "http" && parsed.Hostname() == "127.0.0.1" && parsed.User == nil {
-		expectedHost = parsed.Host
-	}
+	return NewHandlerWithVoice(service, origin, settingsBackend, nil)
+}
+
+func newHandler(service *Service, origin, expectedHost string, settingsBackend SettingsBackend, voiceBackend VoiceBackend) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		setSecurityHeaders(w)
 		isAPI := strings.HasPrefix(r.URL.Path, "/api/")
@@ -34,7 +33,7 @@ func NewHandler(service *Service, origin string, settingsBackends ...SettingsBac
 			return
 		}
 		requestOrigin := r.Header.Get("Origin")
-		if (requestOrigin != "" && requestOrigin != origin) || (r.Method == http.MethodPost && requestOrigin != origin) {
+		if (requestOrigin != "" && requestOrigin != origin) || ((r.Method == http.MethodPost || r.Method == http.MethodDelete) && requestOrigin != origin) {
 			writeAPIError(w, http.StatusForbidden, "invalid_origin", "request origin is not allowed")
 			return
 		}
@@ -100,6 +99,10 @@ func NewHandler(service *Service, origin string, settingsBackends ...SettingsBac
 				return
 			}
 			writeJSON(w, http.StatusOK, result)
+		case "/api/voice", "/api/voice/models", "/api/voice/transcriptions", "/api/voice/local-model", "/api/voice/local-model/download":
+			if handleVoiceRoute(w, r, service, voiceBackend) {
+				return
+			}
 		case "/api/messages":
 			switch r.Method {
 			case http.MethodGet:
@@ -374,6 +377,6 @@ func setSecurityHeaders(w http.ResponseWriter) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+	w.Header().Set("Permissions-Policy", "camera=(), microphone=(self), geolocation=()")
 	w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 }
