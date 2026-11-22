@@ -9,19 +9,26 @@ import {
 	NotebookPen,
 	Settings,
 	Sparkles,
+	UserRound,
 	createIcons,
 } from "lucide";
+import HSOverlay from "preline/plugins/overlay-non-auto";
+import HSSelect from "preline/plugins/select-non-auto";
+import HSTabs from "preline/plugins/tabs-non-auto";
 import { copyRichTextToClipboard, createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
 
-const icons = { ArrowUp, Bot, ChevronDown, Copy, Info, LoaderCircle, MessagesSquare, NotebookPen, Settings, Sparkles };
+const icons = { ArrowUp, Bot, ChevronDown, Copy, Info, LoaderCircle, MessagesSquare, NotebookPen, Settings, Sparkles, UserRound };
 const $ = (selector) => document.querySelector(selector);
 const ui = {
 	profile: $("#profile-name"),
 	model: $("#model-name"),
 	settingsButton: $("#settings-button"),
-	workspace: $("#workspace"),
-	workspaceNav: $("#workspace-nav"),
 	settingsPanel: $("#settings-panel"),
+	settingsTabs: $("#settings-tabs"),
+	settingsClose: $("#settings-close"),
+	settingsProfileTab: $("#settings-profile-tab"),
+	settingsProfilePanel: $("#settings-profile-panel"),
+	settingsModelsPanel: $("#settings-models-panel"),
 	settingsForm: $("#settings-form"),
 	settingsProfile: $("#settings-profile"),
 	settingsProfileSearch: $("#settings-profile-search"),
@@ -50,6 +57,7 @@ const ui = {
 	chatStatus: $("#chat-status"),
 	chatPanel: $("#chat-panel"),
 	memoryPanel: $("#memory-panel"),
+	memoryPanelContent: $("#memory-panel-content"),
 	messageScroll: $("#message-scroll"),
 	messageList: $("#message-list"),
 	messageForm: $("#message-form"),
@@ -215,6 +223,7 @@ function renderState(serverState) {
 	state.pendingNotes = Number(serverState.pending_notes || 0);
 	ui.profile.textContent = state.profile;
 	ui.model.textContent = state.model;
+	ui.model.title = state.model;
 	updateSetupBanner();
 	updateSendControls();
 }
@@ -254,18 +263,45 @@ function updateSettingsControls() {
 	ui.settingsSave.disabled = draftLocked || state.settingsModelLoading || !state.settingsModelsLoaded || !state.draftProfileSlug || state.recoveryRequired || (!state.settingsSetupRequired && !state.draftModel) || (embeddingRebuildRequired && !state.embeddingRebuildConfirmed);
 	ui.settingsSave.textContent = state.settingsSaving ? "Saving…" : "Save";
 	ui.settingsCancel.disabled = state.settingsSaving;
+	ui.settingsClose.disabled = state.settingsSaving;
 }
 
 function setSettingsPage(open) {
 	state.settingsOpen = open;
 	ui.settingsButton.setAttribute("aria-expanded", String(open));
-	ui.workspace.classList.toggle("hidden", open);
-	ui.workspaceNav.classList.toggle("hidden", open);
-	ui.settingsPanel.classList.toggle("hidden", !open);
-	if (!open) {
-		setMobileView(state.mobileView);
+	if (open) {
+		HSTabs.open(ui.settingsProfileTab);
+		if (HSOverlay.getInstance(ui.settingsPanel)) HSOverlay.open(ui.settingsPanel);
+		else ui.settingsPanel.classList.remove("hidden");
+	} else {
+		if (HSOverlay.getInstance(ui.settingsPanel)) HSOverlay.close(ui.settingsPanel);
+		else ui.settingsPanel.classList.add("hidden");
 		ui.settingsButton.focus();
 	}
+}
+
+function focusSettingsField() {
+	const focusTarget = ui.settingsModelsPanel.classList.contains("hidden") ? ui.settingsProfileSearch : ui.settingsModelSearch;
+	focusTarget.focus();
+}
+
+function updateSettingsTabOrientation() {
+	ui.settingsTabs.setAttribute("aria-orientation", window.matchMedia("(min-width: 768px)").matches ? "vertical" : "horizontal");
+}
+
+function trapSettingsTab(event) {
+	if (event.key !== "Tab" || !state.settingsOpen) return;
+	const focusable = Array.from(ui.settingsPanel.querySelectorAll("a[href]:not([tabindex='-1']), button:not([disabled]):not([tabindex='-1']), input:not([disabled]):not([tabindex='-1']), select:not([disabled]):not([tabindex='-1']), textarea:not([disabled]):not([tabindex='-1']), [tabindex]:not([tabindex='-1'])"))
+		.filter((element) => element.getClientRects().length > 0 && !element.closest(".hidden, [hidden], [aria-hidden='true']"));
+	if (!focusable.length) return;
+	const currentIndex = focusable.indexOf(document.activeElement);
+	const direction = event.shiftKey ? -1 : 1;
+	const nextIndex = currentIndex < 0
+		? (direction < 0 ? focusable.length - 1 : 0)
+		: (currentIndex + direction + focusable.length) % focusable.length;
+	event.preventDefault();
+	event.stopPropagation();
+	focusable[nextIndex].focus();
 }
 
 function settingsOption(value, label) {
@@ -360,7 +396,9 @@ function createSearchableDropdown({ input, select, listbox, listboxID, onChange 
 	});
 	input.addEventListener("keydown", (event) => {
 		if (event.key === "Escape") {
+			if (listbox.classList.contains("hidden")) return;
 			event.preventDefault();
+			event.stopPropagation?.();
 			close();
 			input.value = selectedOption()?.label || "";
 			return;
@@ -504,7 +542,7 @@ async function openSettings() {
 		renderSettingsProfiles();
 		state.settingsLoading = false;
 		updateSettingsControls();
-		ui.settingsProfileSearch.focus();
+		focusSettingsField();
 		await loadSettingsModels(state.draftProfileSlug);
 		if (state.recoveryRequired) showStatus(ui.settingsStatus, "Settings require recovery; further changes are disabled.", "error");
 	} catch (error) {
@@ -543,7 +581,7 @@ async function reloadSettings() {
 		renderSettingsProfiles();
 		state.settingsLoading = false;
 		updateSettingsControls();
-		ui.settingsProfileSearch.focus();
+		focusSettingsField();
 		await loadSettingsModels(state.draftProfileSlug);
 	} catch (error) {
 		if (state.settingsOpen && requestID === state.settingsOpenRequestID) showStatus(ui.settingsStatus, `Could not reload settings: ${error.message}`, "error", { label: "Retry", run: () => void reloadSettings() });
@@ -683,12 +721,24 @@ function renderMessages({ scrollToBottom: forceScrollToBottom = false } = {}) {
 function messageElement(message) {
 	const isUser = message.role === "user";
 	const row = document.createElement("article");
-	row.className = `flex ${isUser ? "justify-end" : "justify-start"}`;
+	row.className = isUser
+		? "max-w-2xl min-w-0 ms-auto flex justify-end gap-x-2 sm:gap-x-4"
+		: "flex min-w-0 gap-x-2 sm:gap-x-4";
 	row.setAttribute("aria-label", isUser ? "Your message" : "Noto response");
+	const avatar = document.createElement("span");
+	avatar.className = `mt-0.5 inline-flex size-9.5 shrink-0 items-center justify-center ${isUser ? "rounded-full bg-active text-ink" : "rounded-lg bg-accent text-white"}`;
+	avatar.setAttribute("data-message-avatar", isUser ? "user" : "assistant");
+	avatar.setAttribute("aria-hidden", "true");
+	avatar.innerHTML = isUser
+		? '<i data-lucide="user-round" class="size-4" aria-hidden="true"></i>'
+		: '<i data-lucide="bot" class="size-5" aria-hidden="true"></i>';
+	const content = document.createElement("div");
+	content.className = `min-w-0 space-y-3 ${isUser ? "grow text-end" : "w-full grow max-w-[90%] md:max-w-2xl"}`;
 	const bubble = document.createElement("div");
-	bubble.className = `max-w-[92%] rounded-2xl border px-4 py-3 sm:max-w-[82%] ${isUser ? "border-accent/30 bg-active" : "border-line bg-panel"}`;
+	bubble.className = `inline-block max-w-full rounded-lg p-4 shadow-2xs ${isUser ? "bg-accent text-white" : "border border-line bg-panel"}`;
+	bubble.setAttribute("data-message-bubble", isUser ? "user" : "assistant");
 	const meta = document.createElement("div");
-	meta.className = "mb-2 flex items-center justify-start gap-2 font-mono text-[10px] uppercase tracking-wide text-muted";
+	meta.className = `mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wide ${isUser ? "justify-end text-white/75" : "text-muted"}`;
 	const name = document.createElement("span");
 	name.textContent = isUser ? "You" : "Noto";
 	const timestamp = document.createElement("time");
@@ -696,23 +746,26 @@ function messageElement(message) {
 	timestamp.textContent = formatDate(message.created_at, { hour: "2-digit", minute: "2-digit" });
 	meta.append(name, document.createTextNode("·"), timestamp);
 	const body = document.createElement("div");
-	body.className = "markdown-body break-words text-sm leading-6 text-ink";
+	body.className = `markdown-body break-words text-start text-sm leading-6 ${isUser ? "message-user-content text-white" : "text-ink"}`;
+	body.setAttribute("data-message-content", "");
 	if (message.optimistic && message.content_html === undefined) {
 		body.classList.add("whitespace-pre-wrap");
 		body.textContent = message.content;
 	} else body.innerHTML = message.content_html || "";
 	const copyButton = document.createElement("button");
 	copyButton.type = "button";
-	copyButton.className = "grid size-6 place-items-center rounded text-muted hover:text-ink focus-visible:ring-2 focus-visible:ring-focus";
+	copyButton.className = `inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-transparent p-0 focus-visible:ring-2 focus-visible:ring-focus ${isUser ? "text-white/80 hover:bg-white/10 hover:text-white" : "text-muted hover:bg-raised hover:text-ink"}`;
 	copyButton.setAttribute("aria-label", "Copy message");
 	copyButton.title = "Copy message";
-	copyButton.innerHTML = '<i data-lucide="copy" class="size-2.5" aria-hidden="true"></i>';
+	copyButton.innerHTML = '<i data-lucide="copy" class="size-4" aria-hidden="true"></i>';
 	copyButton.addEventListener("click", () => void copyMessageContent(body, copyButton));
 	const actions = document.createElement("div");
-	actions.className = "mt-1 flex justify-end";
+	actions.className = `mt-2 flex ${isUser ? "justify-end" : "justify-start"}`;
 	actions.append(copyButton);
 	bubble.append(meta, body, actions);
-	row.append(bubble);
+	content.append(bubble);
+	if (isUser) row.append(content, avatar);
+	else row.append(avatar, content);
 	return row;
 }
 
@@ -803,7 +856,7 @@ function renderMemory() {
 
 function memoryCard(item) {
 	const card = document.createElement("article");
-	card.className = "rounded-xl border border-line bg-raised p-3.5 shadow-lg shadow-black/10";
+	card.className = "min-w-0 rounded-lg border border-line bg-raised p-4 shadow-sm";
 	const meta = document.createElement("div");
 	meta.className = "mb-2 flex items-center justify-between gap-2 font-mono text-[10px] uppercase tracking-wide text-muted";
 	const left = document.createElement("span");
@@ -864,11 +917,13 @@ function loadOlderMemory() {
 function updateMemoryTabs() {
 	for (const button of document.querySelectorAll("[data-memory-tab]")) {
 		const selected = button.dataset.memoryTab === state.memoryTab;
+		button.classList.toggle("active", selected);
 		button.setAttribute("aria-selected", String(selected));
 		button.classList.toggle("bg-active", selected);
 		button.classList.toggle("text-ink", selected);
 		button.classList.toggle("text-muted", !selected);
 	}
+	ui.memoryPanelContent.setAttribute("aria-labelledby", `memory-tab-${state.memoryTab}`);
 }
 
 async function refreshState() {
@@ -1103,7 +1158,14 @@ function setMobileView(view) {
 
 ui.settingsButton.addEventListener("click", openSettings);
 ui.settingsCancel.addEventListener("click", cancelSettings);
+ui.settingsClose.addEventListener("click", cancelSettings);
 ui.settingsForm.addEventListener("submit", saveSettings);
+ui.settingsPanel.addEventListener("keydown", trapSettingsTab);
+document.addEventListener("keydown", (event) => {
+	if (event.key !== "Escape" || !state.settingsOpen) return;
+	event.preventDefault();
+	cancelSettings();
+});
 ui.settingsConfirmEmbeddingRebuild.addEventListener("change", () => {
 	state.embeddingRebuildConfirmed = ui.settingsConfirmEmbeddingRebuild.checked;
 	updateSettingsControls();
@@ -1133,10 +1195,17 @@ ui.messageInput.addEventListener("keydown", (event) => {
 		ui.messageForm.requestSubmit();
 	}
 });
-window.addEventListener("resize", () => setMobileView(state.mobileView));
+window.addEventListener("resize", () => {
+	setMobileView(state.mobileView);
+	updateSettingsTabOrientation();
+});
 
 async function initialize() {
 	createIcons({ icons });
+	updateSettingsTabOrientation();
+	HSOverlay.autoInit();
+	HSTabs.autoInit();
+	HSSelect.autoInit();
 	try {
 		const serverState = await refreshState();
 		await loadMessages();

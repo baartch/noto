@@ -45,6 +45,19 @@ noto web
 
 Open the printed `http://127.0.0.1:8080` address. The web UI uses the active profile's existing provider, conversation history, notes, and weekly/monthly summaries. Provider setup must be completed in the terminal first. See the [web GUI operations notes](docs/operations.md#web-gui) for localhost, lifecycle, and build details.
 
+## Web UI development
+
+The browser source is in `internal/web/ui`; `make web-build` bundles it into `internal/web/static`, which the Go binary embeds. Rebuilding the UI requires Bun and the project's pinned JavaScript dependencies. On a fresh checkout, install them with `cd internal/web/ui && bun install --frozen-lockfile`. Tailwind CSS is built with the project-local `@tailwindcss/cli`; no global Tailwind installation is needed.
+
+```bash
+make web-build          # Bun bundle and local Tailwind CSS build
+make web-test           # Bun UI state and interaction tests
+make web-browser-test   # Playwright tests in desktop and 390×844 mobile Chrome
+make build              # Go binary with the generated web assets embedded
+```
+
+`make web-test` requires Bun. `make web-browser-test` also requires Node.js, the pinned project-local Playwright package, and an installed Chrome browser. Bun's `browser` build target selects browser platform resolution but does **not** down-convert JavaScript syntax to ES2022; the generated bundle is tested in Chrome, and no ES2022 compatibility floor is claimed. At runtime the Go binary serves the embedded UI without Bun or Node and makes no third-party asset requests; chat still uses the provider configured for the active profile.
+
 ## Profile reference files
 
 Place reference documents directly in a profile's `files/` directory; there is no upload command:

@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@source "./node_modules/preline/dist/*.js";
+@import "./node_modules/preline/variants.css";
 @source "./*.js";
 @source "./index.html";
 
@@ -58,10 +60,14 @@ button:focus-visible {
 }
 
 .markdown-body a {
-	color: var(--theme-focus);
+	color: var(--theme-link);
 	text-decoration: underline;
 	text-underline-offset: 0.2em;
 	word-break: break-word;
+}
+
+.markdown-body.message-user-content a {
+	color: inherit;
 }
 
 .markdown-body pre {

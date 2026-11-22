@@ -3,29 +3,29 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="theme-color" content="#0d0715" />
+		<meta name="theme-color" content="#171717" />
 		<title>Noto — Workspace</title>
 		<link rel="stylesheet" href="/theme.css" />
 		<link rel="stylesheet" href="/app.css" />
 		<script src="/app.js" defer></script>
 	</head>
 	<body class="min-h-dvh overflow-hidden bg-page font-sans text-ink antialiased">
-		<header class="flex h-14 items-center justify-between border-b border-line bg-panel px-4 sm:px-6">
-			<div class="flex min-w-0 items-center gap-3">
-				<div class="grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-raised text-accent">
+		<header class="relative z-10 flex h-14 w-full items-center justify-between border-b border-line bg-panel px-4 sm:px-6">
+			<a href="/" class="flex min-w-0 items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" aria-label="Noto workspace">
+				<div class="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-line bg-raised text-accent">
 					<i data-lucide="bot" class="size-5" aria-hidden="true"></i>
 				</div>
 				<div class="min-w-0">
 					<div class="truncate text-sm font-semibold tracking-wide">Noto</div>
 					<div class="truncate text-xs text-muted">Local profile · <span id="profile-name">Loading…</span></div>
 				</div>
-			</div>
-			<div class="flex items-center gap-3">
-				<div class="hidden items-center gap-2 text-xs text-muted sm:flex">
+			</a>
+			<div class="flex min-w-0 items-center gap-3">
+				<div class="hidden min-w-0 items-center gap-2 text-xs text-muted sm:flex">
 					<span class="size-2 rounded-full bg-emerald-400" aria-hidden="true"></span>
-					<span id="model-name">Checking provider</span>
+					<span id="model-name" class="max-w-[40vw] truncate" title="Checking provider">Checking provider</span>
 				</div>
-				<button id="settings-button" class="grid size-9 place-items-center rounded-xl border border-line bg-raised text-muted transition hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" type="button" aria-label="Settings" aria-expanded="false">
+			<button id="settings-button" class="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-line bg-raised text-muted transition hover:bg-active hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" type="button" aria-label="Settings" aria-expanded="false">
 					<i data-lucide="settings" class="size-4" aria-hidden="true"></i>
 				</button>
 			</div>
@@ -41,7 +41,7 @@
 		</nav>
 
 		<main id="workspace" class="grid h-[calc(100dvh-6.25rem)] grid-cols-1 lg:h-[calc(100dvh-3.5rem)] lg:grid-cols-[minmax(0,1fr)_360px]">
-			<section id="chat-panel" class="flex min-h-0 min-w-0 flex-col border-r border-line" aria-label="Chat workspace">
+			<section id="chat-panel" class="flex min-h-0 min-w-0 flex-col" aria-label="Chat workspace">
 				<div id="setup-banner" class="mx-4 mt-4 hidden rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100 sm:mx-7" role="status">
 					Noto needs a configured provider before you can chat. Set it up in the terminal, then restart <code>noto web</code>.
 				</div>
@@ -51,12 +51,12 @@
 					<div id="message-list" class="mx-auto flex max-w-4xl flex-col gap-5"></div>
 				</div>
 
-				<div class="shrink-0 border-t border-line bg-panel/70 px-4 pb-3 pt-3 sm:px-7">
-					<form id="message-form" class="mx-auto max-w-4xl rounded-2xl border border-line bg-composer p-2 shadow-xl shadow-black/15">
+				<div class="shrink-0 border-t border-line bg-panel px-4 pb-3 pt-3 sm:px-7">
+					<form id="message-form" class="mx-auto max-w-4xl rounded-xl border border-line bg-composer p-2 shadow-lg shadow-black/15">
 						<label class="sr-only" for="message-input">Message Noto</label>
 						<div class="flex items-end gap-2">
 							<textarea id="message-input" rows="1" maxlength="65536" placeholder="Ask about your work…" class="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-3 text-sm leading-5 text-ink outline-none placeholder:text-muted" autocomplete="off"></textarea>
-							<button id="send-button" type="submit" class="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-white transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" aria-label="Send message">
+							<button id="send-button" type="submit" class="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" aria-label="Send message">
 								<span id="send-label">Send</span><i data-lucide="arrow-up" class="size-4" aria-hidden="true"></i>
 							</button>
 						</div>
@@ -68,7 +68,7 @@
 				</div>
 			</section>
 
-			<aside id="memory-panel" class="hidden min-h-0 min-w-0 flex flex-col bg-panel lg:flex" aria-label="Notes and summaries">
+			<aside id="memory-panel" class="hidden min-h-0 min-w-0 flex flex-col bg-panel lg:border-l lg:border-line lg:flex" aria-label="Notes and summaries">
 				<div class="shrink-0 border-b border-line px-5 pb-4 pt-5">
 					<div class="flex items-center justify-between">
 						<div>
@@ -79,104 +79,139 @@
 							<i data-lucide="notebook-pen" class="size-4" aria-hidden="true"></i>
 						</span>
 					</div>
-					<div class="mt-4 grid grid-cols-3 rounded-xl bg-raised p-1" role="tablist" aria-label="Memory period">
-						<button class="memory-tab rounded-lg bg-active px-2 py-2 text-xs font-medium text-ink" type="button" data-memory-tab="daily" role="tab" aria-selected="true">Daily</button>
-						<button class="memory-tab rounded-lg px-2 py-2 text-xs text-muted hover:text-ink" type="button" data-memory-tab="weekly" role="tab" aria-selected="false">Weekly</button>
-						<button class="memory-tab rounded-lg px-2 py-2 text-xs text-muted hover:text-ink" type="button" data-memory-tab="monthly" role="tab" aria-selected="false">Monthly</button>
+					<div id="memory-tabs" class="mt-4 flex w-full rounded-lg bg-raised p-1" role="tablist" aria-label="Memory period" aria-orientation="horizontal">
+						<button id="memory-tab-daily" class="memory-tab active hs-tab-active:bg-panel hs-tab-active:text-ink flex-1 rounded-md px-2 py-2 text-xs font-medium text-ink transition" type="button" data-memory-tab="daily" data-hs-tab="#memory-panel-content" aria-controls="memory-panel-content" role="tab" aria-selected="true">Daily</button>
+						<button id="memory-tab-weekly" class="memory-tab hs-tab-active:bg-panel hs-tab-active:text-ink flex-1 rounded-md px-2 py-2 text-xs text-muted transition" type="button" data-memory-tab="weekly" data-hs-tab="#memory-panel-content" aria-controls="memory-panel-content" role="tab" aria-selected="false">Weekly</button>
+						<button id="memory-tab-monthly" class="memory-tab hs-tab-active:bg-panel hs-tab-active:text-ink flex-1 rounded-md px-2 py-2 text-xs text-muted transition" type="button" data-memory-tab="monthly" data-hs-tab="#memory-panel-content" aria-controls="memory-panel-content" role="tab" aria-selected="false">Monthly</button>
 					</div>
 				</div>
-				<div id="memory-status" class="mx-4 mt-3 hidden text-xs text-muted" role="status" aria-live="polite"></div>
-				<div id="memory-scroll" class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-					<div id="memory-list" class="flex flex-col gap-3"></div>
+				<div id="memory-panel-content" class="flex min-h-0 flex-1 flex-col" role="tabpanel" aria-labelledby="memory-tab-daily" tabindex="0">
+					<div id="memory-status" class="mx-4 mt-3 hidden text-xs text-muted" role="status" aria-live="polite"></div>
+					<div id="memory-scroll" class="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+						<div id="memory-list" class="flex min-w-0 flex-col gap-3"></div>
+					</div>
 				</div>
 			</aside>
 		</main>
 
-		<main id="settings-panel" class="hidden h-[calc(100dvh-6.25rem)] overflow-y-auto bg-page px-4 py-8 sm:px-6 lg:h-[calc(100dvh-3.5rem)]" aria-labelledby="settings-title">
-			<section class="mx-auto w-full max-w-2xl">
-				<div class="mb-8 flex items-start gap-4">
-					<span class="grid size-11 shrink-0 place-items-center rounded-2xl border border-line bg-raised text-accent">
-						<i data-lucide="settings" class="size-5" aria-hidden="true"></i>
-					</span>
-					<div>
-						<p class="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">Workspace</p>
-						<h1 id="settings-title" class="mt-1 text-2xl font-semibold">Settings</h1>
-						<p class="mt-2 text-sm text-muted">Choose the models used for chat, memory embeddings, and extraction.</p>
-					</div>
-				</div>
+		<div id="settings-panel" class="hs-overlay [--overlay-backdrop:static] [--body-scroll:false] [--tab-accessibility-limited:false] hidden pointer-events-none fixed inset-0 z-60 size-full overflow-x-hidden overflow-y-auto" role="dialog" tabindex="-1" aria-labelledby="settings-title" aria-modal="true" data-hs-overlay-keyboard="false">
+			<div class="hs-overlay-open:opacity-100 hs-overlay-open:duration-300 flex min-h-full items-center justify-center p-3 opacity-0 transition-all duration-300 sm:p-6">
+				<section class="pointer-events-auto my-auto flex max-h-[calc(100dvh-1.5rem)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-2xl shadow-black/30 sm:max-h-[calc(100dvh-3rem)]">
+					<header class="flex shrink-0 items-start justify-between gap-4 border-b border-line px-4 py-4 sm:px-6">
+						<div class="flex min-w-0 items-start gap-3">
+							<span class="grid size-10 shrink-0 place-items-center rounded-xl border border-line bg-raised text-accent">
+								<i data-lucide="settings" class="size-5" aria-hidden="true"></i>
+							</span>
+							<div class="min-w-0">
+								<p class="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">Workspace</p>
+								<h1 id="settings-title" class="mt-1 text-xl font-semibold">Settings</h1>
+								<p class="mt-1 text-xs text-muted sm:text-sm">Choose your profile and models for chat and memory.</p>
+							</div>
+						</div>
+						<button id="settings-close" class="grid size-9 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="button" aria-label="Close settings">
+							<span aria-hidden="true">×</span>
+						</button>
+					</header>
 
-				<form id="settings-form" class="rounded-2xl border border-line bg-panel p-5 shadow-xl shadow-black/10 sm:p-7">
-					<div class="space-y-6">
-						<div>
-							<label for="settings-profile-search" class="mb-2 block text-sm font-medium">Profile</label>
-							<div class="relative">
-								<input id="settings-profile-search" class="w-full rounded-xl border border-line bg-raised px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="settings-profile-options" autocomplete="off" placeholder="Search profiles…" />
-								<div id="settings-profile-options" class="absolute z-20 mt-1 hidden max-h-60 w-full overflow-y-auto rounded-xl border border-line bg-panel p-1 shadow-2xl" role="listbox" aria-label="Profiles"></div>
-								<select id="settings-profile" class="hidden" aria-hidden="true" tabindex="-1"></select>
-							</div>
-						</div>
-						<div>
-							<label for="settings-model-search" class="mb-2 block text-sm font-medium">LLM model</label>
-							<div class="relative">
-								<input id="settings-model-search" class="w-full rounded-xl border border-line bg-raised px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="settings-model-options" aria-describedby="settings-model-help" autocomplete="off" placeholder="Search chat models…" />
-								<div id="settings-model-options" class="absolute z-20 mt-1 hidden max-h-60 w-full overflow-y-auto rounded-xl border border-line bg-panel p-1 shadow-2xl" role="listbox" aria-label="Chat models"></div>
-								<select id="settings-model" class="hidden" aria-hidden="true" tabindex="-1"></select>
-							</div>
-							<div class="mt-2 flex items-center justify-between gap-3">
-								<p id="settings-model-help" class="text-xs text-muted" aria-live="polite"></p>
-								<button id="settings-retry-models" class="hidden shrink-0 rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="button">Retry</button>
-							</div>
-						</div>
-						<div>
-							<div class="mb-2 flex items-center gap-2">
-								<label for="settings-embeddings-search" class="block text-sm font-medium">Embeddings model</label>
-								<button id="settings-embeddings-info-button" class="grid size-6 place-items-center rounded-full text-muted hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" type="button" aria-label="Why does changing the embeddings model rebuild the index?" aria-expanded="false" aria-controls="settings-embeddings-info">
-									<i data-lucide="info" class="size-4" aria-hidden="true"></i>
+					<form id="settings-form" class="flex min-h-0 flex-1 flex-col">
+						<div class="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[200px_minmax(0,1fr)]">
+							<nav class="flex shrink-0 gap-1 overflow-x-auto border-b border-line bg-raised/40 p-3 md:flex-col md:overflow-visible md:border-b-0 md:border-r md:p-4" role="tablist" aria-label="Settings sections" aria-orientation="horizontal" id="settings-tabs">
+								<button id="settings-profile-tab" class="active hs-tab-active:bg-active hs-tab-active:text-ink flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-ink transition" type="button" role="tab" aria-selected="true" aria-controls="settings-profile-panel" data-hs-tab="#settings-profile-panel">
+									<span class="grid size-8 place-items-center rounded-lg bg-panel text-accent"><i data-lucide="user-round" class="size-4" aria-hidden="true"></i></span>Profile
 								</button>
-							</div>
-							<div id="settings-embeddings-info" class="mb-3 hidden rounded-xl border border-line bg-raised p-4 text-xs leading-5 text-muted" role="note">
-								<p>Yes, generally you need to rebuild it. The index stores numerical representations—embeddings—of your memories. A model creates those numbers so that related text lands close together in its particular mathematical space.</p>
-								<p class="mt-2">When you search, the app turns your question into a vector and compares it with the stored vectors. That comparison only makes sense when the question and memories were embedded using compatible models.</p>
-								<p class="mt-2">Think of it like coordinates on a map: two maps can both use pairs of numbers, but the same coordinates don’t necessarily point to the same place. Likewise, two models may produce vectors of the same length, but their meanings can differ. Some models also produce vectors of different lengths, which can make comparison impossible altogether.</p>
-								<p class="mt-2">Changing models therefore usually means:</p>
-								<ol class="mt-1 list-decimal pl-5">
-									<li>Keep the original memories.</li>
-									<li>Generate new embeddings for each memory using the new model.</li>
-									<li>Build a new index from those embeddings.</li>
-								</ol>
-								<p class="mt-2">The original text isn’t lost, but generating embeddings can take time and may cost money. There are exceptions when models explicitly share a compatible embedding space, but it’s safest not to assume that.</p>
-							</div>
-							<div class="relative">
-								<input id="settings-embeddings-search" class="w-full rounded-xl border border-line bg-raised px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="settings-embeddings-options" aria-describedby="settings-embeddings-help settings-embedding-warning" autocomplete="off" placeholder="Search embeddings models…" />
-								<div id="settings-embeddings-options" class="absolute z-20 mt-1 hidden max-h-60 w-full overflow-y-auto rounded-xl border border-line bg-panel p-1 shadow-2xl" role="listbox" aria-label="Embeddings models"></div>
-								<select id="settings-embeddings" class="hidden" aria-hidden="true" tabindex="-1"></select>
-							</div>
-							<p id="settings-embeddings-help" class="mt-2 text-xs text-muted" aria-live="polite"></p>
-							<div id="settings-embedding-warning" class="mt-3 hidden rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-xs text-amber-100" role="alert" aria-live="polite">
-								<p>Changing this model rebuilds the vector index from your memories. This can take time and may incur provider costs.</p>
-								<label class="mt-2 flex items-start gap-2">
-									<input id="settings-confirm-embedding-rebuild" class="mt-0.5 accent-amber-300" type="checkbox" />
-									<span>Continue and rebuild the index</span>
-								</label>
+								<button id="settings-models-tab" class="hs-tab-active:bg-active hs-tab-active:text-ink flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-muted transition" type="button" role="tab" aria-selected="false" aria-controls="settings-models-panel" data-hs-tab="#settings-models-panel">
+									<span class="grid size-8 place-items-center rounded-lg bg-panel text-accent"><i data-lucide="sparkles" class="size-4" aria-hidden="true"></i></span>Models
+								</button>
+							</nav>
+
+							<div class="min-h-0 min-w-0 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
+								<section id="settings-profile-panel" class="min-h-full" role="tabpanel" tabindex="0" aria-labelledby="settings-profile-tab">
+									<div class="mb-6">
+										<h2 class="text-base font-semibold">Profile</h2>
+										<p class="mt-1 text-sm text-muted">Choose the local profile for this workspace.</p>
+									</div>
+									<label for="settings-profile-search" class="mb-2 block text-sm font-medium">Active profile</label>
+									<div class="relative max-w-xl">
+										<input id="settings-profile-search" class="w-full rounded-lg border border-line bg-raised px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="settings-profile-options" autocomplete="off" placeholder="Search profiles…" />
+										<div id="settings-profile-options" class="absolute z-20 mt-1 hidden max-h-60 w-full overflow-y-auto rounded-lg border border-line bg-panel p-1 shadow-2xl" role="listbox" aria-label="Profiles"></div>
+										<select id="settings-profile" class="hidden" aria-hidden="true" tabindex="-1"></select>
+									</div>
+								</section>
+
+								<section id="settings-models-panel" class="hidden min-h-full" role="tabpanel" tabindex="0" aria-labelledby="settings-models-tab">
+									<div class="mb-6">
+										<h2 class="text-base font-semibold">Models</h2>
+										<p class="mt-1 text-sm text-muted">Select the models used for chat, embeddings, and extraction.</p>
+									</div>
+									<div class="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-2">
+										<div class="min-w-0 rounded-xl border border-line bg-raised/40 p-4">
+											<label for="settings-model-search" class="mb-2 block text-sm font-medium">Chat model</label>
+											<div class="relative min-w-0">
+												<input id="settings-model-search" class="w-full min-w-0 rounded-lg border border-line bg-panel px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="settings-model-options" aria-describedby="settings-model-help" autocomplete="off" placeholder="Search chat models…" />
+												<div id="settings-model-options" class="absolute z-20 mt-1 hidden max-h-60 w-full overflow-y-auto rounded-lg border border-line bg-panel p-1 shadow-2xl" role="listbox" aria-label="Chat models"></div>
+												<select id="settings-model" class="hidden" aria-hidden="true" tabindex="-1"></select>
+											</div>
+											<div class="mt-2 flex min-w-0 items-start justify-between gap-3">
+												<p id="settings-model-help" class="min-w-0 break-words text-xs text-muted" aria-live="polite"></p>
+												<button id="settings-retry-models" class="hidden shrink-0 rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium text-ink hover:bg-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="button">Retry</button>
+											</div>
+										</div>
+										<div class="min-w-0 rounded-xl border border-line bg-raised/40 p-4">
+											<div class="mb-2 flex items-center gap-2">
+												<label for="settings-embeddings-search" class="block text-sm font-medium">Embeddings model</label>
+												<button id="settings-embeddings-info-button" class="grid size-6 shrink-0 place-items-center rounded-full text-muted hover:bg-active hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" type="button" aria-label="Why does changing the embeddings model rebuild the index?" aria-expanded="false" aria-controls="settings-embeddings-info">
+													<i data-lucide="info" class="size-4" aria-hidden="true"></i>
+												</button>
+											</div>
+											<div id="settings-embeddings-info" class="mb-3 hidden rounded-lg border border-line bg-panel p-4 text-xs leading-5 text-muted" role="note">
+												<p>Yes, generally you need to rebuild it. The index stores numerical representations—embeddings—of your memories. A model creates those numbers so that related text lands close together in its particular mathematical space.</p>
+												<p class="mt-2">When you search, the app turns your question into a vector and compares it with the stored vectors. That comparison only makes sense when the question and memories were embedded using compatible models.</p>
+												<p class="mt-2">Think of it like coordinates on a map: two maps can both use pairs of numbers, but the same coordinates don’t necessarily point to the same place. Likewise, two models may produce vectors of the same length, but their meanings can differ. Some models also produce vectors of different lengths, which can make comparison impossible altogether.</p>
+												<p class="mt-2">Changing models therefore usually means:</p>
+												<ol class="mt-1 list-decimal pl-5">
+													<li>Keep the original memories.</li>
+													<li>Generate new embeddings for each memory using the new model.</li>
+													<li>Build a new index from those embeddings.</li>
+												</ol>
+												<p class="mt-2">The original text isn’t lost, but generating embeddings can take time and may cost money. There are exceptions when models explicitly share a compatible embedding space, but it’s safest not to assume that.</p>
+											</div>
+											<div class="relative min-w-0">
+												<input id="settings-embeddings-search" class="w-full min-w-0 rounded-lg border border-line bg-panel px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="settings-embeddings-options" aria-describedby="settings-embeddings-help settings-embedding-warning" autocomplete="off" placeholder="Search embeddings models…" />
+												<div id="settings-embeddings-options" class="absolute z-20 mt-1 hidden max-h-60 w-full overflow-y-auto rounded-lg border border-line bg-panel p-1 shadow-2xl" role="listbox" aria-label="Embeddings models"></div>
+												<select id="settings-embeddings" class="hidden" aria-hidden="true" tabindex="-1"></select>
+											</div>
+											<p id="settings-embeddings-help" class="mt-2 break-words text-xs text-muted" aria-live="polite"></p>
+											<div id="settings-embedding-warning" class="mt-3 hidden rounded-lg border border-amber-400/40 bg-amber-400/10 p-3 text-xs text-amber-100" role="alert" aria-live="polite">
+												<p>Changing this model rebuilds the vector index from your memories. This can take time and may incur provider costs.</p>
+												<label class="mt-2 flex items-start gap-2">
+													<input id="settings-confirm-embedding-rebuild" class="mt-0.5 accent-amber-300" type="checkbox" />
+													<span>Continue and rebuild the index</span>
+												</label>
+											</div>
+										</div>
+										<div class="min-w-0 rounded-xl border border-line bg-raised/40 p-4 lg:col-span-2">
+											<label for="settings-extractor-search" class="mb-2 block text-sm font-medium">Extractor model</label>
+											<div class="relative min-w-0">
+												<input id="settings-extractor-search" class="w-full min-w-0 rounded-lg border border-line bg-panel px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="settings-extractor-options" aria-describedby="settings-extractor-help" autocomplete="off" placeholder="Search extractor models…" />
+												<div id="settings-extractor-options" class="absolute z-20 mt-1 hidden max-h-60 w-full overflow-y-auto rounded-lg border border-line bg-panel p-1 shadow-2xl" role="listbox" aria-label="Extractor models"></div>
+												<select id="settings-extractor" class="hidden" aria-hidden="true" tabindex="-1"></select>
+											</div>
+											<p id="settings-extractor-help" class="mt-2 break-words text-xs text-muted" aria-live="polite">Choose a completion model, or use the chat model as the fallback.</p>
+										</div>
+									</div>
+								</section>
 							</div>
 						</div>
-						<div>
-							<label for="settings-extractor-search" class="mb-2 block text-sm font-medium">Extractor model</label>
-							<div class="relative">
-								<input id="settings-extractor-search" class="w-full rounded-xl border border-line bg-raised px-3 py-3 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="settings-extractor-options" aria-describedby="settings-extractor-help" autocomplete="off" placeholder="Search extractor models…" />
-								<div id="settings-extractor-options" class="absolute z-20 mt-1 hidden max-h-60 w-full overflow-y-auto rounded-xl border border-line bg-panel p-1 shadow-2xl" role="listbox" aria-label="Extractor models"></div>
-								<select id="settings-extractor" class="hidden" aria-hidden="true" tabindex="-1"></select>
+						<div class="flex shrink-0 flex-col-reverse gap-3 border-t border-line bg-panel px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+							<div id="settings-status" class="hidden min-w-0 break-words text-sm text-muted sm:flex-1" role="status" aria-live="polite"></div>
+							<div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+								<button id="settings-cancel" class="rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-ink hover:bg-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="button">Cancel</button>
+								<button id="settings-save" class="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="submit">Save</button>
 							</div>
-							<p id="settings-extractor-help" class="mt-2 text-xs text-muted" aria-live="polite">Choose a completion model, or use the chat model as the fallback.</p>
 						</div>
-					</div>
-					<div id="settings-status" class="mt-5 hidden text-sm text-muted" role="status" aria-live="polite"></div>
-					<div class="mt-8 flex flex-col-reverse gap-3 border-t border-line pt-5 sm:flex-row sm:justify-end">
-						<button id="settings-cancel" class="rounded-xl border border-line px-4 py-2.5 text-sm font-medium text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="button">Cancel</button>
-						<button id="settings-save" class="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" type="submit">Save</button>
-					</div>
-				</form>
-			</section>
-		</main>
+					</form>
+				</section>
+			</div>
+		</div>
 	</body>
 </html>
