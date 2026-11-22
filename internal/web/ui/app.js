@@ -223,6 +223,7 @@ function renderState(serverState) {
 	state.pendingNotes = Number(serverState.pending_notes || 0);
 	ui.profile.textContent = state.profile;
 	ui.model.textContent = state.model;
+	ui.model.title = state.model;
 	updateSetupBanner();
 	updateSendControls();
 }

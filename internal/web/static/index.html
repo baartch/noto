@@ -20,12 +20,12 @@
 					<div class="truncate text-xs text-muted">Local profile · <span id="profile-name">Loading…</span></div>
 				</div>
 			</a>
-			<div class="flex items-center gap-3">
-				<div class="hidden items-center gap-2 text-xs text-muted sm:flex">
+			<div class="flex min-w-0 items-center gap-3">
+				<div class="hidden min-w-0 items-center gap-2 text-xs text-muted sm:flex">
 					<span class="size-2 rounded-full bg-emerald-400" aria-hidden="true"></span>
-					<span id="model-name">Checking provider</span>
+					<span id="model-name" class="max-w-[40vw] truncate" title="Checking provider">Checking provider</span>
 				</div>
-				<button id="settings-button" class="inline-flex size-9 items-center justify-center rounded-lg border border-line bg-raised text-muted transition hover:bg-active hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" type="button" aria-label="Settings" aria-expanded="false">
+			<button id="settings-button" class="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-line bg-raised text-muted transition hover:bg-active hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" type="button" aria-label="Settings" aria-expanded="false">
 					<i data-lucide="settings" class="size-4" aria-hidden="true"></i>
 				</button>
 			</div>

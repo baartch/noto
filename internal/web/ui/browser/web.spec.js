@@ -227,6 +227,30 @@ test("@settings model labels fit inside the responsive dialog", async ({ page })
 	expect(dimensions.save.width).toBeGreaterThan(0);
 });
 
+test("a long active model name cannot push Settings off the compact desktop header", async ({ page, isMobile }) => {
+	test.skip(isMobile, "compact desktop header regression");
+	const longModel = `provider/${"model".repeat(36)}`;
+	await page.setViewportSize({ width: 640, height: 900 });
+	await page.route("**/api/state", (route) => route.fulfill({
+		status: 200,
+		contentType: "application/json",
+		body: JSON.stringify({ profile: { slug: "artist", name: "Artist" }, model: longModel, setup_required: false, revision: 1, sending: false, pending_notes: 0 }),
+	}));
+	await page.goto("/");
+	await expect(page.locator("#model-name")).toHaveText(longModel);
+	const header = await page.evaluate(() => ({
+		viewport: document.documentElement.clientWidth,
+		scroll: document.documentElement.scrollWidth,
+		gear: document.querySelector("#settings-button").getBoundingClientRect(),
+		model: document.querySelector("#model-name"),
+		modelStyle: getComputedStyle(document.querySelector("#model-name")),
+	}));
+	expect(header.gear.right).toBeLessThanOrEqual(header.viewport);
+	expect(header.scroll).toBeLessThanOrEqual(header.viewport);
+	expect(header.modelStyle.textOverflow).toBe("ellipsis");
+	expect(await page.locator("#model-name").getAttribute("title")).toBe(longModel);
+});
+
 const sampleConversation = [
 	{ id: "assistant-1", role: "assistant", content: "A useful answer", content_html: "<p>A useful <strong>answer</strong></p>", created_at: "2026-11-22T10:00:00Z", conversation_id: "conversation-1" },
 	{ id: "user-1", role: "user", content: "A follow-up", content_html: "<p>A follow-up</p>", created_at: "2026-11-22T10:01:00Z", conversation_id: "conversation-1" },
