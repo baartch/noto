@@ -2,7 +2,7 @@ import { expect, mock, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 
 mock.module("lucide", () => ({
-	ArrowUp: {}, Bot: {}, ChevronDown: {}, Copy: {}, Info: {}, LoaderCircle: {}, MessagesSquare: {}, NotebookPen: {}, Settings: {}, Sparkles: {}, UserRound: {},
+	ArrowUp: {}, Bot: {}, ChevronDown: {}, Copy: {}, Info: {}, LoaderCircle: {}, Mic: {}, MessagesSquare: {}, NotebookPen: {}, Settings: {}, Sparkles: {}, UserRound: {},
 	createIcons() {},
 }));
 

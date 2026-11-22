@@ -449,3 +449,229 @@ test("notes sidebar stays on the right and period tabs support keyboard navigati
 	await expect.poll(() => memoryRequests.at(-1)).toBe("weekly");
 	await expect(notes.locator("#memory-list")).toContainText("weekly note");
 });
+
+function voiceResponse(body, status = 200) {
+	return { status, contentType: "application/json", body: JSON.stringify(body) };
+}
+
+async function openVoiceSettings(page) {
+	await page.goto("/");
+	await page.locator("#settings-button").click();
+	const dialog = page.getByRole("dialog", { name: "Settings" });
+	await dialog.getByRole("tab", { name: "Voice" }).click();
+	await expect(dialog.locator("#settings-voice-panel")).toBeVisible();
+	return dialog;
+}
+
+test("Voice settings download Parakeet explicitly and confirm shared deletion", async ({ page }) => {
+	let selection = { profile_slug: "artist", provider: "", model: "", ready: false, revision: 1 };
+	let modelStatus = { available: true, installed: false, downloading: false, deleting: false, downloaded_bytes: 0, download_size_bytes: 487211443, installed_size_bytes: 670576784, progress: 0 };
+	let downloadCalls = 0;
+	let deleteCalls = 0;
+	let polls = 0;
+	await page.route("**/api/settings", async (route) => {
+		if (route.request().method() !== "POST") return route.continue();
+		const request = route.request().postDataJSON();
+		await route.fulfill(voiceResponse({ profile: { slug: "artist", name: "Artist" }, model: request.model, setup_required: false, revision: 2, sending: false, pending_notes: 0 }));
+	});
+	await page.route((url) => url.pathname === "/api/voice", async (route) => {
+		if (route.request().method() === "POST") {
+			selection = { ...selection, ...route.request().postDataJSON(), revision: selection.revision + 1 };
+		}
+		const ready = selection.provider === "local" && selection.model === "parakeet-tdt-0.6b-v3-int8" && modelStatus.available && modelStatus.installed;
+		await route.fulfill(voiceResponse({ ...selection, ready, model_status: { ...modelStatus }, reason: ready ? "" : "Download the local speech model to enable dictation." }));
+	});
+	await page.route("**/api/voice/models?*", (route) => route.fulfill(voiceResponse({ profile_slug: "artist", models: [], revision: selection.revision })));
+	await page.route("**/api/voice/local-model/download", async (route) => {
+		downloadCalls++;
+		polls = 0;
+		modelStatus = { ...modelStatus, downloading: true, progress: 0 };
+		await route.fulfill(voiceResponse({ model_status: { ...modelStatus } }, 202));
+	});
+	await page.route("**/api/voice/local-model", async (route) => {
+		if (route.request().method() === "DELETE") {
+			deleteCalls++;
+			modelStatus = { ...modelStatus, installed: false, downloading: false, downloaded_bytes: 0, progress: 0 };
+			await route.fulfill(voiceResponse({ model_status: { ...modelStatus } }));
+			return;
+		}
+		if (modelStatus.downloading) {
+			polls++;
+			modelStatus = polls > 2
+				? { ...modelStatus, installed: true, downloading: false, downloaded_bytes: modelStatus.download_size_bytes, progress: 1 }
+				: { ...modelStatus, downloaded_bytes: polls * 100000000, progress: polls / 4 };
+		}
+		await route.fulfill(voiceResponse({ model_status: { ...modelStatus } }));
+	});
+
+	const dialog = await openVoiceSettings(page);
+	await dialog.locator("#voice-provider").selectOption("local");
+	await expect(dialog.locator("#voice-download")).toBeVisible();
+	await expect(dialog.locator("#voice-draft-status")).toContainText("Unsaved voice changes");
+	const voiceSaveRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/voice" && request.method() === "POST");
+	await dialog.locator("#voice-save").click();
+	const savedVoiceRequest = await voiceSaveRequest;
+	expect(savedVoiceRequest.postDataJSON()).toMatchObject({ profile_slug: "artist", provider: "local", model: "parakeet-tdt-0.6b-v3-int8", revision: 1 });
+	await expect.poll(() => selection.provider).toBe("local");
+	await expect(dialog.locator("#voice-ready-status")).toContainText("Download the local speech model");
+	expect(downloadCalls).toBe(0);
+
+	await dialog.locator("#voice-download").click();
+	await expect.poll(() => downloadCalls).toBe(1);
+	await expect.poll(async () => Number(await dialog.locator("#voice-download-progress").getAttribute("value"))).toBeGreaterThan(0);
+	await expect(dialog.locator("#voice-model-status")).toContainText("Installed");
+	await expect(dialog.locator("#voice-ready-status")).toContainText("Ready for dictation");
+	await expect(dialog.locator("#voice-delete")).toBeVisible();
+	let confirmation = "";
+	page.once("dialog", async (browserDialog) => {
+		confirmation = browserDialog.message();
+		await browserDialog.accept();
+	});
+	await dialog.locator("#voice-delete").click();
+	await expect.poll(() => deleteCalls).toBe(1);
+	expect(confirmation).toContain("all profiles");
+	await expect(dialog.locator("#voice-ready-status")).toContainText("Download the local speech model");
+});
+
+test("Voice provider models show an error and support retry when no STT models are verified", async ({ page }) => {
+	let modelRequests = 0;
+	await page.route("**/api/voice?*", (route) => route.fulfill(voiceResponse({ profile_slug: "artist", provider: "", model: "", ready: false, revision: 1, model_status: { available: true, installed: false } })));
+	await page.route("**/api/voice/models?*", async (route) => {
+		modelRequests++;
+		if (modelRequests === 1) {
+			await route.fulfill(voiceResponse({ error: { code: "voice_models_unsupported", message: "speech models are unavailable" } }, 503));
+			return;
+		}
+		await route.fulfill(voiceResponse({ profile_slug: "artist", models: [], revision: 1 }));
+	});
+	const dialog = await openVoiceSettings(page);
+	await dialog.locator("#voice-provider").selectOption("provider");
+	await expect(dialog.locator("#voice-model-retry")).toBeVisible();
+	await dialog.locator("#voice-model-retry").click();
+	await expect(dialog.locator("#voice-model-help")).toContainText("No verified speech-to-text models");
+	await expect.poll(() => modelRequests).toBe(2);
+	await expect(dialog.locator("#voice-save")).toBeDisabled();
+});
+
+test("Voice model search only shows verified speech IDs", async ({ page }) => {
+	await page.route("**/api/voice?*", (route) => route.fulfill(voiceResponse({ profile_slug: "artist", provider: "", model: "", ready: false, revision: 1, model_status: { available: true, installed: false } })));
+	await page.route("**/api/voice/models?*", (route) => route.fulfill(voiceResponse({ profile_slug: "artist", models: ["verified/whisper-large", "vendor/speech-small"], revision: 1 })));
+	const dialog = await openVoiceSettings(page);
+	await dialog.locator("#voice-provider").selectOption("provider");
+	const search = dialog.locator("#voice-model-search");
+	await search.fill("speech");
+	await expect(dialog.locator("#voice-model-options")).toContainText("vendor/speech-small");
+	await expect(dialog.locator("#voice-model-options")).not.toContainText("model-a");
+	const availableIDs = await dialog.locator("#voice-model option").allTextContents();
+	expect(availableIDs).not.toContain("model-a");
+});
+
+test("late voice model replies are ignored after the profile draft changes", async ({ page }) => {
+	let releaseArtistModels;
+	let signalArtistModels;
+	const artistModelsStarted = new Promise((resolve) => { signalArtistModels = resolve; });
+	const artistModelsGate = new Promise((resolve) => { releaseArtistModels = resolve; });
+	await page.route("**/api/settings", (route) => route.fulfill(voiceResponse({ active_profile_slug: "artist", profiles: [{ slug: "artist", name: "Artist" }, { slug: "writer", name: "Writer" }] })));
+	await page.route("**/api/settings/models?*", async (route) => {
+		const slug = new URL(route.request().url()).searchParams.get("profile");
+		await route.fulfill(voiceResponse({ profile_slug: slug, saved_model: "model-a", models: ["model-a"], saved_embeddings_model: "", embedding_models: [], saved_extractor_model: "", setup_required: false }));
+	});
+	await page.route("**/api/voice?*", (route) => {
+		const slug = new URL(route.request().url()).searchParams.get("profile_slug");
+		const model = slug === "artist" ? "artist-speech" : "writer-speech";
+		return route.fulfill(voiceResponse({ profile_slug: slug, provider: "provider", model, ready: false, revision: 1, model_status: { available: true, installed: false } }));
+	});
+	await page.route("**/api/voice/models?*", async (route) => {
+		const slug = new URL(route.request().url()).searchParams.get("profile_slug");
+		if (slug === "artist") {
+			signalArtistModels();
+			await artistModelsGate;
+			await route.fulfill(voiceResponse({ profile_slug: "artist", models: ["artist-speech"], revision: 1 }));
+			return;
+		}
+		await route.fulfill(voiceResponse({ profile_slug: "writer", models: ["writer-speech"], revision: 1 }));
+	});
+	try {
+		const dialog = await openVoiceSettings(page);
+		await artistModelsStarted;
+		await dialog.getByRole("tab", { name: "Profile" }).click();
+		const profileSearch = dialog.locator("#settings-profile-search");
+		await profileSearch.fill("Writer");
+		await dialog.getByRole("option", { name: "Writer" }).click();
+		await expect(dialog.locator("#settings-profile")).toHaveValue("writer");
+		await dialog.getByRole("tab", { name: "Voice" }).click();
+		await expect(dialog.locator("#voice-model")).toHaveValue("writer-speech");
+		releaseArtistModels();
+		await expect(dialog.locator("#voice-model")).toHaveValue("writer-speech");
+	} finally {
+		releaseArtistModels?.();
+	}
+});
+
+test("voice save settles when a model-status refresh races its response", async ({ page }) => {
+	let voiceSelection = { profile_slug: "artist", provider: "", model: "", ready: false, revision: 1 };
+	let modelStatus = { available: true, installed: false, downloading: true, deleting: false, progress: 0.5, downloaded_bytes: 100, download_size_bytes: 200 };
+	let voiceGets = 0;
+	let statusGets = 0;
+	let saveInFlight = false;
+	let releaseSave;
+	let signalSaveStarted;
+	let releaseReload;
+	let signalReloadStarted;
+	let releaseStatusPoll;
+	let signalStatusPollStarted;
+	const saveStarted = new Promise((resolve) => { signalSaveStarted = resolve; });
+	const saveGate = new Promise((resolve) => { releaseSave = resolve; });
+	const reloadStarted = new Promise((resolve) => { signalReloadStarted = resolve; });
+	const reloadGate = new Promise((resolve) => { releaseReload = resolve; });
+	const statusPollStarted = new Promise((resolve) => { signalStatusPollStarted = resolve; });
+	const statusPollGate = new Promise((resolve) => { releaseStatusPoll = resolve; });
+	await page.route("**/api/voice**", async (route) => {
+		const url = new URL(route.request().url());
+		if (url.pathname !== "/api/voice") return route.fallback();
+		if (route.request().method() === "POST") {
+			saveInFlight = true;
+			signalSaveStarted();
+			await saveGate;
+			voiceSelection = { ...voiceSelection, ...route.request().postDataJSON(), ready: true, revision: 2, model_status: modelStatus };
+			saveInFlight = false;
+			await route.fulfill(voiceResponse(voiceSelection));
+			return;
+		}
+		voiceGets++;
+		const staleSelection = { ...voiceSelection, model_status: modelStatus };
+		if (saveInFlight) {
+			signalReloadStarted();
+			await reloadGate;
+		}
+		await route.fulfill(voiceResponse(staleSelection));
+	});
+	await page.route("**/api/voice/local-model", async (route) => {
+		statusGets++;
+		if (statusGets === 2) {
+			signalStatusPollStarted();
+			await statusPollGate;
+		}
+		if (statusGets > 1) modelStatus = { ...modelStatus, installed: true, downloading: false, progress: 1, downloaded_bytes: 200 };
+		await route.fulfill(voiceResponse({ model_status: modelStatus }));
+	});
+	try {
+		const dialog = await openVoiceSettings(page);
+		await dialog.locator("#voice-provider").selectOption("local");
+		const voiceSave = dialog.locator("#voice-save");
+		await voiceSave.click();
+		await saveStarted;
+		await statusPollStarted;
+		releaseStatusPoll();
+		await reloadStarted;
+		releaseSave();
+		await expect(dialog.locator("#settings-cancel")).toBeEnabled();
+		await expect(voiceSave).toHaveText("Save voice settings");
+		releaseReload();
+		await expect(dialog.locator("#voice-ready-status")).toContainText("Ready for dictation");
+	} finally {
+		releaseSave?.();
+		releaseReload?.();
+		releaseStatusPoll?.();
+	}
+});
