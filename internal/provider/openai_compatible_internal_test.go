@@ -3,17 +3,26 @@ package provider
 import "testing"
 
 func TestIsOpenRouterEndpoint(t *testing.T) {
-	if !isOpenRouterEndpoint("https://openrouter.ai/api/v1") {
-		t.Fatal("openrouter.ai endpoint not detected")
-	}
-	if !isOpenRouterEndpoint("https://OpenRouter.AI/api/v1") {
-		t.Fatal("case-insensitive host not detected")
-	}
-	if isOpenRouterEndpoint("https://api.openai.com/v1") {
-		t.Fatal("non-OpenRouter endpoint misdetected")
-	}
-	if isOpenRouterEndpoint("") {
-		t.Fatal("empty endpoint misdetected")
+	for _, tc := range []struct {
+		endpoint string
+		want     bool
+	}{
+		{endpoint: "https://openrouter.ai/api/v1", want: true},
+		{endpoint: "https://OpenRouter.AI/api/v1", want: true},
+		{endpoint: "https://openrouter.ai:8443/api/v1", want: true},
+		{endpoint: "https://api.openai.com/v1", want: false},
+		{endpoint: "https://openrouter.ai.evil/v1", want: false},
+		{endpoint: "https://evil-openrouter.ai/v1", want: false},
+		{endpoint: "https://evil.com/?next=openrouter.ai", want: false},
+		{endpoint: "https://openrouter.ai@evil.com/v1", want: false},
+		{endpoint: "http://openrouter.ai/api/v1", want: false},
+		{endpoint: "", want: false},
+	} {
+		t.Run(tc.endpoint, func(t *testing.T) {
+			if got := IsOpenRouterEndpoint(tc.endpoint); got != tc.want {
+				t.Fatalf("IsOpenRouterEndpoint(%q) = %t, want %t", tc.endpoint, got, tc.want)
+			}
+		})
 	}
 }
 
