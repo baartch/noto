@@ -57,6 +57,48 @@ test("workspace loads locally and mobile notes remain a separate tab", async ({ 
 	expect(await page.evaluate(() => window.__cspViolations)).toEqual([]);
 });
 
+test("chat, notes, and settings use only local assets under the production CSP", async ({ page, isMobile }) => {
+	const externalRequests = [];
+	const localPaths = [];
+	await page.addInitScript(() => {
+		window.__interactionCspViolations = [];
+		window.addEventListener("securitypolicyviolation", (event) => window.__interactionCspViolations.push(`${event.violatedDirective}: ${event.blockedURI}`));
+	});
+	page.on("request", (request) => {
+		const url = new URL(request.url());
+		if (url.origin !== "http://127.0.0.1:4173") externalRequests.push(request.url());
+		else localPaths.push(url.pathname);
+	});
+	await page.route("**/api/messages**", (route) => route.request().method() === "POST"
+		? route.fulfill({ status: 200, contentType: "application/json", body: "{}" })
+		: route.continue());
+	await page.goto("/");
+	const sendRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/messages" && request.method() === "POST");
+	await page.locator("#message-input").fill("local web runtime");
+	await page.locator("#message-form").evaluate((form) => form.requestSubmit());
+	await sendRequest;
+	if (isMobile) await page.locator("#mobile-memory-tab").click();
+	await page.locator('[data-memory-tab="weekly"]').click();
+	await expect(page.locator("#memory-tab-weekly")).toHaveAttribute("aria-selected", "true");
+	await page.locator("#settings-button").click();
+	const dialog = page.getByRole("dialog", { name: "Settings" });
+	await expect(dialog).toBeVisible();
+	await dialog.getByRole("tab", { name: "Models" }).click();
+	const modelSearch = dialog.locator("#settings-model-search");
+	await expect(modelSearch).toBeEnabled();
+	await modelSearch.fill("model");
+	await modelSearch.press("ArrowDown");
+	await expect(modelSearch).toHaveAttribute("aria-activedescendant", /settings-model-options-option/);
+	await dialog.getByRole("button", { name: "Cancel" }).click();
+	await expect(dialog).toBeHidden();
+	expect(localPaths).toContain("/api/messages");
+	expect(localPaths).toContain("/api/settings");
+	expect(localPaths).toContain("/api/settings/models");
+	expect(localPaths).toContain("/api/memory");
+	expect(externalRequests).toEqual([]);
+	expect(await page.evaluate(() => window.__interactionCspViolations)).toEqual([]);
+});
+
 test("@settings gear opens a Preline modal with keyboard tabs and focus restoration", async ({ page, isMobile }) => {
 	const violations = [];
 	await page.addInitScript(() => {

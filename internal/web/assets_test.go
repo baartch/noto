@@ -5,12 +5,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
 
 func TestEmbeddedAssetsAvailable(t *testing.T) {
 	h := NewHandler(NewService(nil, nil, nil, "", true), testOrigin)
+	bodies := make(map[string]string)
 	for path, wantType := range map[string]string{
 		"/":          "text/html",
 		"/app.js":    "javascript",
@@ -24,8 +26,18 @@ func TestEmbeddedAssetsAvailable(t *testing.T) {
 		if !strings.Contains(recorder.Header().Get("Content-Type"), wantType) {
 			t.Errorf("GET %s Content-Type = %q, want %q", path, recorder.Header().Get("Content-Type"), wantType)
 		}
-		if strings.Contains(strings.ToLower(recorder.Body.String()), "src=\"http") || strings.Contains(strings.ToLower(recorder.Body.String()), "href=\"http") || strings.Contains(strings.ToLower(recorder.Body.String()), "url(http") {
-			t.Errorf("GET %s includes an external asset URL", path)
+		bodies[path] = recorder.Body.String()
+	}
+
+	for _, want := range []string{`id="settings-panel"`, `role="dialog"`, `id="workspace"`, `id="chat-panel"`, `id="message-input"`, `id="memory-panel"`, `id="memory-tabs"`} {
+		if !strings.Contains(bodies["/"], want) {
+			t.Errorf("embedded index.html is missing required web UI entry point %q", want)
+		}
+	}
+	externalResource := regexp.MustCompile(`(?i)(?:src|href)\s*=\s*["']\s*https?://|url\(\s*["']?\s*https?://|@import\s+(?:url\(\s*)?["']?\s*https?://`)
+	for _, path := range []string{"/", "/app.css", "/theme.css"} {
+		if externalResource.MatchString(bodies[path]) {
+			t.Errorf("GET %s contains an external script, stylesheet, font, or CSS URL", path)
 		}
 	}
 	if recorder := request(h, http.MethodGet, "/missing.js", "", ""); recorder.Code != http.StatusNotFound {
