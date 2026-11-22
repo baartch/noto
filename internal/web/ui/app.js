@@ -754,10 +754,10 @@ function messageElement(message) {
 	} else body.innerHTML = message.content_html || "";
 	const copyButton = document.createElement("button");
 	copyButton.type = "button";
-	copyButton.className = `inline-flex items-center gap-x-2 rounded-full border border-transparent px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-focus ${isUser ? "text-white/80 hover:bg-white/10 hover:text-white" : "text-muted hover:bg-raised hover:text-ink"}`;
+	copyButton.className = `inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-transparent p-0 focus-visible:ring-2 focus-visible:ring-focus ${isUser ? "text-white/80 hover:bg-white/10 hover:text-white" : "text-muted hover:bg-raised hover:text-ink"}`;
 	copyButton.setAttribute("aria-label", "Copy message");
 	copyButton.title = "Copy message";
-	copyButton.innerHTML = '<i data-lucide="copy" class="size-4" aria-hidden="true"></i>Copy';
+	copyButton.innerHTML = '<i data-lucide="copy" class="size-4" aria-hidden="true"></i>';
 	copyButton.addEventListener("click", () => void copyMessageContent(body, copyButton));
 	const actions = document.createElement("div");
 	actions.className = `mt-2 flex ${isUser ? "justify-end" : "justify-start"}`;

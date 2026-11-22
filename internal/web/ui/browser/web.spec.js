@@ -326,6 +326,10 @@ test("copy preserves rich HTML and plain text formats", async ({ page }) => {
 	await page.goto("/");
 	const assistant = page.getByRole("article", { name: "Noto response" });
 	const copy = assistant.getByRole("button", { name: "Copy message" });
+	await expect(copy).toHaveText("");
+	const copyBox = await copy.boundingBox();
+	expect(copyBox.width).toBeLessThanOrEqual(36);
+	expect(copyBox.height).toBeLessThanOrEqual(36);
 	await copy.click();
 	await expect(assistant.getByRole("button", { name: "Message copied" })).toBeVisible();
 	const clipboard = await page.evaluate(async () => {
