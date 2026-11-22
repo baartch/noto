@@ -279,6 +279,47 @@ test("chat layout uses alternating Preline user and assistant bubbles", async ({
 	await expect(user.locator("[data-message-avatar=user]")).toBeVisible();
 });
 
+test("dark app palette matches Preline surfaces and primary colors", async ({ page }) => {
+	await serveConversation(page, [
+		{ ...sampleConversation[0], content_html: '<p><a href="/docs">Reference link</a></p>' },
+		sampleConversation[1],
+	]);
+	await page.goto("/");
+	await expect(page.locator("[data-message-bubble=assistant]")).toBeVisible();
+	await expect(page.locator("[data-message-bubble=user]")).toBeVisible();
+	const chatColors = await page.evaluate(() => ({
+		themeColor: document.querySelector('meta[name="theme-color"]').content,
+		page: getComputedStyle(document.body).backgroundColor,
+		header: getComputedStyle(document.querySelector("header")).backgroundColor,
+		notes: getComputedStyle(document.querySelector("#memory-panel")).backgroundColor,
+		assistant: getComputedStyle(document.querySelector("[data-message-bubble=assistant]")).backgroundColor,
+		user: getComputedStyle(document.querySelector("[data-message-bubble=user]")).backgroundColor,
+		composer: getComputedStyle(document.querySelector("#message-form")).backgroundColor,
+		composerBorder: getComputedStyle(document.querySelector("#message-form")).borderTopColor,
+		link: getComputedStyle(document.querySelector(".markdown-body a")).color,
+		muted: getComputedStyle(document.querySelector("#model-name")).color,
+	}));
+	expect(chatColors.themeColor).toBe("#171717");
+	expect(chatColors.page).toBe("rgb(23, 23, 23)");
+	expect(chatColors.header).toBe("rgb(38, 38, 38)");
+	expect(chatColors.notes).toBe("rgb(38, 38, 38)");
+	expect(chatColors.assistant).toBe("rgb(38, 38, 38)");
+	expect(chatColors.user).toBe("rgb(59, 130, 246)");
+	expect(chatColors.composer).toBe("rgb(38, 38, 38)");
+	expect(chatColors.composerBorder).toBe("rgb(64, 64, 64)");
+	expect(chatColors.link).toBe("rgb(96, 165, 250)");
+	expect(chatColors.muted).toBe("rgb(163, 163, 163)");
+	await page.locator("#settings-button").click();
+	const settingsColors = await page.evaluate(() => ({
+		panel: getComputedStyle(document.querySelector("#settings-panel > div > section")).backgroundColor,
+		input: getComputedStyle(document.querySelector("#settings-profile-search")).backgroundColor,
+		primary: getComputedStyle(document.querySelector("#settings-save")).backgroundColor,
+	}));
+	expect(settingsColors.panel).toBe("rgb(38, 38, 38)");
+	expect(settingsColors.input).toBe("rgb(64, 64, 64)");
+	expect(settingsColors.primary).toBe("rgb(59, 130, 246)");
+});
+
 test("copy preserves rich HTML and plain text formats", async ({ page }) => {
 	await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
 	await serveConversation(page);

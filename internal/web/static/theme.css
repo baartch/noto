@@ -1,17 +1,18 @@
 :root {
 	color-scheme: dark;
-	--theme-page: #0d0715;
-	--theme-panel: #160d20;
-	--theme-raised: #21152d;
-	--theme-active: #352544;
-	--theme-composer: #110a19;
-	--theme-ink: #f6f1fb;
-	--theme-muted: #a99bb8;
-	--theme-line: #42334f;
-	--theme-accent: #8b5cf6;
-	--theme-accent-hover: #7c3aed;
-	--theme-focus: #c4b5fd;
+	--theme-page: #171717;
+	--theme-panel: #262626;
+	--theme-raised: #404040;
+	--theme-active: #404040;
+	--theme-composer: #262626;
+	--theme-ink: #e5e5e5;
+	--theme-muted: #a3a3a3;
+	--theme-line: #404040;
+	--theme-accent: #3b82f6;
+	--theme-accent-hover: #2563eb;
+	--theme-focus: #2563eb;
+	--theme-link: #60a5fa;
 	--theme-danger: #fca5a5;
 	--theme-warning: #fde68a;
-	--theme-code: #130b1b;
+	--theme-code: #0a0a0a;
 }

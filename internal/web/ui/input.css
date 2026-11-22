@@ -60,7 +60,7 @@ button:focus-visible {
 }
 
 .markdown-body a {
-	color: var(--theme-focus);
+	color: var(--theme-link);
 	text-decoration: underline;
 	text-underline-offset: 0.2em;
 	word-break: break-word;
