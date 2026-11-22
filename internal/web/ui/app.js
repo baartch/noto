@@ -23,9 +23,12 @@ const ui = {
 	profile: $("#profile-name"),
 	model: $("#model-name"),
 	settingsButton: $("#settings-button"),
-	workspace: $("#workspace"),
-	workspaceNav: $("#workspace-nav"),
 	settingsPanel: $("#settings-panel"),
+	settingsTabs: $("#settings-tabs"),
+	settingsClose: $("#settings-close"),
+	settingsProfileTab: $("#settings-profile-tab"),
+	settingsProfilePanel: $("#settings-profile-panel"),
+	settingsModelsPanel: $("#settings-models-panel"),
 	settingsForm: $("#settings-form"),
 	settingsProfile: $("#settings-profile"),
 	settingsProfileSearch: $("#settings-profile-search"),
@@ -259,18 +262,45 @@ function updateSettingsControls() {
 	ui.settingsSave.disabled = draftLocked || state.settingsModelLoading || !state.settingsModelsLoaded || !state.draftProfileSlug || state.recoveryRequired || (!state.settingsSetupRequired && !state.draftModel) || (embeddingRebuildRequired && !state.embeddingRebuildConfirmed);
 	ui.settingsSave.textContent = state.settingsSaving ? "Saving…" : "Save";
 	ui.settingsCancel.disabled = state.settingsSaving;
+	ui.settingsClose.disabled = state.settingsSaving;
 }
 
 function setSettingsPage(open) {
 	state.settingsOpen = open;
 	ui.settingsButton.setAttribute("aria-expanded", String(open));
-	ui.workspace.classList.toggle("hidden", open);
-	ui.workspaceNav.classList.toggle("hidden", open);
-	ui.settingsPanel.classList.toggle("hidden", !open);
-	if (!open) {
-		setMobileView(state.mobileView);
+	if (open) {
+		HSTabs.open(ui.settingsProfileTab);
+		if (HSOverlay.getInstance(ui.settingsPanel)) HSOverlay.open(ui.settingsPanel);
+		else ui.settingsPanel.classList.remove("hidden");
+	} else {
+		if (HSOverlay.getInstance(ui.settingsPanel)) HSOverlay.close(ui.settingsPanel);
+		else ui.settingsPanel.classList.add("hidden");
 		ui.settingsButton.focus();
 	}
+}
+
+function focusSettingsField() {
+	const focusTarget = ui.settingsModelsPanel.classList.contains("hidden") ? ui.settingsProfileSearch : ui.settingsModelSearch;
+	focusTarget.focus();
+}
+
+function updateSettingsTabOrientation() {
+	ui.settingsTabs.setAttribute("aria-orientation", window.matchMedia("(min-width: 768px)").matches ? "vertical" : "horizontal");
+}
+
+function trapSettingsTab(event) {
+	if (event.key !== "Tab" || !state.settingsOpen) return;
+	const focusable = Array.from(ui.settingsPanel.querySelectorAll("a[href]:not([tabindex='-1']), button:not([disabled]):not([tabindex='-1']), input:not([disabled]):not([tabindex='-1']), select:not([disabled]):not([tabindex='-1']), textarea:not([disabled]):not([tabindex='-1']), [tabindex]:not([tabindex='-1'])"))
+		.filter((element) => element.getClientRects().length > 0 && !element.closest(".hidden, [hidden], [aria-hidden='true']"));
+	if (!focusable.length) return;
+	const currentIndex = focusable.indexOf(document.activeElement);
+	const direction = event.shiftKey ? -1 : 1;
+	const nextIndex = currentIndex < 0
+		? (direction < 0 ? focusable.length - 1 : 0)
+		: (currentIndex + direction + focusable.length) % focusable.length;
+	event.preventDefault();
+	event.stopPropagation();
+	focusable[nextIndex].focus();
 }
 
 function settingsOption(value, label) {
@@ -365,7 +395,9 @@ function createSearchableDropdown({ input, select, listbox, listboxID, onChange 
 	});
 	input.addEventListener("keydown", (event) => {
 		if (event.key === "Escape") {
+			if (listbox.classList.contains("hidden")) return;
 			event.preventDefault();
+			event.stopPropagation?.();
 			close();
 			input.value = selectedOption()?.label || "";
 			return;
@@ -509,7 +541,7 @@ async function openSettings() {
 		renderSettingsProfiles();
 		state.settingsLoading = false;
 		updateSettingsControls();
-		ui.settingsProfileSearch.focus();
+		focusSettingsField();
 		await loadSettingsModels(state.draftProfileSlug);
 		if (state.recoveryRequired) showStatus(ui.settingsStatus, "Settings require recovery; further changes are disabled.", "error");
 	} catch (error) {
@@ -548,7 +580,7 @@ async function reloadSettings() {
 		renderSettingsProfiles();
 		state.settingsLoading = false;
 		updateSettingsControls();
-		ui.settingsProfileSearch.focus();
+		focusSettingsField();
 		await loadSettingsModels(state.draftProfileSlug);
 	} catch (error) {
 		if (state.settingsOpen && requestID === state.settingsOpenRequestID) showStatus(ui.settingsStatus, `Could not reload settings: ${error.message}`, "error", { label: "Retry", run: () => void reloadSettings() });
@@ -1125,7 +1157,14 @@ function setMobileView(view) {
 
 ui.settingsButton.addEventListener("click", openSettings);
 ui.settingsCancel.addEventListener("click", cancelSettings);
+ui.settingsClose.addEventListener("click", cancelSettings);
 ui.settingsForm.addEventListener("submit", saveSettings);
+ui.settingsPanel.addEventListener("keydown", trapSettingsTab);
+document.addEventListener("keydown", (event) => {
+	if (event.key !== "Escape" || !state.settingsOpen) return;
+	event.preventDefault();
+	cancelSettings();
+});
 ui.settingsConfirmEmbeddingRebuild.addEventListener("change", () => {
 	state.embeddingRebuildConfirmed = ui.settingsConfirmEmbeddingRebuild.checked;
 	updateSettingsControls();
@@ -1155,10 +1194,14 @@ ui.messageInput.addEventListener("keydown", (event) => {
 		ui.messageForm.requestSubmit();
 	}
 });
-window.addEventListener("resize", () => setMobileView(state.mobileView));
+window.addEventListener("resize", () => {
+	setMobileView(state.mobileView);
+	updateSettingsTabOrientation();
+});
 
 async function initialize() {
 	createIcons({ icons });
+	updateSettingsTabOrientation();
 	HSOverlay.autoInit();
 	HSTabs.autoInit();
 	HSSelect.autoInit();

@@ -26,9 +26,9 @@ web-build:
 web-test:
 	cd internal/web/ui && bun test app.test.js state.test.js
 
-## web-browser-test: run browser tests with Node and Chrome (dialog check is pending Task 4)
+## web-browser-test: run browser tests with Node and Chrome
 web-browser-test:
-	cd internal/web/ui && node node_modules/@playwright/test/cli.js test --grep-invert "gear opens the Settings dialog"
+	cd internal/web/ui && node node_modules/@playwright/test/cli.js test
 
 ## run: run the binary directly
 run-web:

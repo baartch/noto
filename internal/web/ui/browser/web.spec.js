@@ -57,10 +57,132 @@ test("workspace loads locally and mobile notes remain a separate tab", async ({ 
 	expect(await page.evaluate(() => window.__cspViolations)).toEqual([]);
 });
 
-test("gear opens the Settings dialog", async ({ page }) => {
+test("@settings gear opens a Preline modal with keyboard tabs and focus restoration", async ({ page, isMobile }) => {
+	const violations = [];
+	await page.addInitScript(() => {
+		window.__settingsCspViolations = [];
+		window.addEventListener("securitypolicyviolation", (event) => window.__settingsCspViolations.push(event.violatedDirective));
+	});
+	await page.goto("/");
+	const trigger = page.locator("#settings-button");
+	await trigger.click();
+	const dialog = page.getByRole("dialog", { name: "Settings" });
+	await expect(dialog).toBeVisible();
+	await expect(dialog).toHaveAttribute("aria-modal", "true");
+	await expect(page.locator("#chat-panel")).toBeVisible();
+	await expect(dialog.locator("#settings-tabs")).toHaveAttribute("aria-orientation", isMobile ? "horizontal" : "vertical");
+	const profileTab = dialog.getByRole("tab", { name: "Profile" });
+	const modelsTab = dialog.getByRole("tab", { name: "Models" });
+	await profileTab.focus();
+	await profileTab.press(isMobile ? "ArrowRight" : "ArrowDown");
+	await expect(modelsTab).toHaveAttribute("aria-selected", "true");
+	await expect(dialog.locator("#settings-models-panel")).toBeVisible();
+	await expect(dialog.locator("#settings-profile-panel")).toBeHidden();
+	await profileTab.click();
+	await expect(dialog.locator("#settings-profile-panel")).toBeVisible();
+	for (let index = 0; index < 12; index++) {
+		await page.keyboard.press("Tab");
+		expect(await dialog.evaluate((element) => element.contains(document.activeElement)), `Tab ${index + 1} should stay in the dialog`).toBe(true);
+	}
+	for (let index = 0; index < 6; index++) {
+		await page.keyboard.press("Shift+Tab");
+		expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+	}
+	await modelsTab.click();
+	const modelSearch = dialog.locator("#settings-model-search");
+	await modelSearch.fill("model");
+	await modelSearch.press("ArrowDown");
+	await expect(modelSearch).toHaveAttribute("aria-activedescendant", /settings-model-options-option/);
+	await page.keyboard.press("Escape");
+	await expect(dialog).toBeVisible();
+	await expect(modelSearch).toHaveAttribute("aria-expanded", "false");
+	await page.keyboard.press("Escape");
+	await expect(dialog).toBeHidden();
+	await expect(trigger).toBeFocused();
+	violations.push(...await page.evaluate(() => window.__settingsCspViolations));
+	expect(violations).toEqual([]);
+});
+
+test("@settings cancel and backdrop discard without saving", async ({ page }) => {
+	let settingsPosts = 0;
+	page.on("request", (request) => {
+		if (request.url().endsWith("/api/settings") && request.method() === "POST") settingsPosts++;
+	});
 	await page.goto("/");
 	await page.locator("#settings-button").click();
-	await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible({ timeout: 1000 });
+	const dialog = page.getByRole("dialog", { name: "Settings" });
+	await expect(dialog).toBeVisible();
+	await page.locator("#settings-models-tab").click();
+	await page.locator("#settings-panel-backdrop").click({ position: { x: 2, y: 2 } });
+	await expect(dialog).toBeVisible();
+	await dialog.getByRole("button", { name: "Cancel" }).click();
+	await expect(dialog).toBeHidden();
+	expect(settingsPosts).toBe(0);
+	await expect(page.locator("#settings-button")).toBeFocused();
+});
+
+test("@settings save cannot be dismissed while the request is pending", async ({ page }) => {
+	let releaseSave;
+	let saveStarted;
+	let saveRequests = 0;
+	const saveRequestStarted = new Promise((resolve) => { saveStarted = resolve; });
+	await page.route("**/api/settings", async (route) => {
+		if (route.request().method() !== "POST") return route.continue();
+		saveRequests++;
+		saveStarted();
+		await new Promise((resolve) => { releaseSave = resolve; });
+		await route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({ profile: { slug: "artist", name: "Artist" }, model: "model-b", setup_required: false, revision: 2, sending: false, pending_notes: 0 }),
+		});
+	});
+	await page.goto("/");
+	await page.locator("#settings-button").click();
+	const dialog = page.getByRole("dialog", { name: "Settings" });
+	await expect(dialog).toBeVisible();
+	await page.locator("#settings-models-tab").click();
+	const modelSearch = page.locator("#settings-model-search");
+	await modelSearch.fill("model-b");
+	await modelSearch.press("ArrowDown");
+	await modelSearch.press("Enter");
+	await page.locator("#settings-save").click();
+	await saveRequestStarted;
+	await expect(page.locator("#settings-close")).toBeDisabled();
+	await expect(page.locator("#settings-cancel")).toBeDisabled();
+	await page.locator("#settings-close").click({ force: true });
+	await page.locator("#settings-save").click({ force: true });
+	await page.keyboard.press("Escape");
+	await expect(dialog).toBeVisible();
+	await page.locator("#settings-panel-backdrop").click({ position: { x: 2, y: 2 } });
+	await expect(dialog).toBeVisible();
+	await page.locator("#settings-cancel").click({ force: true });
+	await expect(dialog).toBeVisible();
+	expect(saveRequests).toBe(1);
+	releaseSave();
+	await expect(dialog).toBeHidden();
+});
+
+test("@settings model labels fit inside the responsive dialog", async ({ page }) => {
+	const longModel = "provider/model-with-a-long-identifying-name-that-must-wrap-without-widening-the-dialog";
+	await page.route("**/api/settings/models?*", (route) => route.fulfill({
+		status: 200,
+		contentType: "application/json",
+		body: JSON.stringify({ profile_slug: "artist", saved_model: longModel, models: [longModel, "model-b"], saved_embeddings_model: "embed-a", embedding_models: ["embed-a"], saved_extractor_model: "extractor-a", setup_required: false }),
+	}));
+	await page.goto("/");
+	await page.locator("#settings-button").click();
+	const dialog = page.getByRole("dialog", { name: "Settings" });
+	await expect(dialog).toBeVisible();
+	await dialog.getByRole("tab", { name: "Models" }).click();
+	const dimensions = await page.evaluate(() => ({
+		viewport: document.documentElement.clientWidth,
+		scroll: document.documentElement.scrollWidth,
+		save: document.querySelector("#settings-save").getBoundingClientRect(),
+	}));
+	expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.viewport);
+	expect(dimensions.save.right).toBeLessThanOrEqual(dimensions.viewport);
+	expect(dimensions.save.width).toBeGreaterThan(0);
 });
 
 const sampleConversation = [

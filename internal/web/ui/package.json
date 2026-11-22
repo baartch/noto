@@ -5,7 +5,7 @@
   "scripts": {
     "build": "bun run build.mjs",
     "test": "bun test app.test.js state.test.js",
-    "test:browser": "node node_modules/@playwright/test/cli.js test --grep-invert \"gear opens the Settings dialog\""
+    "test:browser": "node node_modules/@playwright/test/cli.js test"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",

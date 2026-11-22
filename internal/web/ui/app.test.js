@@ -33,6 +33,7 @@ class Element {
 	append(...children) { this.children.push(...children); }
 	replaceChildren(...children) { this.children = children; }
 	setAttribute(name, value) { this.attributes[name] = value; }
+	getAttribute(name) { return this.attributes[name] ?? null; }
 	addEventListener(name, callback) { this.listeners[name] = callback; }
 	focus() { this.focused = true; }
 	scrollIntoView(options) { this.scrollOptions = options; }
@@ -94,6 +95,8 @@ test("submission clears the input and formats the pending bubble before the repl
 	let activeState = { setup_required: false, profile: { slug: "artist", name: "Artist" }, model: "model-a", revision: 1, pending_notes: 0 };
 	let delayedArtistModels = false;
 	let resolveArtistModels;
+	let delayedModelsProfile = "";
+	let resolveDeferredModels;
 	let failedModelsProfile = "";
 	let unavailableModelsProfile = "";
 	let failSave = false;
@@ -174,6 +177,7 @@ test("submission clears the input and formats the pending bubble before the repl
 			const profile = new URLSearchParams(url.split("?")[1]).get("profile");
 			modelRequests.push(profile);
 			if (failedModelsProfile === profile) return { ok: false, status: 502, json: async () => ({ error: { message: "model list failed", code: "models_unavailable" } }) };
+			if (profile === delayedModelsProfile) return new Promise((resolve) => { resolveDeferredModels = resolve; });
 			if (profile === "artist" && delayedArtistModels) {
 				return new Promise((resolve) => { resolveArtistModels = resolve; });
 			}
@@ -314,8 +318,13 @@ test("submission clears the input and formats the pending bubble before the repl
 	expect(elements.get("#settings-profile-options").classList.contains("hidden")).toBe(true);
 	profileSearch.value = "no-such-profile";
 	profileSearch.listeners.input();
-	profileSearch.listeners.keydown({ key: "Escape", preventDefault() {} });
+	let stoppedOpenEscape = false;
+	profileSearch.listeners.keydown({ key: "Escape", preventDefault() {}, stopPropagation() { stoppedOpenEscape = true; } });
 	expect(profileSearch.attributes["aria-expanded"]).toBe("false");
+	expect(stoppedOpenEscape).toBe(true);
+	let stoppedClosedEscape = false;
+	profileSearch.listeners.keydown({ key: "Escape", preventDefault() {}, stopPropagation() { stoppedClosedEscape = true; } });
+	expect(stoppedClosedEscape).toBe(false);
 	profileSearch.value = "bet";
 	profileSearch.listeners.input();
 	expect(renderedText(elements.get("#settings-profile-options"))).toContain("Beta");
@@ -367,10 +376,26 @@ test("submission clears the input and formats the pending bubble before the repl
 	expect(activeState.profile.slug).toBe("artist");
 	expect(input.value).toBe("draft preserved by cancel");
 	expect(elements.get("#settings-panel").classList.contains("hidden")).toBe(true);
-	expect(elements.get("#workspace").classList.contains("hidden")).toBe(false);
 	expect(settingsButton.focused).toBe(true);
 
 	delayedArtistModels = false;
+	delayedModelsProfile = "artist";
+	const reopening = settingsButton.listeners.click();
+	await Bun.sleep(0);
+	await Bun.sleep(0);
+	expect(typeof resolveDeferredModels).toBe("function");
+	const betaModelBeforeClose = modelSelect.value;
+	elements.get("#settings-cancel").listeners.click();
+	resolveDeferredModels({ ok: true, json: async () => ({ profile_slug: "artist", saved_model: "model-a", models: ["model-a"], setup_required: false }) });
+	await reopening;
+	await Bun.sleep(0);
+	expect(elements.get("#settings-panel").classList.contains("hidden")).toBe(true);
+	expect(modelSelect.value).toBe(betaModelBeforeClose);
+	delayedModelsProfile = "";
+	await settingsButton.listeners.click();
+	expect(modelSelect.value).toBe("model-a");
+	elements.get("#settings-cancel").listeners.click();
+
 	await settingsButton.listeners.click();
 	profileSelect.value = "beta";
 	await profileSelect.listeners.change();
