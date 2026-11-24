@@ -130,7 +130,7 @@ func TestProviderTranscriberDoesNotFollowRedirects(t *testing.T) {
 	}
 }
 
-func TestProviderTranscriberMapsUnauthorizedResponses(t *testing.T) {
+func TestProviderTranscriberMapsUnauthorizedAndForbiddenResponses(t *testing.T) {
 	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -152,11 +152,12 @@ func TestProviderTranscriberMapsUnauthorizedResponses(t *testing.T) {
 
 func TestProviderTranscriberRejectsMalformedAndOversizedResponses(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		body string
+		name    string
+		body    string
+		wantErr string
 	}{
-		{name: "malformed JSON", body: `{"text":"private malformed"`},
-		{name: "missing text field", body: `{"result":"ignored"}`},
+		{name: "malformed JSON", body: `{"text":"private malformed"`, wantErr: "voice: invalid transcription response"},
+		{name: "missing text field", body: `{"result":"ignored"}`, wantErr: "voice: transcription response is missing text"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -166,8 +167,8 @@ func TestProviderTranscriberRejectsMalformedAndOversizedResponses(t *testing.T) 
 
 			transcriber := NewProviderTranscriber(provider.Config{Endpoint: server.URL}, "provider/stt")
 			_, err := transcriber.Transcribe(context.Background(), makePCM16WAV(1, 16000, 16, []byte{1, 2}))
-			if err == nil {
-				t.Fatal("Transcribe() succeeded for an invalid response")
+			if err == nil || err.Error() != tc.wantErr {
+				t.Fatalf("Transcribe() error = %v, want %q", err, tc.wantErr)
 			}
 			if strings.Contains(err.Error(), "private malformed") {
 				t.Fatalf("provider response body leaked: %v", err)
@@ -247,7 +248,9 @@ func TestProviderTranscriberRequiresModel(t *testing.T) {
 }
 
 func TestProviderTranscriberRedactsNetworkErrors(t *testing.T) {
+	var gotQuery string
 	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		gotQuery = req.URL.RawQuery
 		return nil, fmt.Errorf("dial %s with %s", req.URL.String(), req.Header.Get("Authorization"))
 	})}
 	transcriber := &providerTranscriber{
@@ -259,6 +262,13 @@ func TestProviderTranscriberRedactsNetworkErrors(t *testing.T) {
 	_, err := transcriber.Transcribe(context.Background(), makePCM16WAV(1, 16000, 16, []byte{1, 2}))
 	if !errors.Is(err, provider.ErrProviderUnavailable) {
 		t.Fatalf("Transcribe() error = %v, want ErrProviderUnavailable", err)
+	}
+	if err != provider.ErrProviderUnavailable {
+		t.Fatalf("Transcribe() error = %v, want sanitized provider error %v", err, provider.ErrProviderUnavailable)
+	}
+	_, wantQuery, hasQuery := strings.Cut(transcriber.endpoint, "?")
+	if !hasQuery || gotQuery != wantQuery {
+		t.Fatalf("request query = %q, want configured query preserved", gotQuery)
 	}
 	for _, secret := range []string{"header-secret", "url-secret", "api.example"} {
 		if strings.Contains(err.Error(), secret) {

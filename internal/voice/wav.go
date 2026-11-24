@@ -49,8 +49,5 @@ func ValidateWAV(data []byte) error {
 	if dataBytes == 0 || dataBytes%uint64(blockAlign) != 0 {
 		return fmt.Errorf("%w: empty or incomplete PCM frame", ErrInvalidWAV)
 	}
-	if dataBytes > 16000*300*2 {
-		return ErrWAVTooLarge
-	}
 	return nil
 }
