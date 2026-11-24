@@ -117,7 +117,7 @@ jobs:
           NOTO_DEPENDENCIES=$(env -u LD_LIBRARY_PATH ldd "$PWD/dist/noto")
           NOTO_SHERPA_DEPENDENCIES=$(printf '%s\n' "$NOTO_DEPENDENCIES" | grep -E '^[[:space:]]*(libsherpa|libonnxruntime)' || true)
           if [ -n "$NOTO_SHERPA_DEPENDENCIES" ]; then
-            readelf -d "$PWD/dist/noto" | grep -F '$ORIGIN/lib'
+            readelf -d "$PWD/dist/noto" | grep -F "\$ORIGIN/lib"
             if printf '%s\n' "$NOTO_SHERPA_DEPENDENCIES" | grep -vF "=> $PWD/dist/lib/"; then
               echo "noto resolved a sherpa/onnx dependency outside the release bundle" >&2
               exit 1
