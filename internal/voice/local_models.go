@@ -50,6 +50,8 @@ var (
 	ErrLocalModelDeleting = errors.New("voice: local speech model is being deleted")
 	// ErrUnsafeModelArchive is returned when a downloaded archive has unsafe entries.
 	ErrUnsafeModelArchive = errors.New("voice: unsafe Parakeet model archive")
+	// errLocalRecognizerClose is returned when the native recognizer could not be closed.
+	errLocalRecognizerClose = errors.New("voice: could not close local speech model")
 )
 
 type modelFileSpec struct {
@@ -68,6 +70,7 @@ type modelPaths struct {
 
 type localRecognizer interface {
 	Transcribe(context.Context, []float32) (string, error)
+	// Close must be idempotent because a failed close may be retried before reuse or deletion.
 	Close() error
 }
 
@@ -123,6 +126,7 @@ type ModelManager struct {
 	runtimeAvailable     bool
 	recognizerFactory    func(modelPaths) (localRecognizer, error)
 	recognizer           localRecognizer
+	verifiedFiles        []os.FileInfo
 	status               ModelStatus
 }
 
@@ -315,12 +319,9 @@ func (t localModelTranscriber) Transcribe(ctx context.Context, data []byte) (str
 		m.mu.RUnlock()
 		return "", ErrLocalModelNotInstalled
 	}
-	verified := m.status.Verified
 	m.mu.RUnlock()
-	if !verified {
-		if err := m.verifyInstalledModel(ctx); err != nil {
-			return "", err
-		}
+	if err := m.ensureVerifiedModelSnapshot(ctx); err != nil {
+		return "", err
 	}
 	m.mu.RLock()
 	recognizer := m.recognizer
@@ -343,6 +344,9 @@ func (t localModelTranscriber) Transcribe(ctx context.Context, data []byte) (str
 		m.recognizer = recognizer
 		m.status.Error = ""
 		m.mu.Unlock()
+		if err := m.checkRecognizerModelSnapshot(); err != nil {
+			return "", err
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -385,7 +389,12 @@ func (m *ModelManager) Download(ctx context.Context) (retErr error) {
 		if status.Verified {
 			return nil
 		}
-		if err := m.verifyInstalledModel(ctx); err == nil {
+		if err := m.lockInference(ctx); err != nil {
+			return err
+		}
+		err := m.verifyInstalledModel(ctx)
+		m.unlockInference()
+		if err == nil {
 			return nil
 		} else if !errors.Is(err, ErrLocalModelIntegrity) && !errors.Is(err, ErrLocalModelNotInstalled) {
 			return err
@@ -466,7 +475,8 @@ func (m *ModelManager) Download(ctx context.Context) (retErr error) {
 	m.mu.Unlock()
 	progressBody := &modelProgressReader{reader: resp.Body, manager: m, limit: m.maxArchiveBytes, total: total}
 	archiveReader := m.decompress(progressBody)
-	if err := m.extractAndVerify(ctx, archiveReader, stagingDir); err != nil {
+	stagingFiles, err := m.extractAndVerifyWithSnapshot(ctx, archiveReader, stagingDir)
+	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -475,7 +485,7 @@ func (m *ModelManager) Download(ctx context.Context) (retErr error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := m.installStagingDirectory(ctx, stagingDir); err != nil {
+	if err := m.installStagingDirectory(ctx, stagingDir, stagingFiles); err != nil {
 		return err
 	}
 	keepStage = true // Rename consumed the staging directory.
@@ -579,6 +589,20 @@ func (m *ModelManager) extractAndVerify(ctx context.Context, source io.Reader, s
 	return nil
 }
 
+func (m *ModelManager) extractAndVerifyWithSnapshot(ctx context.Context, source io.Reader, stagingDir string) ([]os.FileInfo, error) {
+	if err := m.extractAndVerify(ctx, source, stagingDir); err != nil {
+		return nil, err
+	}
+	files, present, err := snapshotModelDirectory(stagingDir, m.manifest)
+	if err != nil {
+		return nil, err
+	}
+	if !present {
+		return nil, ErrLocalModelIntegrity
+	}
+	return files, nil
+}
+
 func sweepOrphanModelStagingDirectories(modelsDir string) error {
 	entries, err := os.ReadDir(modelsDir)
 	if err != nil {
@@ -676,18 +700,37 @@ func (m *ModelManager) extractVerifiedFile(reader *tar.Reader, stagingDir string
 	return nil
 }
 
-func (m *ModelManager) installStagingDirectory(ctx context.Context, stagingDir string) error {
+func (m *ModelManager) installStagingDirectory(ctx context.Context, stagingDir string, stagingFiles []os.FileInfo) error {
 	if err := m.lockInference(ctx); err != nil {
 		return err
 	}
 	defer m.unlockInference()
+	currentStage, stagePresent, err := snapshotModelDirectory(stagingDir, m.manifest)
+	if err != nil || !stagePresent || !sameModelFileSnapshots(stagingFiles, currentStage) {
+		return ErrLocalModelIntegrity
+	}
+	target := m.modelDir
+	targetInfo, targetErr := os.Lstat(target)
+	if targetErr == nil && (targetInfo.Mode()&os.ModeSymlink != 0 || !targetInfo.IsDir()) {
+		return errors.New("voice: unsafe existing model path")
+	}
+	if targetErr != nil && !errors.Is(targetErr, os.ErrNotExist) {
+		return fmt.Errorf("voice: inspect existing model directory: %w", targetErr)
+	}
+	if err := m.closeCachedRecognizer(); err != nil {
+		return err
+	}
+	currentStage, stagePresent, err = snapshotModelDirectory(stagingDir, m.manifest)
+	if err != nil || !stagePresent || !sameModelFileSnapshots(stagingFiles, currentStage) {
+		return ErrLocalModelIntegrity
+	}
 	m.mu.Lock()
 	m.status.Installed = false
 	m.status.Verified = false
 	m.status.Verifying = false
 	m.status.Progress = 0
+	m.verifiedFiles = nil
 	m.mu.Unlock()
-	target := m.modelDir
 	if info, err := os.Lstat(target); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 			return errors.New("voice: unsafe existing model path")
@@ -701,6 +744,15 @@ func (m *ModelManager) installStagingDirectory(ctx context.Context, stagingDir s
 	if err := os.Rename(stagingDir, target); err != nil {
 		return fmt.Errorf("voice: install model directory: %w", err)
 	}
+	verifiedFiles, present, err := snapshotModelDirectory(target, m.manifest)
+	if err != nil || !present || !sameModelFileSnapshots(stagingFiles, verifiedFiles) {
+		m.mu.Lock()
+		m.status.Installed = false
+		m.status.Verified = false
+		m.status.Error = ErrLocalModelIntegrity.Error()
+		m.mu.Unlock()
+		return ErrLocalModelIntegrity
+	}
 	m.mu.Lock()
 	m.status.Installed = true
 	m.status.Verified = true
@@ -708,6 +760,7 @@ func (m *ModelManager) installStagingDirectory(ctx context.Context, stagingDir s
 	m.status.InstalledSizeBytes = manifestSize(m.manifest)
 	m.status.Progress = 1
 	m.status.Error = ""
+	m.verifiedFiles = verifiedFiles
 	m.mu.Unlock()
 	return nil
 }
@@ -732,23 +785,17 @@ func (m *ModelManager) Delete(ctx context.Context) error {
 	}
 	defer m.unlockInference()
 
+	if err := m.closeCachedRecognizer(); err != nil {
+		return fmt.Errorf("voice: close local speech model: %w", err)
+	}
 	m.mu.Lock()
-	recognizer := m.recognizer
-	m.recognizer = nil
+	m.verifiedFiles = nil
 	m.status.Installed = false
 	m.status.Verified = false
 	m.status.Verifying = false
 	m.status.DownloadedBytes = 0
 	m.status.Progress = 0
 	m.mu.Unlock()
-	if recognizer != nil {
-		if err := recognizer.Close(); err != nil {
-			m.mu.Lock()
-			m.status.Error = "voice: could not close local speech model"
-			m.mu.Unlock()
-			return fmt.Errorf("voice: close local speech model: %w", err)
-		}
-	}
 	if info, err := os.Lstat(m.modelDir); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 			m.mu.Lock()
@@ -819,63 +866,110 @@ func verifyModelDirectory(dir string, manifest []modelFileSpec) (bool, error) {
 }
 
 func inspectModelDirectory(dir string, manifest []modelFileSpec) (bool, error) {
+	_, present, err := snapshotModelDirectory(dir, manifest)
+	return present, err
+}
+
+func snapshotModelDirectory(dir string, manifest []modelFileSpec) ([]os.FileInfo, bool, error) {
 	info, err := os.Lstat(dir)
 	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
+		return nil, false, nil
 	}
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return false, errors.New("voice: unsafe installed model directory")
+		return nil, false, errors.New("voice: unsafe installed model directory")
 	}
+	files := make([]os.FileInfo, 0, len(manifest))
 	for _, spec := range manifest {
 		path := filepath.Join(dir, spec.Name)
 		fileInfo, err := os.Lstat(path)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
-				return false, nil
+				return nil, false, nil
 			}
-			return false, err
+			return nil, false, err
 		}
 		if fileInfo.Mode()&os.ModeSymlink != 0 || !fileInfo.Mode().IsRegular() || fileInfo.Size() != spec.Size {
-			return false, nil
+			return nil, false, nil
 		}
+		files = append(files, fileInfo)
 	}
-	return true, nil
+	return files, true, nil
 }
 
 func verifyModelDirectoryContext(ctx context.Context, dir string, manifest []modelFileSpec) (bool, error) {
-	present, err := inspectModelDirectory(dir, manifest)
+	_, present, err := verifyModelDirectoryContextWithSnapshot(ctx, dir, manifest)
+	return present, err
+}
+
+func verifyModelDirectoryContextWithSnapshot(ctx context.Context, dir string, manifest []modelFileSpec) ([]os.FileInfo, bool, error) {
+	before, present, err := snapshotModelDirectory(dir, manifest)
 	if err != nil || !present {
-		return present, err
+		return nil, present, err
 	}
-	for _, spec := range manifest {
+	for i, spec := range manifest {
 		if err := ctx.Err(); err != nil {
-			return false, err
+			return nil, false, err
 		}
 		filePath := filepath.Join(dir, spec.Name)
 		file, err := os.Open(filePath)
 		if err != nil {
-			return false, err
+			return nil, false, err
+		}
+		openedInfo, err := file.Stat()
+		if err != nil || !sameModelFileInfo(before[i], openedInfo) {
+			_ = file.Close()
+			if err != nil {
+				return nil, false, err
+			}
+			return nil, false, nil
 		}
 		hash := sha256.New()
 		_, readErr := io.Copy(hash, contextModelReader{ctx: ctx, reader: file})
+		finishedInfo, statErr := file.Stat()
 		closeErr := file.Close()
 		if readErr != nil {
-			return false, readErr
+			return nil, false, readErr
+		}
+		if statErr != nil {
+			return nil, false, statErr
 		}
 		if closeErr != nil {
-			return false, closeErr
+			return nil, false, closeErr
+		}
+		if !sameModelFileInfo(before[i], finishedInfo) {
+			return nil, false, nil
 		}
 		if hex.EncodeToString(hash.Sum(nil)) != spec.SHA256 {
-			return false, nil
+			return nil, false, nil
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return false, err
+		return nil, false, err
 	}
-	return true, nil
+	after, stillPresent, err := snapshotModelDirectory(dir, manifest)
+	if err != nil || !stillPresent || !sameModelFileSnapshots(before, after) {
+		return nil, false, err
+	}
+	return after, true, nil
+}
+
+func sameModelFileInfo(a, b os.FileInfo) bool {
+	return a != nil && b != nil && os.SameFile(a, b) && a.Mode() == b.Mode() && a.Size() == b.Size() && a.ModTime().Equal(b.ModTime())
+}
+
+func sameModelFileSnapshots(a, b []os.FileInfo) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !sameModelFileInfo(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *ModelManager) verifyInstalledModel(ctx context.Context) error {
@@ -897,8 +991,14 @@ func (m *ModelManager) verifyInstalledModel(ctx context.Context) error {
 	dir := m.modelDir
 	manifest := append([]modelFileSpec(nil), m.manifest...)
 	m.mu.Unlock()
+	if err := m.closeCachedRecognizer(); err != nil {
+		m.mu.Lock()
+		m.status.Verifying = false
+		m.mu.Unlock()
+		return err
+	}
 
-	verified, err := verifyModelDirectoryContext(ctx, dir, manifest)
+	verifiedFiles, verified, err := verifyModelDirectoryContextWithSnapshot(ctx, dir, manifest)
 	m.mu.Lock()
 	m.status.Verifying = false
 	if ctx.Err() != nil {
@@ -906,14 +1006,119 @@ func (m *ModelManager) verifyInstalledModel(ctx context.Context) error {
 		return ctx.Err()
 	}
 	if err != nil || !verified {
+		m.verifiedFiles = nil
 		m.status.Installed = false
 		m.status.Verified = false
+		m.status.Error = ErrLocalModelIntegrity.Error()
+		m.mu.Unlock()
+		if closeErr := m.closeCachedRecognizer(); closeErr != nil {
+			return closeErr
+		}
+		m.mu.Lock()
 		m.status.Error = ErrLocalModelIntegrity.Error()
 		m.mu.Unlock()
 		return ErrLocalModelIntegrity
 	}
 	m.status.Verified = true
 	m.status.Error = ""
+	m.verifiedFiles = verifiedFiles
+	m.mu.Unlock()
+	return nil
+}
+
+// ensureVerifiedModelSnapshot rehashes pinned files whenever their identity,
+// type, size or modification time changes. Metadata is a change detector, not
+// an authentication mechanism against an actor able to preserve metadata.
+func (m *ModelManager) ensureVerifiedModelSnapshot(ctx context.Context) error {
+	m.mu.RLock()
+	verified := m.status.Verified
+	previous := append([]os.FileInfo(nil), m.verifiedFiles...)
+	pendingClose := m.recognizer != nil && !verified
+	dir := m.modelDir
+	manifest := append([]modelFileSpec(nil), m.manifest...)
+	m.mu.RUnlock()
+	if pendingClose {
+		if err := m.closeCachedRecognizer(); err != nil {
+			return err
+		}
+	}
+	if !verified || len(previous) != len(manifest) {
+		m.mu.Lock()
+		if m.status.Error == ErrLocalModelIntegrity.Error() || m.status.Error == errLocalRecognizerClose.Error() {
+			m.status.Error = ""
+		}
+		m.mu.Unlock()
+		return m.verifyInstalledModel(ctx)
+	}
+	current, present, err := snapshotModelDirectory(dir, manifest)
+	if err == nil && present && sameModelFileSnapshots(previous, current) {
+		return nil
+	}
+
+	m.mu.Lock()
+	m.status.Verified = false
+	m.verifiedFiles = nil
+	m.status.Error = ""
+	m.mu.Unlock()
+	if closeErr := m.closeCachedRecognizer(); closeErr != nil {
+		return closeErr
+	}
+	if err != nil || !present {
+		m.mu.Lock()
+		m.status.Installed = false
+		m.status.Error = ErrLocalModelIntegrity.Error()
+		m.mu.Unlock()
+		return ErrLocalModelIntegrity
+	}
+	return m.verifyInstalledModel(ctx)
+}
+
+func (m *ModelManager) checkRecognizerModelSnapshot() error {
+	m.mu.RLock()
+	expected := append([]os.FileInfo(nil), m.verifiedFiles...)
+	dir := m.modelDir
+	manifest := append([]modelFileSpec(nil), m.manifest...)
+	m.mu.RUnlock()
+	current, present, err := snapshotModelDirectory(dir, manifest)
+	if err == nil && present && sameModelFileSnapshots(expected, current) {
+		return nil
+	}
+	m.mu.Lock()
+	m.verifiedFiles = nil
+	m.status.Verified = false
+	m.status.Error = ErrLocalModelIntegrity.Error()
+	m.mu.Unlock()
+	if err := m.closeCachedRecognizer(); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	m.status.Error = ErrLocalModelIntegrity.Error()
+	m.mu.Unlock()
+	return ErrLocalModelIntegrity
+}
+
+// closeCachedRecognizer is called while holding the inference gate, so no
+// decode can still be using the native recognizer.
+func (m *ModelManager) closeCachedRecognizer() error {
+	m.mu.RLock()
+	recognizer := m.recognizer
+	m.mu.RUnlock()
+	if recognizer == nil {
+		return nil
+	}
+	if err := recognizer.Close(); err != nil {
+		m.mu.Lock()
+		m.status.Verified = false
+		m.verifiedFiles = nil
+		m.status.Error = errLocalRecognizerClose.Error()
+		m.mu.Unlock()
+		return errLocalRecognizerClose
+	}
+	m.mu.Lock()
+	m.recognizer = nil
+	if !m.status.Verified {
+		m.status.Error = ""
+	}
 	m.mu.Unlock()
 	return nil
 }

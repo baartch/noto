@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,6 +32,53 @@ type testLocalRecognizer struct {
 	startedOne sync.Once
 	closed     atomic.Int32
 	samples    []float32
+	closeHook  func()
+}
+
+type cancellationIgnoringRecognizer struct {
+	started chan struct{}
+	release chan struct{}
+	closed  atomic.Int32
+	start   sync.Once
+}
+
+func (r *cancellationIgnoringRecognizer) Transcribe(context.Context, []float32) (string, error) {
+	r.start.Do(func() { close(r.started) })
+	<-r.release
+	return "late transcript", nil
+}
+
+func (r *cancellationIgnoringRecognizer) Close() error {
+	r.closed.Add(1)
+	return nil
+}
+
+type closeErrorRecognizer struct {
+	closed atomic.Int32
+}
+
+func (r *closeErrorRecognizer) Transcribe(context.Context, []float32) (string, error) {
+	return "loaded", nil
+}
+
+func (r *closeErrorRecognizer) Close() error {
+	r.closed.Add(1)
+	return errors.New("native close failed")
+}
+
+type transientCloseRecognizer struct {
+	closeCalls atomic.Int32
+}
+
+func (*transientCloseRecognizer) Transcribe(context.Context, []float32) (string, error) {
+	return "stale", nil
+}
+
+func (r *transientCloseRecognizer) Close() error {
+	if r.closeCalls.Add(1) == 1 {
+		return errors.New("transient native close failure")
+	}
+	return nil
 }
 
 func (r *testLocalRecognizer) Transcribe(ctx context.Context, samples []float32) (string, error) {
@@ -49,6 +97,9 @@ func (r *testLocalRecognizer) Transcribe(ctx context.Context, samples []float32)
 }
 
 func (r *testLocalRecognizer) Close() error {
+	if r.closeHook != nil {
+		r.closeHook()
+	}
 	r.closed.Add(1)
 	return nil
 }
@@ -556,12 +607,14 @@ func TestModelManagerRepairsCorruptExistingInstall(t *testing.T) {
 	}
 }
 
-func TestModelManagerFailedPromotionClearsInstalledStatus(t *testing.T) {
+func TestModelManagerPromotionClosesRecognizerBeforeReplacingModel(t *testing.T) {
 	contents := testModelContents()
 	archive := makeModelArchive(t, contents)
 	manifest := manifestForTestFiles(contents)
+	var recognizer *testLocalRecognizer
 	fixture := newModelTestFixture(t, archive, manifest, contents, func(modelPaths) (localRecognizer, error) {
-		return &testLocalRecognizer{text: "local"}, nil
+		recognizer = &testLocalRecognizer{text: "local"}
+		return recognizer, nil
 	}, true, nil)
 	if err := fixture.manager.Download(context.Background()); err != nil {
 		t.Fatalf("initial Download(): %v", err)
@@ -569,16 +622,377 @@ func TestModelManagerFailedPromotionClearsInstalledStatus(t *testing.T) {
 	if status := fixture.manager.Status(); !status.Installed || !status.Verified {
 		t.Fatalf("initial status = %+v, want installed and verified", status)
 	}
+	transcriber, err := fixture.manager.LocalTranscriber()
+	if err != nil {
+		t.Fatalf("LocalTranscriber(): %v", err)
+	}
+	if _, err := transcriber.Transcribe(context.Background(), makePCM16WAV(1, 16000, 16, []byte{1, 2})); err != nil {
+		t.Fatalf("load recognizer: %v", err)
+	}
+	target := filepath.Join(fixture.modelsDir, localModelDirectoryName)
+	modelExistedOnClose := false
+	recognizer.closeHook = func() {
+		_, err := os.Stat(filepath.Join(target, "tokens.txt"))
+		modelExistedOnClose = err == nil
+	}
 
-	missingStagingDir := filepath.Join(fixture.modelsDir, ".missing-parakeet-stage")
-	if err := fixture.manager.installStagingDirectory(context.Background(), missingStagingDir); err == nil {
-		t.Fatal("installStagingDirectory() succeeded for a missing stage")
+	stagingDir := filepath.Join(fixture.modelsDir, ".promotion-stage")
+	if err := os.Mkdir(stagingDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stagingFiles, err := fixture.manager.extractAndVerifyWithSnapshot(context.Background(), bytes.NewReader(archive), stagingDir)
+	if err != nil {
+		t.Fatalf("extract verified replacement: %v", err)
+	}
+	if err := fixture.manager.installStagingDirectory(context.Background(), stagingDir, stagingFiles); err != nil {
+		t.Fatalf("install verified stage: %v", err)
+	}
+	if status := fixture.manager.Status(); !status.Installed || !status.Verified {
+		t.Fatalf("successful promotion status = %+v, want installed and verified", status)
+	}
+	if fixture.manager.recognizer != nil || recognizer.closed.Load() != 1 {
+		t.Fatalf("failed promotion retained recognizer: current=%v closes=%d", fixture.manager.recognizer, recognizer.closed.Load())
+	}
+	if !modelExistedOnClose {
+		t.Fatal("model files were mutated before the cached recognizer was closed")
+	}
+	if _, err := verifyModelDirectory(filepath.Join(fixture.modelsDir, localModelDirectoryName), manifest); err != nil {
+		t.Fatalf("verify promoted model: %v", err)
+	}
+}
+
+func TestModelManagerRevalidatesSameSizeModelChanges(t *testing.T) {
+	contents := testModelContents()
+	var recognizer *testLocalRecognizer
+	fixture := newModelTestFixture(t, makeModelArchive(t, contents), manifestForTestFiles(contents), contents, func(modelPaths) (localRecognizer, error) {
+		recognizer = &testLocalRecognizer{text: "cached"}
+		return recognizer, nil
+	}, true, nil)
+	if err := fixture.manager.Download(context.Background()); err != nil {
+		t.Fatalf("Download(): %v", err)
+	}
+	transcriber, err := fixture.manager.LocalTranscriber()
+	if err != nil {
+		t.Fatalf("LocalTranscriber(): %v", err)
+	}
+	wav := makePCM16WAV(1, 16000, 16, []byte{1, 2})
+	if _, err := transcriber.Transcribe(context.Background(), wav); err != nil {
+		t.Fatalf("initial Transcribe(): %v", err)
+	}
+
+	tokens := filepath.Join(fixture.modelsDir, localModelDirectoryName, "tokens.txt")
+	modified := []byte("token-c\ntoken-d\n")
+	if len(modified) != len(contents["tokens.txt"]) {
+		t.Fatalf("test fixture changed file size: got %d want %d", len(modified), len(contents["tokens.txt"]))
+	}
+	if err := os.WriteFile(tokens, modified, 0o600); err != nil {
+		t.Fatalf("modify same-size tokens file: %v", err)
+	}
+	changedTime := time.Now().Add(time.Second)
+	if err := os.Chtimes(tokens, changedTime, changedTime); err != nil {
+		t.Fatalf("update tokens mtime: %v", err)
+	}
+	if _, err := transcriber.Transcribe(context.Background(), wav); !errors.Is(err, ErrLocalModelIntegrity) {
+		t.Fatalf("Transcribe() after same-size file tamper = %v, want ErrLocalModelIntegrity", err)
+	}
+	if fixture.manager.recognizer != nil || recognizer.closed.Load() != 1 {
+		t.Fatalf("tampered model retained recognizer: current=%v closes=%d", fixture.manager.recognizer, recognizer.closed.Load())
 	}
 	if status := fixture.manager.Status(); status.Installed || status.Verified {
-		t.Fatalf("failed promotion left stale readiness: %+v", status)
+		t.Fatalf("tampered model status = %+v, want not installed or verified", status)
 	}
+}
+
+func TestModelManagerExplicitVerificationRejectsTamperWithPreservedMetadata(t *testing.T) {
+	contents := testModelContents()
+	var recognizer *testLocalRecognizer
+	fixture := newModelTestFixture(t, makeModelArchive(t, contents), manifestForTestFiles(contents), contents, func(modelPaths) (localRecognizer, error) {
+		recognizer = &testLocalRecognizer{text: "cached"}
+		return recognizer, nil
+	}, true, nil)
 	if err := fixture.manager.Download(context.Background()); err != nil {
-		t.Fatalf("Download() could not repair after failed promotion: %v", err)
+		t.Fatalf("Download(): %v", err)
+	}
+	transcriber, err := fixture.manager.LocalTranscriber()
+	if err != nil {
+		t.Fatalf("LocalTranscriber(): %v", err)
+	}
+	wav := makePCM16WAV(1, 16000, 16, []byte{1, 2})
+	if _, err := transcriber.Transcribe(context.Background(), wav); err != nil {
+		t.Fatalf("initial Transcribe(): %v", err)
+	}
+	tokens := filepath.Join(fixture.modelsDir, localModelDirectoryName, "tokens.txt")
+	before, err := os.Stat(tokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	modified := []byte("token-x\ntoken-y\n")
+	if len(modified) != len(contents["tokens.txt"]) {
+		t.Fatalf("test fixture changed file size: got %d want %d", len(modified), len(contents["tokens.txt"]))
+	}
+	if err := os.WriteFile(tokens, modified, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(tokens, before.ModTime(), before.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	fixture.manager.mu.Lock()
+	fixture.manager.status.Verified = false // Simulate a caller forcing re-verification after metadata-preserving change.
+	fixture.manager.mu.Unlock()
+	if _, err := transcriber.Transcribe(context.Background(), wav); !errors.Is(err, ErrLocalModelIntegrity) {
+		t.Fatalf("Transcribe() after explicit hash failure = %v, want ErrLocalModelIntegrity", err)
+	}
+	if fixture.manager.recognizer != nil || recognizer.closed.Load() != 1 {
+		t.Fatalf("failed explicit verification retained recognizer: current=%v closes=%d", fixture.manager.recognizer, recognizer.closed.Load())
+	}
+	if status := fixture.manager.Status(); status.Installed || status.Verified {
+		t.Fatalf("status after explicit hash failure = %+v; want not installed or verified", status)
+	}
+}
+
+func TestModelManagerReopensRecognizerWhenModelFileIdentityChanges(t *testing.T) {
+	contents := testModelContents()
+	var factoryCalls atomic.Int32
+	var recognizers []*testLocalRecognizer
+	fixture := newModelTestFixture(t, makeModelArchive(t, contents), manifestForTestFiles(contents), contents, func(modelPaths) (localRecognizer, error) {
+		call := factoryCalls.Add(1)
+		recognizer := &testLocalRecognizer{text: fmt.Sprintf("recognizer-%d", call)}
+		recognizers = append(recognizers, recognizer)
+		return recognizer, nil
+	}, true, nil)
+	if err := fixture.manager.Download(context.Background()); err != nil {
+		t.Fatalf("Download(): %v", err)
+	}
+	transcriber, err := fixture.manager.LocalTranscriber()
+	if err != nil {
+		t.Fatalf("LocalTranscriber(): %v", err)
+	}
+	wav := makePCM16WAV(1, 16000, 16, []byte{1, 2})
+	for i := 0; i < 2; i++ {
+		if got, err := transcriber.Transcribe(context.Background(), wav); err != nil || got != "recognizer-1" {
+			t.Fatalf("unchanged-file Transcribe() = %q, %v; want reused recognizer", got, err)
+		}
+	}
+	if factoryCalls.Load() != 1 {
+		t.Fatalf("unchanged files opened %d recognizers, want 1", factoryCalls.Load())
+	}
+
+	path := filepath.Join(fixture.modelsDir, localModelDirectoryName, "tokens.txt")
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tempPath := path + ".replacement"
+	if err := os.WriteFile(tempPath, contents["tokens.txt"], 0o600); err != nil {
+		t.Fatalf("write replacement tokens: %v", err)
+	}
+	if err := os.Chtimes(tempPath, before.ModTime(), before.ModTime()); err != nil {
+		t.Fatalf("preserve replacement timestamps: %v", err)
+	}
+	if err := os.Rename(tempPath, path); err != nil {
+		t.Fatalf("replace tokens inode: %v", err)
+	}
+	if got, err := transcriber.Transcribe(context.Background(), wav); err != nil || got != "recognizer-2" {
+		t.Fatalf("Transcribe() after inode replacement = %q, %v; want reopened recognizer", got, err)
+	}
+	if factoryCalls.Load() != 2 || recognizers[0].closed.Load() != 1 {
+		t.Fatalf("factory calls=%d old recognizer closes=%d; want 2 and 1", factoryCalls.Load(), recognizers[0].closed.Load())
+	}
+}
+
+func TestModelManagerFailedRecognizerCloseDoesNotReplaceModel(t *testing.T) {
+	contents := testModelContents()
+	archive := makeModelArchive(t, contents)
+	manifest := manifestForTestFiles(contents)
+	var recognizer *closeErrorRecognizer
+	fixture := newModelTestFixture(t, archive, manifest, contents, func(modelPaths) (localRecognizer, error) {
+		recognizer = &closeErrorRecognizer{}
+		return recognizer, nil
+	}, true, nil)
+	if err := fixture.manager.Download(context.Background()); err != nil {
+		t.Fatalf("Download(): %v", err)
+	}
+	transcriber, err := fixture.manager.LocalTranscriber()
+	if err != nil {
+		t.Fatalf("LocalTranscriber(): %v", err)
+	}
+	if _, err := transcriber.Transcribe(context.Background(), makePCM16WAV(1, 16000, 16, []byte{1, 2})); err != nil {
+		t.Fatalf("load recognizer: %v", err)
+	}
+	target := filepath.Join(fixture.modelsDir, localModelDirectoryName)
+	stagingDir := filepath.Join(fixture.modelsDir, ".close-failure-stage")
+	if err := os.Mkdir(stagingDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stagingFiles, err := fixture.manager.extractAndVerifyWithSnapshot(context.Background(), bytes.NewReader(archive), stagingDir)
+	if err != nil {
+		t.Fatalf("extract verified replacement: %v", err)
+	}
+	if err := fixture.manager.installStagingDirectory(context.Background(), stagingDir, stagingFiles); err == nil {
+		t.Fatal("installStagingDirectory() succeeded despite recognizer close failure")
+	}
+	if _, err := os.Stat(filepath.Join(target, "tokens.txt")); err != nil {
+		t.Fatalf("existing model was removed after close failure: %v", err)
+	}
+	if fixture.manager.recognizer != recognizer || recognizer.closed.Load() != 1 {
+		t.Fatalf("failed close did not retain recognizer for retry: current=%v closes=%d", fixture.manager.recognizer, recognizer.closed.Load())
+	}
+	if status := fixture.manager.Status(); !status.Installed || status.Verified {
+		t.Fatalf("status after close failure = %+v; want installed but unverified model retained", status)
+	}
+}
+
+func TestModelManagerRejectsChangedStagingSnapshotBeforeReplacement(t *testing.T) {
+	contents := testModelContents()
+	var recognizer *testLocalRecognizer
+	archive := makeModelArchive(t, contents)
+	fixture := newModelTestFixture(t, archive, manifestForTestFiles(contents), contents, func(modelPaths) (localRecognizer, error) {
+		recognizer = &testLocalRecognizer{text: "current"}
+		return recognizer, nil
+	}, true, nil)
+	if err := fixture.manager.Download(context.Background()); err != nil {
+		t.Fatalf("Download(): %v", err)
+	}
+	transcriber, err := fixture.manager.LocalTranscriber()
+	if err != nil {
+		t.Fatalf("LocalTranscriber(): %v", err)
+	}
+	if _, err := transcriber.Transcribe(context.Background(), makePCM16WAV(1, 16000, 16, []byte{1, 2})); err != nil {
+		t.Fatalf("load current recognizer: %v", err)
+	}
+	stagingDir := filepath.Join(fixture.modelsDir, ".mutated-stage")
+	if err := os.Mkdir(stagingDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stagingFiles, err := fixture.manager.extractAndVerifyWithSnapshot(context.Background(), bytes.NewReader(archive), stagingDir)
+	if err != nil {
+		t.Fatalf("extract replacement: %v", err)
+	}
+	tokens := filepath.Join(stagingDir, "tokens.txt")
+	modified := []byte("token-x\ntoken-y\n")
+	if err := os.WriteFile(tokens, modified, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	changedTime := time.Now().Add(time.Second)
+	if err := os.Chtimes(tokens, changedTime, changedTime); err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.manager.installStagingDirectory(context.Background(), stagingDir, stagingFiles); !errors.Is(err, ErrLocalModelIntegrity) {
+		t.Fatalf("install mutated staging = %v, want integrity error", err)
+	}
+	installedTokens, err := os.ReadFile(filepath.Join(fixture.modelsDir, localModelDirectoryName, "tokens.txt"))
+	if err != nil || !bytes.Equal(installedTokens, contents["tokens.txt"]) {
+		t.Fatalf("existing model changed after rejected stage: content=%q err=%v", installedTokens, err)
+	}
+	if fixture.manager.recognizer != recognizer || recognizer.closed.Load() != 0 {
+		t.Fatalf("rejected stage changed live recognizer: current=%v closes=%d", fixture.manager.recognizer, recognizer.closed.Load())
+	}
+	if status := fixture.manager.Status(); !status.Installed || !status.Verified {
+		t.Fatalf("status after rejected stage = %+v; want existing verified model", status)
+	}
+}
+
+func TestModelManagerRetriesRecognizerCloseAfterFilesChangeDuringOpen(t *testing.T) {
+	contents := testModelContents()
+	archive := makeModelArchive(t, contents)
+	var factoryCalls atomic.Int32
+	transient := &transientCloseRecognizer{}
+	var secondRecognizer *testLocalRecognizer
+	var fixture *modelTestFixture
+	factory := func(modelPaths) (localRecognizer, error) {
+		call := factoryCalls.Add(1)
+		if call == 1 {
+			path := filepath.Join(fixture.modelsDir, localModelDirectoryName, "tokens.txt")
+			before, err := os.Stat(path)
+			if err != nil {
+				return nil, err
+			}
+			tempPath := path + ".replacement"
+			if err := os.WriteFile(tempPath, contents["tokens.txt"], 0o600); err != nil {
+				return nil, err
+			}
+			if err := os.Chtimes(tempPath, before.ModTime(), before.ModTime()); err != nil {
+				return nil, err
+			}
+			if err := os.Rename(tempPath, path); err != nil {
+				return nil, err
+			}
+			return transient, nil
+		}
+		secondRecognizer = &testLocalRecognizer{text: "reopened"}
+		return secondRecognizer, nil
+	}
+	fixture = newModelTestFixture(t, archive, manifestForTestFiles(contents), contents, factory, true, nil)
+	if err := fixture.manager.Download(context.Background()); err != nil {
+		t.Fatalf("Download(): %v", err)
+	}
+	transcriber, err := fixture.manager.LocalTranscriber()
+	if err != nil {
+		t.Fatalf("LocalTranscriber(): %v", err)
+	}
+	wav := makePCM16WAV(1, 16000, 16, []byte{1, 2})
+	if _, err := transcriber.Transcribe(context.Background(), wav); err == nil || !strings.Contains(err.Error(), "could not close local speech model") {
+		t.Fatalf("Transcribe() during file replacement = %v, want close failure", err)
+	}
+	if fixture.manager.recognizer != transient || transient.closeCalls.Load() != 1 {
+		t.Fatalf("failed close state: recognizer=%v close calls=%d; want retained handle and one attempt", fixture.manager.recognizer, transient.closeCalls.Load())
+	}
+	if status := fixture.manager.Status(); !status.Installed || status.Verified {
+		t.Fatalf("status after failed close = %+v; want installed but unverified", status)
+	}
+	if got, err := transcriber.Transcribe(context.Background(), wav); err != nil || got != "reopened" {
+		t.Fatalf("Transcribe() after close retry = %q, %v; want reopened recognizer", got, err)
+	}
+	if factoryCalls.Load() != 2 || transient.closeCalls.Load() != 2 || secondRecognizer == nil {
+		t.Fatalf("factory calls=%d old closes=%d second recognizer=%v", factoryCalls.Load(), transient.closeCalls.Load(), secondRecognizer)
+	}
+}
+
+func TestModelManagerCancellationDuringDecodeDiscardsResultAndDeleteWaits(t *testing.T) {
+	contents := testModelContents()
+	recognizer := &cancellationIgnoringRecognizer{started: make(chan struct{}), release: make(chan struct{})}
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(recognizer.release) })
+	fixture := newModelTestFixture(t, makeModelArchive(t, contents), manifestForTestFiles(contents), contents, func(modelPaths) (localRecognizer, error) {
+		return recognizer, nil
+	}, true, nil)
+	if err := fixture.manager.Download(context.Background()); err != nil {
+		t.Fatalf("Download(): %v", err)
+	}
+	transcriber, err := fixture.manager.LocalTranscriber()
+	if err != nil {
+		t.Fatalf("LocalTranscriber(): %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	transcribeDone := make(chan error, 1)
+	go func() {
+		text, err := transcriber.Transcribe(ctx, makePCM16WAV(1, 16000, 16, []byte{1, 2}))
+		if err == nil && text != "" {
+			err = fmt.Errorf("returned transcript after cancellation: %q", text)
+		}
+		transcribeDone <- err
+	}()
+	select {
+	case <-recognizer.started:
+	case <-time.After(time.Second):
+		t.Fatal("native-like decode did not start")
+	}
+	deleteDone := make(chan error, 1)
+	go func() { deleteDone <- fixture.manager.Delete(context.Background()) }()
+	waitForModelStatus(t, fixture.manager, func(status ModelStatus) bool { return status.Deleting })
+	cancel()
+	if got := recognizer.closed.Load(); got != 0 {
+		t.Fatalf("recognizer closed during active decode: %d", got)
+	}
+	releaseOnce.Do(func() { close(recognizer.release) })
+	if err := <-transcribeDone; !errors.Is(err, context.Canceled) {
+		t.Fatalf("Transcribe() after decode cancellation = %v, want context.Canceled", err)
+	}
+	if err := <-deleteDone; err != nil {
+		t.Fatalf("Delete() after decode: %v", err)
+	}
+	if got := recognizer.closed.Load(); got != 1 {
+		t.Fatalf("recognizer close count after delete = %d, want 1", got)
 	}
 }
 
@@ -633,6 +1047,9 @@ func TestModelManagerCleansInterruptedDownload(t *testing.T) {
 }
 
 func TestModelManagerCoordinatesStagingAcrossManagers(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process-wide staging lock is implemented on Linux")
+	}
 	contents := testModelContents()
 	manifest := manifestForTestFiles(contents)
 	archive := makeModelArchive(t, contents)
@@ -1104,6 +1521,37 @@ func TestModelManagerFailedDeleteDoesNotReuseClosedRecognizer(t *testing.T) {
 	}
 	if _, err := fixture.manager.LocalTranscriber(); !errors.Is(err, ErrLocalModelNotInstalled) {
 		t.Fatalf("LocalTranscriber() after failed delete error = %v, want ErrLocalModelNotInstalled", err)
+	}
+}
+
+func TestModelManagerFailedDeleteKeepsInstalledModelWhenCloseFails(t *testing.T) {
+	contents := testModelContents()
+	var recognizer *closeErrorRecognizer
+	fixture := newModelTestFixture(t, makeModelArchive(t, contents), manifestForTestFiles(contents), contents, func(modelPaths) (localRecognizer, error) {
+		recognizer = &closeErrorRecognizer{}
+		return recognizer, nil
+	}, true, nil)
+	if err := fixture.manager.Download(context.Background()); err != nil {
+		t.Fatalf("Download(): %v", err)
+	}
+	transcriber, err := fixture.manager.LocalTranscriber()
+	if err != nil {
+		t.Fatalf("LocalTranscriber(): %v", err)
+	}
+	if _, err := transcriber.Transcribe(context.Background(), makePCM16WAV(1, 16000, 16, []byte{1, 2})); err != nil {
+		t.Fatalf("load recognizer: %v", err)
+	}
+	if err := fixture.manager.Delete(context.Background()); err == nil {
+		t.Fatal("Delete() succeeded despite recognizer close failure")
+	}
+	if _, err := os.Stat(filepath.Join(fixture.modelsDir, localModelDirectoryName, "tokens.txt")); err != nil {
+		t.Fatalf("model files were removed after close failure: %v", err)
+	}
+	if status := fixture.manager.Status(); !status.Installed || status.Verified {
+		t.Fatalf("status after failed Delete() = %+v; want installed but unverified model", status)
+	}
+	if fixture.manager.recognizer != recognizer || recognizer.closed.Load() != 1 {
+		t.Fatalf("failed Delete() did not retain recognizer for close retry: current=%v closes=%d", fixture.manager.recognizer, recognizer.closed.Load())
 	}
 }
 
