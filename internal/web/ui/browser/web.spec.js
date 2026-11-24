@@ -854,6 +854,23 @@ test("recording period edits, Enter sends once, and Escape cancels without chang
 	await expect.poll(() => page.evaluate(() => window.__micTrackStopCount)).toBe(4);
 });
 
+test("modified recording shortcuts do not edit or send", async ({ page }) => {
+	await installFakeMicrophone(page);
+	const { uploads, sends, readinessLoads } = await routeReadyVoice(page);
+	await page.goto("/");
+	await expect.poll(readinessLoads).toBeGreaterThan(0);
+	await page.locator("#message-input").fill("Draft");
+	await page.locator("#voice-record").click();
+	await page.evaluate(() => window.__emitVoiceAudio(0.2));
+
+	for (const shortcut of ["Shift+Enter", "Control+Enter", "Shift+.", "Control+."]) {
+		await page.keyboard.press(shortcut);
+		await expect(page.locator("#voice-recording-panel")).toBeVisible();
+		expect(uploads).toHaveLength(0);
+		expect(sends).toHaveLength(0);
+	}
+});
+
 test("focused recording controls keep their native Enter and period behavior", async ({ page }) => {
 	await installFakeMicrophone(page);
 	const { uploads, sends, readinessLoads } = await routeReadyVoice(page);

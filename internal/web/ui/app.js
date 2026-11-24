@@ -1754,15 +1754,16 @@ function handleVoiceKeydown(event) {
 	if (state.voiceCapture.phase !== "recording" || event.isComposing || event.keyCode === 229) return;
 	const targetIsControl = event.target !== ui.messageInput && Boolean(event.target?.closest?.("button, a, input, select, textarea"));
 	if (targetIsControl && event.key !== "Escape") return;
+	const hasModifier = event.shiftKey || event.ctrlKey || event.altKey || event.metaKey;
 	if (event.key === "Escape") {
 		event.preventDefault();
 		event.stopPropagation();
 		voiceController.cancel();
-	} else if (event.key === "." || event.code === "Period") {
+	} else if (!hasModifier && (event.key === "." || event.code === "Period")) {
 		event.preventDefault();
 		event.stopPropagation();
 		void voiceController.finish("edit");
-	} else if (event.key === "Enter") {
+	} else if (!hasModifier && event.key === "Enter") {
 		event.preventDefault();
 		event.stopPropagation();
 		void voiceController.finish("send");
