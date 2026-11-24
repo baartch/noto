@@ -294,10 +294,6 @@ func (t localModelTranscriber) Transcribe(ctx context.Context, data []byte) (str
 	if err := ValidateWAV(data); err != nil {
 		return "", err
 	}
-	samples, err := pcm16WAVSamples(data)
-	if err != nil {
-		return "", err
-	}
 	m := t.manager
 	if err := m.lockInference(ctx); err != nil {
 		return "", err
@@ -320,6 +316,10 @@ func (t localModelTranscriber) Transcribe(ctx context.Context, data []byte) (str
 		return "", ErrLocalModelNotInstalled
 	}
 	m.mu.RUnlock()
+	samples, err := pcm16WAVSamples(data)
+	if err != nil {
+		return "", err
+	}
 	if err := m.ensureVerifiedModelSnapshot(ctx); err != nil {
 		return "", err
 	}

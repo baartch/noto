@@ -1459,6 +1459,21 @@ func TestLocalTranscriberCancelsWhileWaitingForInference(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("first inference did not start")
 	}
+
+	largeWAV := makePCM16WAV(1, 16000, 16, make([]byte, 16000*300*2))
+	ctxCanceled, cancelBeforeQueue := context.WithCancel(context.Background())
+	cancelBeforeQueue()
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	if _, err := transcriber.Transcribe(ctxCanceled, largeWAV); !errors.Is(err, context.Canceled) {
+		t.Fatalf("pre-canceled queued inference error = %v, want context.Canceled", err)
+	}
+	runtime.ReadMemStats(&after)
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 1<<20 {
+		t.Fatalf("pre-canceled queued inference allocated %d bytes, want at most 1 MiB", allocated)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	secondStarted := make(chan struct{})
 	secondDone := make(chan error, 1)
