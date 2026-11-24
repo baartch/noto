@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "bun run build.mjs",
-    "test": "bun test app.test.js state.test.js",
+    "test": "bun test app.test.js state.test.js voice.test.js",
     "test:browser": "node node_modules/@playwright/test/cli.js test"
   },
   "devDependencies": {

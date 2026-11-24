@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -206,16 +207,17 @@ func buildChatCompletionsPayload(cfg Config, req CompletionRequest) openAIChatCo
 			Type:       "json_schema",
 			JSONSchema: openAIJSONSchemaFormat{Name: req.ResponseFormat.Name, Strict: req.ResponseFormat.Strict, Schema: req.ResponseFormat.Schema},
 		}
-		if isOpenRouterEndpoint(cfg.Endpoint) {
+		if IsOpenRouterEndpoint(cfg.Endpoint) {
 			payload.ProviderPrefs = &openAIProviderPreferences{RequireParameters: true}
 		}
 	}
 	return payload
 }
 
-// isOpenRouterEndpoint reports whether the configured endpoint targets OpenRouter.
-func isOpenRouterEndpoint(endpoint string) bool {
-	return strings.Contains(strings.ToLower(endpoint), "openrouter.ai")
+// IsOpenRouterEndpoint reports whether the configured endpoint targets the OpenRouter HTTPS API host.
+func IsOpenRouterEndpoint(endpoint string) bool {
+	u, err := url.Parse(endpoint)
+	return err == nil && strings.EqualFold(u.Scheme, "https") && u.User == nil && strings.EqualFold(u.Hostname(), "openrouter.ai")
 }
 
 // Complete performs an OpenAI-compatible chat completion request.

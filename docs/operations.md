@@ -156,9 +156,10 @@ and credentials remain server-side; the browser loads only embedded local assets
 
 The active/default profile must already have a provider configured in the terminal UI.
 Without one, the web workspace remains read-only and explains how to configure it.
-The first version supports ordinary chat plus Daily notes and existing Weekly/Monthly
-SQLite summaries. It has no settings screen or slash commands; text beginning with `/`
-is sent as ordinary chat text.
+The web workspace supports chat, Daily notes, Weekly/Monthly SQLite summaries, and a
+Settings dialog for profile-specific chat and voice choices. It has no slash commands;
+text beginning with `/` is sent as ordinary chat text. See the
+[voice dictation guide](voice-dictation.md) for setup and platform limits.
 
 Each `noto web` process follows the same lifecycle as a terminal chat launch: it creates
 one new profile-scoped conversation and uses recent prior history for context. Browser
@@ -179,6 +180,7 @@ network access. To rebuild the frontend, install Bun 1.3.10 or compatible and ru
 
 ```bash
 make web-test
+make web-browser-test
 make web-build
 ```
 
@@ -186,7 +188,9 @@ The UI dependencies are pinned in `internal/web/ui/package.json` and `bun.lock`.
 `make web-build` installs from the frozen lockfile, compiles Tailwind CSS and the selected
 Lucide icons, and regenerates the embedded static files. Theme colors live in the
 separate `internal/web/ui/theme.css`; normal Go releases use the generated copies in
-`internal/web/static/`.
+`internal/web/static/`. `make web-test` runs the app, state, and voice-controller Bun tests;
+`make web-browser-test` runs the desktop and mobile Chrome Playwright suite and requires
+Node.js plus an installed Chrome browser.
 
 ## CLI Quick Reference
 

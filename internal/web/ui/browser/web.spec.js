@@ -479,3 +479,521 @@ test("notes sidebar stays on the right and period tabs support keyboard navigati
 	await expect.poll(() => memoryRequests.at(-1)).toBe("weekly");
 	await expect(notes.locator("#memory-list")).toContainText("weekly note");
 });
+
+function voiceResponse(body, status = 200) {
+	return { status, contentType: "application/json", body: JSON.stringify(body) };
+}
+
+async function openVoiceSettings(page) {
+	await page.goto("/");
+	await page.locator("#settings-button").click();
+	const dialog = page.getByRole("dialog", { name: "Settings" });
+	await dialog.getByRole("tab", { name: "Voice" }).click();
+	await expect(dialog.locator("#settings-voice-panel")).toBeVisible();
+	return dialog;
+}
+
+test("Voice settings download Parakeet explicitly and confirm shared deletion", async ({ page }) => {
+	let selection = { profile_slug: "artist", provider: "", model: "", ready: false, revision: 1 };
+	let modelStatus = { available: true, installed: false, downloading: false, deleting: false, downloaded_bytes: 0, download_size_bytes: 487211443, installed_size_bytes: 670576784, progress: 0 };
+	let downloadCalls = 0;
+	let deleteCalls = 0;
+	let polls = 0;
+	await page.route("**/api/settings", async (route) => {
+		if (route.request().method() !== "POST") return route.continue();
+		const request = route.request().postDataJSON();
+		await route.fulfill(voiceResponse({ profile: { slug: "artist", name: "Artist" }, model: request.model, setup_required: false, revision: 2, sending: false, pending_notes: 0 }));
+	});
+	await page.route((url) => url.pathname === "/api/voice", async (route) => {
+		if (route.request().method() === "POST") {
+			selection = { ...selection, ...route.request().postDataJSON(), revision: selection.revision + 1 };
+		}
+		const ready = selection.provider === "local" && selection.model === "parakeet-tdt-0.6b-v3-int8" && modelStatus.available && modelStatus.installed;
+		await route.fulfill(voiceResponse({ ...selection, ready, model_status: { ...modelStatus }, reason: ready ? "" : "Download the local speech model to enable dictation." }));
+	});
+	await page.route("**/api/voice/models?*", (route) => route.fulfill(voiceResponse({ profile_slug: "artist", models: [], revision: selection.revision })));
+	await page.route("**/api/voice/local-model/download", async (route) => {
+		downloadCalls++;
+		polls = 0;
+		modelStatus = { ...modelStatus, downloading: true, progress: 0 };
+		await route.fulfill(voiceResponse({ model_status: { ...modelStatus } }, 202));
+	});
+	await page.route("**/api/voice/local-model", async (route) => {
+		if (route.request().method() === "DELETE") {
+			deleteCalls++;
+			modelStatus = { ...modelStatus, installed: false, downloading: false, downloaded_bytes: 0, progress: 0 };
+			await route.fulfill(voiceResponse({ model_status: { ...modelStatus } }));
+			return;
+		}
+		if (modelStatus.downloading) {
+			polls++;
+			modelStatus = polls > 2
+				? { ...modelStatus, installed: true, downloading: false, downloaded_bytes: modelStatus.download_size_bytes, progress: 1 }
+				: { ...modelStatus, downloaded_bytes: polls * 100000000, progress: polls / 4 };
+		}
+		await route.fulfill(voiceResponse({ model_status: { ...modelStatus } }));
+	});
+
+	const dialog = await openVoiceSettings(page);
+	await dialog.locator("#voice-provider").selectOption("local");
+	await expect(dialog.locator("#voice-download")).toBeVisible();
+	await expect(dialog.locator("#voice-draft-status")).toContainText("Unsaved voice changes");
+	const voiceSaveRequest = page.waitForRequest((request) => new URL(request.url()).pathname === "/api/voice" && request.method() === "POST");
+	await dialog.locator("#voice-save").click();
+	const savedVoiceRequest = await voiceSaveRequest;
+	expect(savedVoiceRequest.postDataJSON()).toMatchObject({ profile_slug: "artist", provider: "local", model: "parakeet-tdt-0.6b-v3-int8", revision: 1 });
+	await expect.poll(() => selection.provider).toBe("local");
+	await expect(dialog.locator("#voice-ready-status")).toContainText("Download the local speech model");
+	expect(downloadCalls).toBe(0);
+
+	await dialog.locator("#voice-download").click();
+	await expect.poll(() => downloadCalls).toBe(1);
+	await expect.poll(async () => Number(await dialog.locator("#voice-download-progress").getAttribute("value"))).toBeGreaterThan(0);
+	await expect(dialog.locator("#voice-model-status")).toContainText("Installed");
+	await expect(dialog.locator("#voice-ready-status")).toContainText("Ready for dictation");
+	await expect(dialog.locator("#voice-delete")).toBeVisible();
+	let confirmation = "";
+	page.once("dialog", async (browserDialog) => {
+		confirmation = browserDialog.message();
+		await browserDialog.accept();
+	});
+	await dialog.locator("#voice-delete").click();
+	await expect.poll(() => deleteCalls).toBe(1);
+	expect(confirmation).toContain("all profiles");
+	await expect(dialog.locator("#voice-ready-status")).toContainText("Download the local speech model");
+});
+
+test("Voice provider models show an error and support retry when no STT models are verified", async ({ page }) => {
+	let modelRequests = 0;
+	await page.route("**/api/voice?*", (route) => route.fulfill(voiceResponse({ profile_slug: "artist", provider: "", model: "", ready: false, revision: 1, model_status: { available: true, installed: false } })));
+	await page.route("**/api/voice/models?*", async (route) => {
+		modelRequests++;
+		if (modelRequests === 1) {
+			await route.fulfill(voiceResponse({ error: { code: "voice_models_unsupported", message: "speech models are unavailable" } }, 503));
+			return;
+		}
+		await route.fulfill(voiceResponse({ profile_slug: "artist", models: [], revision: 1 }));
+	});
+	const dialog = await openVoiceSettings(page);
+	await dialog.locator("#voice-provider").selectOption("provider");
+	await expect(dialog.locator("#voice-model-retry")).toBeVisible();
+	await dialog.locator("#voice-model-retry").click();
+	await expect(dialog.locator("#voice-model-help")).toContainText("No verified speech-to-text models");
+	await expect.poll(() => modelRequests).toBe(2);
+	await expect(dialog.locator("#voice-save")).toBeDisabled();
+});
+
+test("Voice model search only shows verified speech IDs", async ({ page }) => {
+	await page.route("**/api/voice?*", (route) => route.fulfill(voiceResponse({ profile_slug: "artist", provider: "", model: "", ready: false, revision: 1, model_status: { available: true, installed: false } })));
+	await page.route("**/api/voice/models?*", (route) => route.fulfill(voiceResponse({ profile_slug: "artist", models: ["verified/whisper-large", "vendor/speech-small"], revision: 1 })));
+	const dialog = await openVoiceSettings(page);
+	await dialog.locator("#voice-provider").selectOption("provider");
+	const search = dialog.locator("#voice-model-search");
+	await search.fill("speech");
+	await expect(dialog.locator("#voice-model-options")).toContainText("vendor/speech-small");
+	await expect(dialog.locator("#voice-model-options")).not.toContainText("model-a");
+	const availableIDs = await dialog.locator("#voice-model option").allTextContents();
+	expect(availableIDs).not.toContain("model-a");
+});
+
+test("late voice model replies are ignored after the profile draft changes", async ({ page }) => {
+	let releaseArtistModels;
+	let signalArtistModels;
+	const artistModelsStarted = new Promise((resolve) => { signalArtistModels = resolve; });
+	const artistModelsGate = new Promise((resolve) => { releaseArtistModels = resolve; });
+	await page.route("**/api/settings", (route) => route.fulfill(voiceResponse({ active_profile_slug: "artist", profiles: [{ slug: "artist", name: "Artist" }, { slug: "writer", name: "Writer" }] })));
+	await page.route("**/api/settings/models?*", async (route) => {
+		const slug = new URL(route.request().url()).searchParams.get("profile");
+		await route.fulfill(voiceResponse({ profile_slug: slug, saved_model: "model-a", models: ["model-a"], saved_embeddings_model: "", embedding_models: [], saved_extractor_model: "", setup_required: false }));
+	});
+	await page.route("**/api/voice?*", (route) => {
+		const slug = new URL(route.request().url()).searchParams.get("profile_slug");
+		const model = slug === "artist" ? "artist-speech" : "writer-speech";
+		return route.fulfill(voiceResponse({ profile_slug: slug, provider: "provider", model, ready: false, revision: 1, model_status: { available: true, installed: false } }));
+	});
+	await page.route("**/api/voice/models?*", async (route) => {
+		const slug = new URL(route.request().url()).searchParams.get("profile_slug");
+		if (slug === "artist") {
+			signalArtistModels();
+			await artistModelsGate;
+			await route.fulfill(voiceResponse({ profile_slug: "artist", models: ["artist-speech"], revision: 1 }));
+			return;
+		}
+		await route.fulfill(voiceResponse({ profile_slug: "writer", models: ["writer-speech"], revision: 1 }));
+	});
+	try {
+		const dialog = await openVoiceSettings(page);
+		await artistModelsStarted;
+		await dialog.getByRole("tab", { name: "Profile" }).click();
+		const profileSearch = dialog.locator("#settings-profile-search");
+		await profileSearch.fill("Writer");
+		await dialog.getByRole("option", { name: "Writer" }).click();
+		await expect(dialog.locator("#settings-profile")).toHaveValue("writer");
+		await dialog.getByRole("tab", { name: "Voice" }).click();
+		await expect(dialog.locator("#voice-model")).toHaveValue("writer-speech");
+		releaseArtistModels();
+		await expect(dialog.locator("#voice-model")).toHaveValue("writer-speech");
+	} finally {
+		releaseArtistModels?.();
+	}
+});
+
+test("voice save settles when a model-status refresh races its response", async ({ page }) => {
+	let voiceSelection = { profile_slug: "artist", provider: "", model: "", ready: false, revision: 1 };
+	let modelStatus = { available: true, installed: false, downloading: true, deleting: false, progress: 0.5, downloaded_bytes: 100, download_size_bytes: 200 };
+	let voiceGets = 0;
+	let statusGets = 0;
+	let saveInFlight = false;
+	let releaseSave;
+	let signalSaveStarted;
+	let releaseReload;
+	let signalReloadStarted;
+	let releaseStatusPoll;
+	let signalStatusPollStarted;
+	const saveStarted = new Promise((resolve) => { signalSaveStarted = resolve; });
+	const saveGate = new Promise((resolve) => { releaseSave = resolve; });
+	const reloadStarted = new Promise((resolve) => { signalReloadStarted = resolve; });
+	const reloadGate = new Promise((resolve) => { releaseReload = resolve; });
+	const statusPollStarted = new Promise((resolve) => { signalStatusPollStarted = resolve; });
+	const statusPollGate = new Promise((resolve) => { releaseStatusPoll = resolve; });
+	await page.route("**/api/voice**", async (route) => {
+		const url = new URL(route.request().url());
+		if (url.pathname !== "/api/voice") return route.fallback();
+		if (route.request().method() === "POST") {
+			saveInFlight = true;
+			signalSaveStarted();
+			await saveGate;
+			voiceSelection = { ...voiceSelection, ...route.request().postDataJSON(), ready: true, revision: 2, model_status: modelStatus };
+			saveInFlight = false;
+			await route.fulfill(voiceResponse(voiceSelection));
+			return;
+		}
+		voiceGets++;
+		const staleSelection = { ...voiceSelection, model_status: modelStatus };
+		if (saveInFlight) {
+			signalReloadStarted();
+			await reloadGate;
+		}
+		await route.fulfill(voiceResponse(staleSelection));
+	});
+	await page.route("**/api/voice/local-model", async (route) => {
+		statusGets++;
+		if (statusGets === 2) {
+			signalStatusPollStarted();
+			await statusPollGate;
+		}
+		if (statusGets > 1) modelStatus = { ...modelStatus, installed: true, downloading: false, progress: 1, downloaded_bytes: 200 };
+		await route.fulfill(voiceResponse({ model_status: modelStatus }));
+	});
+	try {
+		const dialog = await openVoiceSettings(page);
+		await dialog.locator("#voice-provider").selectOption("local");
+		const voiceSave = dialog.locator("#voice-save");
+		await voiceSave.click();
+		await saveStarted;
+		await statusPollStarted;
+		releaseStatusPoll();
+		await reloadStarted;
+		releaseSave();
+		await expect(dialog.locator("#settings-cancel")).toBeEnabled();
+		await expect(voiceSave).toHaveText("Save voice settings");
+		releaseReload();
+		await expect(dialog.locator("#voice-ready-status")).toContainText("Ready for dictation");
+	} finally {
+		releaseSave?.();
+		releaseReload?.();
+		releaseStatusPoll?.();
+	}
+});
+
+async function installFakeMicrophone(page, { denied = false, hold = false } = {}) {
+	await page.addInitScript(({ denied, hold }) => {
+		window.__micGetUserMediaCalls = 0;
+		window.__micTrackStopCount = 0;
+		window.__voiceProcessor = null;
+		const mediaDevices = {
+			getUserMedia: async () => {
+				window.__micGetUserMediaCalls++;
+				if (denied || window.__denyMicrophone) throw new DOMException("Permission denied", "NotAllowedError");
+				const stream = () => {
+					const track = { stop() { window.__micTrackStopCount++; } };
+					return { getTracks: () => [track] };
+				};
+				if (hold) return new Promise((resolve) => { window.__resolveMicrophone = () => resolve(stream()); });
+				return stream();
+			},
+		};
+		Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: mediaDevices });
+		class FakeAudioContext {
+			constructor() { this.sampleRate = 48000; this.destination = {}; }
+			createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
+			createScriptProcessor() {
+				window.__voiceProcessor = { onaudioprocess: null, connect() {}, disconnect() {} };
+				return window.__voiceProcessor;
+			}
+			close() { return Promise.resolve(); }
+		}
+		window.AudioContext = FakeAudioContext;
+		window.webkitAudioContext = FakeAudioContext;
+		window.__emitVoiceAudio = (amplitude = 0.25) => {
+			const samples = new Float32Array(4096).fill(amplitude);
+			window.__voiceProcessor?.onaudioprocess?.({ inputBuffer: { getChannelData: () => samples } });
+		};
+	}, { denied, hold });
+}
+
+async function routeReadyVoice(page, { ready = true, reason = "", transcript = "spoken words", deferTranscription = false, deferSend = false } = {}) {
+	const uploads = [];
+	const sends = [];
+	let readinessLoads = 0;
+	let completeTranscription = async () => {};
+	let completeSend = async () => {};
+	await page.route("**/api/voice?*", (route) => {
+		readinessLoads++;
+		return route.fulfill(voiceResponse({
+			profile_slug: "artist", provider: ready ? "provider" : "", model: ready ? "verified-stt" : "", ready,
+			reason: reason || (ready ? "" : "Configure Voice in Settings before recording."), revision: 1,
+			model_status: { available: true, installed: false },
+		}));
+	});
+	await page.route("**/api/voice/transcriptions?*", async (route) => {
+		uploads.push({ url: route.request().url(), contentType: route.request().headers()["content-type"], body: route.request().postDataBuffer() });
+		if (deferTranscription) {
+			await new Promise((resolve) => {
+				completeTranscription = async () => {
+					await route.fulfill(voiceResponse({ text: transcript }));
+					resolve();
+				};
+			});
+		} else {
+			await route.fulfill(voiceResponse({ text: transcript }));
+		}
+	});
+	await page.route("**/api/messages", async (route) => {
+		if (route.request().method() !== "POST") return route.fallback();
+		sends.push(route.request().postDataJSON());
+		if (deferSend) {
+			await new Promise((resolve) => {
+				completeSend = async () => {
+					await route.fulfill(voiceResponse({ request_id: "voice-send", reply: { content: "Reply", content_html: "<p>Reply</p>" } }));
+					resolve();
+				};
+			});
+		} else {
+			await route.fulfill(voiceResponse({ request_id: "voice-send", reply: { content: "Reply", content_html: "<p>Reply</p>" } }));
+		}
+	});
+	return { uploads, sends, readinessLoads: () => readinessLoads, completeTranscription: () => completeTranscription(), completeSend: () => completeSend() };
+}
+
+test("idle composer has Preline mic/send controls and accessible setup guidance", async ({ page }) => {
+	await page.route("**/api/voice?*", (route) => route.fulfill(voiceResponse({ profile_slug: "artist", provider: "", model: "", ready: false, reason: "Configure Voice in Settings before recording.", revision: 1, model_status: { available: true, installed: false } })));
+	await page.goto("/");
+	const input = page.locator("#message-input");
+	await expect(input).toHaveAttribute("placeholder", "Type your message…");
+	const microphone = page.locator("#voice-record");
+	const send = page.locator("#send-button");
+	await expect(microphone).toBeDisabled();
+	await expect(microphone).toHaveAttribute("title", /Settings/);
+	await expect(microphone.locator("svg.lucide-mic")).toBeVisible();
+	await expect(send.locator("svg.lucide-send")).toBeVisible();
+	await expect(page.locator("#voice-readiness-help")).toBeVisible();
+	await expect(page.locator("#voice-readiness-help")).toContainText("Settings");
+	await expect(page.locator("#voice-open-settings")).toBeEnabled();
+	await page.locator("#voice-open-settings").focus();
+	expect(await page.evaluate(() => document.activeElement.id)).toBe("voice-open-settings");
+	const boxes = await Promise.all([microphone.boundingBox(), send.boundingBox()]);
+	expect(boxes[0].width).toBe(32);
+	expect(boxes[0].height).toBe(32);
+	expect(boxes[1].width).toBe(32);
+	expect(boxes[1].height).toBe(32);
+	expect(boxes[0].x).toBeLessThan(boxes[1].x);
+});
+
+test("idle punctuation and IME Enter retain normal chat semantics", async ({ page }) => {
+	await installFakeMicrophone(page);
+	const { sends } = await routeReadyVoice(page);
+	await page.goto("/");
+	const input = page.locator("#message-input");
+	await input.fill("Draft");
+	await page.keyboard.press(".");
+	await expect(input).toHaveValue("Draft.");
+	await input.evaluate((element) => element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, isComposing: true })));
+	await expect.poll(() => sends.length).toBe(0);
+	await expect(input).toHaveValue("Draft.");
+	await input.press("Enter");
+	await expect.poll(() => sends.length).toBe(1);
+	expect(sends[0].content).toBe("Draft.");
+	expect(await page.evaluate(() => window.__micGetUserMediaCalls)).toBe(0);
+});
+
+test("voice capture remains available after bfcache restore", async ({ page }) => {
+	await installFakeMicrophone(page);
+	const { readinessLoads } = await routeReadyVoice(page);
+	await page.goto("/");
+	await expect.poll(readinessLoads).toBeGreaterThan(0);
+	await page.locator("#voice-record").click();
+	await expect(page.locator("#voice-recording-panel")).toBeVisible();
+	await page.evaluate(() => {
+		window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+		window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+	});
+	await expect(page.locator("#voice-recording-panel")).toBeHidden();
+	await expect.poll(() => page.evaluate(() => window.__micTrackStopCount)).toBe(1);
+	await page.locator("#voice-record").click();
+	await expect(page.locator("#voice-recording-panel")).toBeVisible();
+	await expect.poll(() => page.evaluate(() => window.__micGetUserMediaCalls)).toBe(2);
+});
+
+test("recording period edits, Enter sends once, and Escape cancels without changing the draft", async ({ page }) => {
+	await installFakeMicrophone(page);
+	const { uploads, sends, readinessLoads } = await routeReadyVoice(page);
+	await page.goto("/");
+	await expect.poll(readinessLoads).toBeGreaterThan(0);
+	await expect(page.locator("#voice-record")).toBeEnabled();
+	const input = page.locator("#message-input");
+	await input.fill("Draft");
+	await page.locator("#voice-record").click();
+	await expect(page.locator("#voice-recording-panel")).toBeVisible();
+	await page.evaluate(() => window.__emitVoiceAudio(0.3));
+	await page.keyboard.press(".");
+	await expect(input).toHaveValue("Draft spoken words");
+	await expect.poll(() => uploads.length).toBe(1);
+	expect(uploads[0].contentType).toMatch(/audio\/wav/);
+	expect(new URL(uploads[0].url).searchParams.get("profile_slug")).toBe("artist");
+	expect(uploads[0].body.subarray(0, 4).toString("ascii")).toBe("RIFF");
+	await expect.poll(() => sends.length).toBe(0);
+
+	await page.locator("#voice-record").click();
+	await page.evaluate(() => window.__emitVoiceAudio(0.3));
+	await page.keyboard.press("Enter");
+	await expect.poll(() => sends.length).toBe(1);
+	expect(sends[0].content).toBe("Draft spoken words spoken words");
+	await expect.poll(() => uploads.length).toBe(2);
+
+	await input.fill("Keep this draft");
+	await page.locator("#voice-record").click();
+	await page.keyboard.press("Escape");
+	await expect(input).toHaveValue("Keep this draft");
+	await expect.poll(() => uploads.length).toBe(2);
+	await expect.poll(() => page.evaluate(() => window.__micTrackStopCount)).toBe(3);
+
+	await page.locator("#voice-record").click();
+	await page.locator("#voice-cancel").click();
+	await expect(input).toHaveValue("Keep this draft");
+	await expect.poll(() => page.evaluate(() => window.__micTrackStopCount)).toBe(4);
+});
+
+test("modified recording shortcuts do not edit or send", async ({ page }) => {
+	await installFakeMicrophone(page);
+	const { uploads, sends, readinessLoads } = await routeReadyVoice(page);
+	await page.goto("/");
+	await expect.poll(readinessLoads).toBeGreaterThan(0);
+	await page.locator("#message-input").fill("Draft");
+	await page.locator("#voice-record").click();
+	await page.evaluate(() => window.__emitVoiceAudio(0.2));
+
+	for (const shortcut of ["Shift+Enter", "Control+Enter", "Shift+.", "Control+."]) {
+		await page.keyboard.press(shortcut);
+		await expect(page.locator("#voice-recording-panel")).toBeVisible();
+		expect(uploads).toHaveLength(0);
+		expect(sends).toHaveLength(0);
+	}
+});
+
+test("focused recording controls keep their native Enter and period behavior", async ({ page }) => {
+	await installFakeMicrophone(page);
+	const { uploads, sends, readinessLoads } = await routeReadyVoice(page);
+	await page.goto("/");
+	await expect.poll(readinessLoads).toBeGreaterThan(0);
+	await page.locator("#message-input").fill("Draft");
+	await page.locator("#voice-record").click();
+	await page.evaluate(() => window.__emitVoiceAudio(0.2));
+	await page.locator("#voice-edit").focus();
+	await page.keyboard.press(".");
+	await expect(page.locator("#voice-recording-panel")).toBeVisible();
+	await expect.poll(() => uploads.length).toBe(0);
+	await page.keyboard.press("Enter");
+	await expect.poll(() => uploads.length).toBe(1);
+	await expect.poll(() => sends.length).toBe(0);
+	await expect(page.locator("#message-input")).toHaveValue("Draft spoken words");
+
+	await page.locator("#voice-record").click();
+	await page.locator("#voice-cancel").focus();
+	await page.keyboard.press("Enter");
+	await expect(page.locator("#voice-recording-panel")).toBeHidden();
+	await expect.poll(() => uploads.length).toBe(1);
+	await expect.poll(() => sends.length).toBe(0);
+});
+
+test("chat submit stays blocked during microphone permission, recording, and transcription", async ({ page }) => {
+	await installFakeMicrophone(page, { hold: true });
+	const { sends, readinessLoads, completeTranscription } = await routeReadyVoice(page, { deferTranscription: true });
+	await page.goto("/");
+	await expect.poll(readinessLoads).toBeGreaterThan(0);
+	const input = page.locator("#message-input");
+	await input.fill("Keep this draft");
+	await page.locator("#voice-record").click();
+	await expect(input).toHaveAttribute("readonly", "");
+	await expect(page.locator("#send-button")).toBeDisabled();
+	await input.evaluate((element) => element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+	await page.locator("#message-form").evaluate((form) => form.requestSubmit());
+	await expect.poll(() => sends.length).toBe(0);
+
+	await page.evaluate(() => window.__resolveMicrophone());
+	await expect(page.locator("#voice-recording-panel")).toBeVisible();
+	await page.locator("#message-form").evaluate((form) => form.requestSubmit());
+	await expect.poll(() => sends.length).toBe(0);
+	await page.evaluate(() => window.__emitVoiceAudio(0.2));
+	await page.locator("#voice-edit").click();
+	await expect(page.locator("#voice-phase-label")).toHaveText("Transcribing recording");
+	await input.evaluate((element) => element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+	await page.locator("#message-form").evaluate((form) => form.requestSubmit());
+	await expect.poll(() => sends.length).toBe(0);
+	await expect(input).toHaveValue("Keep this draft");
+	await completeTranscription();
+	await expect(input).toHaveValue("Keep this draft spoken words");
+	await expect.poll(() => sends.length).toBe(0);
+});
+
+test("transcribing send returns to the idle composer before a slow chat turn completes", async ({ page }) => {
+	await installFakeMicrophone(page);
+	const { sends, readinessLoads, completeSend } = await routeReadyVoice(page, { deferSend: true });
+	await page.goto("/");
+	await expect.poll(readinessLoads).toBeGreaterThan(0);
+	await page.locator("#message-input").fill("Draft");
+	await page.locator("#voice-record").click();
+	await page.evaluate(() => window.__emitVoiceAudio(0.2));
+	await page.locator("#voice-send").click();
+	await expect.poll(() => sends.length).toBe(1);
+	await expect(page.locator("#voice-recording-panel")).toBeHidden();
+	await expect(page.locator("#composer-idle-controls")).toBeVisible();
+	await expect(page.locator("#message-input")).not.toHaveAttribute("readonly", "");
+	await expect(page.locator("#send-state")).toHaveText("Noto is working");
+	await expect(page.locator("#voice-cancel")).toBeHidden();
+	await completeSend();
+	await expect(page.locator("#send-state")).toBeEmpty();
+});
+
+test("permission denial reports an error and recording meter shows elapsed time and volume", async ({ page }) => {
+	await installFakeMicrophone(page);
+	const { readinessLoads } = await routeReadyVoice(page);
+	await page.goto("/");
+	await expect.poll(readinessLoads).toBeGreaterThan(0);
+	await expect(page.locator("#voice-record")).toBeEnabled();
+	await page.locator("#voice-record").click();
+	await expect(page.locator("#voice-recording-panel")).toBeVisible();
+	await expect(page.locator("#voice-elapsed")).toHaveText("00:00");
+	expect(await page.evaluate(() => typeof window.__voiceProcessor?.onaudioprocess)).toBe("function");
+	await page.evaluate(() => window.__emitVoiceAudio(0.5));
+	await page.waitForTimeout(350);
+	await expect.poll(async () => Number(await page.locator("#voice-volume").getAttribute("aria-valuenow"))).toBeGreaterThan(0);
+	await expect(page.locator("#voice-elapsed")).toHaveText("00:01", { timeout: 2500 });
+	await page.locator("#voice-cancel").click();
+	await expect.poll(() => page.evaluate(() => window.__micTrackStopCount)).toBe(1);
+
+	await page.evaluate(() => { window.__denyMicrophone = true; });
+	await page.locator("#voice-record").click();
+	await expect(page.locator("#voice-error")).toContainText(/permission/i);
+	await expect(page.locator("#voice-recording-panel")).toBeHidden();
+});

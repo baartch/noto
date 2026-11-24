@@ -1,23 +1,27 @@
 import {
-	ArrowUp,
 	Bot,
 	ChevronDown,
 	Copy,
 	Info,
 	LoaderCircle,
+	Mic,
 	MessagesSquare,
 	NotebookPen,
+	Pencil,
+	Send,
 	Settings,
 	Sparkles,
 	UserRound,
+	X,
 	createIcons,
 } from "lucide";
 import HSOverlay from "preline/plugins/overlay-non-auto";
 import HSSelect from "preline/plugins/select-non-auto";
 import HSTabs from "preline/plugins/tabs-non-auto";
 import { copyRichTextToClipboard, createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
+import { createVoiceController, filterAvailableVoiceModels, LOCAL_VOICE_MODEL_ID, voiceReady } from "./voice.js";
 
-const icons = { ArrowUp, Bot, ChevronDown, Copy, Info, LoaderCircle, MessagesSquare, NotebookPen, Settings, Sparkles, UserRound };
+const icons = { Bot, ChevronDown, Copy, Info, LoaderCircle, Mic, MessagesSquare, NotebookPen, Pencil, Send, Settings, Sparkles, UserRound, X };
 const $ = (selector) => document.querySelector(selector);
 const ui = {
 	profile: $("#profile-name"),
@@ -29,6 +33,7 @@ const ui = {
 	settingsProfileTab: $("#settings-profile-tab"),
 	settingsProfilePanel: $("#settings-profile-panel"),
 	settingsModelsPanel: $("#settings-models-panel"),
+	settingsVoiceTab: $("#settings-voice-tab"),
 	settingsForm: $("#settings-form"),
 	settingsProfile: $("#settings-profile"),
 	settingsProfileSearch: $("#settings-profile-search"),
@@ -50,6 +55,23 @@ const ui = {
 	settingsExtractorOptions: $("#settings-extractor-options"),
 	settingsExtractorHelp: $("#settings-extractor-help"),
 	settingsRetryModels: $("#settings-retry-models"),
+	voiceProvider: $("#voice-provider"),
+	voiceProviderPanel: $("#voice-provider-panel"),
+	voiceModel: $("#voice-model"),
+	voiceModelSearch: $("#voice-model-search"),
+	voiceModelOptions: $("#voice-model-options"),
+	voiceModelHelp: $("#voice-model-help"),
+	voiceModelRetry: $("#voice-model-retry"),
+	voiceLocalPanel: $("#voice-local-panel"),
+	voiceModelStatus: $("#voice-model-status"),
+	voiceLocalReason: $("#voice-local-reason"),
+	voiceDownloadProgress: $("#voice-download-progress"),
+	voiceDownload: $("#voice-download"),
+	voiceDelete: $("#voice-delete"),
+	voiceReadyStatus: $("#voice-ready-status"),
+	voiceDraftStatus: $("#voice-draft-status"),
+	voiceSettingsStatus: $("#voice-settings-status"),
+	voiceSave: $("#voice-save"),
 	settingsStatus: $("#settings-status"),
 	settingsSave: $("#settings-save"),
 	settingsCancel: $("#settings-cancel"),
@@ -62,9 +84,24 @@ const ui = {
 	messageList: $("#message-list"),
 	messageForm: $("#message-form"),
 	messageInput: $("#message-input"),
+	composerIdleControls: $("#composer-idle-controls"),
 	sendButton: $("#send-button"),
 	sendLabel: $("#send-label"),
 	sendState: $("#send-state"),
+	voiceRecord: $("#voice-record"),
+	voiceReadinessHelp: $("#voice-readiness-help"),
+	voiceReadinessMessage: $("#voice-readiness-message"),
+	voiceOpenSettings: $("#voice-open-settings"),
+	voiceRequestStatus: $("#voice-request-status"),
+	voiceRecordingPanel: $("#voice-recording-panel"),
+	voiceCancel: $("#voice-cancel"),
+	voiceElapsed: $("#voice-elapsed"),
+	voiceVolume: $("#voice-volume"),
+	voiceVolumeFill: $("#voice-volume-fill"),
+	voicePhaseLabel: $("#voice-phase-label"),
+	voiceEdit: $("#voice-edit"),
+	voiceSend: $("#voice-send"),
+	voiceError: $("#voice-error"),
 	memoryList: $("#memory-list"),
 	memoryStatus: $("#memory-status"),
 	memoryScroll: $("#memory-scroll"),
@@ -115,6 +152,36 @@ const state = {
 	settingsModelRequestID: 0,
 	settingsOpenRequestID: 0,
 	settingsModelController: null,
+	settingsSavedModel: "",
+	settingsSavedExtractorModel: "",
+	settingsTab: "profile",
+	voiceLoading: false,
+	voiceLoaded: false,
+	voiceSaving: false,
+	voiceSaveGeneration: 0,
+	voiceDTO: null,
+	voiceReady: false,
+	draftVoiceProvider: "",
+	draftVoiceModel: "",
+	savedVoiceProvider: "",
+	savedVoiceModel: "",
+	voiceDraftDirty: false,
+	voiceModels: [],
+	voiceModelsLoading: false,
+	voiceModelsUnavailable: false,
+	voiceModelsError: "",
+	voiceModelStatus: null,
+	voiceModelStatusReason: "",
+	voiceOperationStarting: false,
+	voiceRequestID: 0,
+	voiceModelsRequestID: 0,
+	voiceStatusRequestID: 0,
+	voiceStatusTimer: null,
+	composerVoiceDTO: null,
+	composerVoiceLoading: false,
+	composerVoiceError: "",
+	composerVoiceRequestID: 0,
+	voiceCapture: { phase: "idle", elapsedMs: 0, volume: 0, error: "", profileSlug: "" },
 	profileSyncing: false,
 	profileSyncTimer: null,
 	profileSyncController: null,
@@ -127,6 +194,7 @@ const settingsProfileDropdown = createSearchableDropdown({
 	onChange(value) {
 		state.draftProfileSlug = value;
 		state.settingsModelsLoaded = false;
+		void loadVoiceSettings(value);
 		return loadSettingsModels(value);
 	},
 });
@@ -154,6 +222,19 @@ const settingsExtractorDropdown = createSearchableDropdown({
 	onChange(value) {
 		state.draftExtractorModel = value;
 		updateSettingsControls();
+	},
+});
+const voiceModelDropdown = createSearchableDropdown({
+	input: ui.voiceModelSearch, select: ui.voiceModel, listbox: ui.voiceModelOptions,
+	listboxID: "voice-model-options",
+	filterOptions(options, search) {
+		const allowed = new Set(filterAvailableVoiceModels(options.map((option) => option.value), search));
+		return options.filter((option) => allowed.has(option.value));
+	},
+	onChange(value) {
+		state.draftVoiceModel = value;
+		updateVoiceDraftDirty();
+		renderVoiceSettings();
 	},
 });
 ui.settingsEmbeddingsInfo.classList.add("hidden");
@@ -243,12 +324,115 @@ function updateSendControls() {
 	ui.messageInput.disabled = state.setupRequired || state.recoveryRequired;
 	ui.sendLabel.textContent = state.sending ? "Thinking…" : "Send";
 	ui.sendState.textContent = state.sending ? "Noto is working" : state.pendingNotes > 0 ? "Saving memory…" : "";
+	updateComposerVoiceControls();
 	updateSettingsControls();
 }
 
+function voiceRecorderSupported() {
+	return typeof navigator !== "undefined"
+		&& typeof window !== "undefined"
+		&& typeof navigator.mediaDevices?.getUserMedia === "function"
+		&& typeof (window.AudioContext || window.webkitAudioContext) === "function";
+}
+
+function updateComposerVoiceControls() {
+	const ready = voiceReady(state.composerVoiceDTO);
+	const supported = voiceRecorderSupported();
+	let reason = state.composerVoiceError;
+	if (!reason && !supported) reason = "Microphone recording is not supported in this browser.";
+	if (!reason && state.composerVoiceLoading) reason = "Checking voice dictation readiness…";
+	if (!reason && !ready) {
+		const detail = state.composerVoiceDTO?.reason;
+		reason = detail ? `Voice is not ready. Open Settings: ${detail}` : "Voice must be configured in Settings before recording.";
+	}
+	const needsSetup = Boolean(reason);
+	ui.voiceReadinessHelp.classList.toggle("hidden", !needsSetup);
+	ui.voiceReadinessMessage.textContent = state.composerVoiceLoading
+		? "Checking voice dictation readiness…"
+		: reason;
+	ui.voiceOpenSettings.classList.toggle("hidden", !needsSetup || !supported);
+	ui.voiceRecord.title = needsSetup ? reason || "Checking voice readiness" : "Start voice recording";
+	const phase = state.voiceCapture.phase;
+	const voiceBusy = ["requesting", "recording", "processing"].includes(phase);
+	ui.sendButton.disabled = state.setupRequired || state.sending || !state.profileSlug || state.recoveryRequired || voiceBusy;
+	ui.voiceRecord.disabled = !ready || !supported || state.composerVoiceLoading || state.setupRequired || state.recoveryRequired || state.sending || !["idle", "error"].includes(phase);
+	ui.voiceRequestStatus.textContent = phase === "requesting" ? "Waiting for microphone permission…" : "";
+	ui.voiceRequestStatus.classList.toggle("hidden", phase !== "requesting");
+}
+
+function formatVoiceElapsed(elapsedMs) {
+	const seconds = Math.floor(Math.max(0, elapsedMs) / 1000);
+	return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function updateVoiceRecordingState(captureState) {
+	const previousPhase = state.voiceCapture.phase;
+	const activeElement = document.activeElement;
+	const hadVoiceFocus = ui.voiceRecordingPanel.contains(activeElement) || activeElement === ui.voiceRecord || activeElement === ui.messageInput;
+	state.voiceCapture = { ...captureState };
+	const requesting = captureState.phase === "requesting";
+	const recording = captureState.phase === "recording";
+	const processing = captureState.phase === "processing";
+	const active = requesting || recording || processing;
+	ui.messageInput.readOnly = ["requesting", "recording", "processing"].includes(captureState.phase);
+	ui.composerIdleControls.classList.toggle("hidden", active);
+	ui.voiceRecordingPanel.classList.toggle("hidden", !active);
+	ui.voiceRecordingPanel.classList.toggle("flex", active);
+	ui.voiceElapsed.textContent = formatVoiceElapsed(captureState.elapsedMs);
+	ui.voiceVolume.setAttribute("aria-valuenow", String(Math.round(Math.max(0, Math.min(1, captureState.volume || 0)) * 100)));
+	ui.voiceVolumeFill.style.transform = `scaleX(${Math.max(0, Math.min(1, captureState.volume || 0))})`;
+	ui.voicePhaseLabel.textContent = requesting ? "Waiting for microphone permission" : processing ? "Transcribing recording" : "Recording";
+	ui.voiceCancel.disabled = !["requesting", "recording", "processing"].includes(captureState.phase);
+	ui.voiceEdit.disabled = !recording;
+	ui.voiceSend.disabled = !recording;
+	ui.voiceError.textContent = captureState.error || "";
+	ui.voiceError.classList.toggle("hidden", !captureState.error);
+	updateComposerVoiceControls();
+	if (["idle", "error"].includes(previousPhase) && requesting) ui.messageInput.focus();
+	else if (["requesting", "recording", "processing"].includes(previousPhase) && ["idle", "error"].includes(captureState.phase) && hadVoiceFocus) ui.messageInput.focus();
+}
+
+async function loadComposerVoiceReadiness(profileSlug = state.profileSlug) {
+	const requestID = ++state.composerVoiceRequestID;
+	state.composerVoiceLoading = true;
+	state.composerVoiceError = "";
+	updateComposerVoiceControls();
+	if (!profileSlug) {
+		state.composerVoiceLoading = false;
+		state.composerVoiceDTO = null;
+		updateComposerVoiceControls();
+		return;
+	}
+	try {
+		const query = new URLSearchParams({ profile_slug: profileSlug });
+		const dto = await api(`/api/voice?${query}`);
+		if (requestID !== state.composerVoiceRequestID || profileSlug !== state.profileSlug || dto.profile_slug !== profileSlug) return;
+		state.composerVoiceDTO = dto;
+	} catch (error) {
+		if (requestID === state.composerVoiceRequestID && profileSlug === state.profileSlug) {
+			state.composerVoiceDTO = null;
+			state.composerVoiceError = `Voice readiness could not be checked: ${error.message}`;
+		}
+	} finally {
+		if (requestID === state.composerVoiceRequestID) {
+			state.composerVoiceLoading = false;
+			updateComposerVoiceControls();
+		}
+	}
+}
+
+function applyComposerVoiceDTO(dto) {
+	state.composerVoiceRequestID++;
+	state.composerVoiceDTO = dto;
+	state.composerVoiceError = "";
+	state.composerVoiceLoading = false;
+	updateComposerVoiceControls();
+}
+
 function updateSettingsControls() {
-	const busy = state.settingsLoading || state.settingsSaving || state.sending;
+	const busy = state.settingsLoading || state.settingsSaving || state.voiceSaving || state.sending;
 	const draftLocked = busy || state.settingsConflict;
+	const voicePage = state.settingsTab === "voice";
 	ui.settingsProfile.disabled = draftLocked;
 	ui.settingsModel.disabled = draftLocked || state.settingsModelLoading || !state.settingsModelsLoaded || state.settingsSetupRequired || !ui.settingsModel.options?.length;
 	ui.settingsEmbeddings.disabled = draftLocked || state.settingsModelLoading || !state.settingsModelsLoaded || state.settingsSetupRequired || !ui.settingsEmbeddings.options?.length;
@@ -258,22 +442,35 @@ function updateSettingsControls() {
 	ui.settingsEmbeddingsSearch.disabled = ui.settingsEmbeddings.disabled;
 	ui.settingsExtractorSearch.disabled = ui.settingsExtractor.disabled;
 	ui.settingsRetryModels.disabled = busy || state.settingsModelLoading;
+	ui.voiceProvider.disabled = draftLocked || state.voiceLoading || state.settingsModelLoading || !state.voiceLoaded;
+	ui.voiceModelSearch.disabled = draftLocked || state.voiceLoading || state.voiceModelsLoading || state.draftVoiceProvider !== "provider" || state.voiceModels.length === 0;
+	ui.voiceModelRetry.disabled = busy || state.voiceModelsLoading || state.voiceLoading;
+	ui.voiceSave.classList.toggle("hidden", !voicePage);
+	ui.settingsSave.classList.toggle("hidden", voicePage);
+	const voiceProviderModelMissing = state.draftVoiceProvider === "provider" && (!state.draftVoiceModel || !state.voiceModels.includes(state.draftVoiceModel));
+	ui.voiceSave.disabled = draftLocked || state.voiceLoading || state.settingsModelLoading || !state.voiceLoaded || !state.voiceDraftDirty || !state.draftProfileSlug || state.draftProfileSlug !== state.profileSlug || state.recoveryRequired || state.voiceModelsLoading || voiceProviderModelMissing;
+	ui.voiceSave.textContent = state.voiceSaving ? "Saving…" : "Save voice settings";
+	const modelStatus = state.voiceModelStatus || state.voiceDTO?.model_status;
+	ui.voiceDownload.disabled = state.voiceOperationStarting || !modelStatus?.available || modelStatus.installed || modelStatus.downloading || modelStatus.deleting;
+	ui.voiceDelete.disabled = state.voiceOperationStarting || !modelStatus?.installed || modelStatus.downloading || modelStatus.deleting;
 	const embeddingRebuildRequired = !state.settingsSetupRequired && state.draftEmbeddingsModel !== state.savedEmbeddingsModel && Boolean(state.draftEmbeddingsModel);
 	ui.settingsEmbeddingWarning.classList.toggle("hidden", !embeddingRebuildRequired);
 	ui.settingsSave.disabled = draftLocked || state.settingsModelLoading || !state.settingsModelsLoaded || !state.draftProfileSlug || state.recoveryRequired || (!state.settingsSetupRequired && !state.draftModel) || (embeddingRebuildRequired && !state.embeddingRebuildConfirmed);
 	ui.settingsSave.textContent = state.settingsSaving ? "Saving…" : "Save";
-	ui.settingsCancel.disabled = state.settingsSaving;
-	ui.settingsClose.disabled = state.settingsSaving;
+	ui.settingsCancel.disabled = state.settingsSaving || state.voiceSaving || state.voiceOperationStarting;
+	ui.settingsClose.disabled = state.settingsSaving || state.voiceSaving || state.voiceOperationStarting;
 }
 
 function setSettingsPage(open) {
 	state.settingsOpen = open;
 	ui.settingsButton.setAttribute("aria-expanded", String(open));
 	if (open) {
+		state.settingsTab = "profile";
 		HSTabs.open(ui.settingsProfileTab);
 		if (HSOverlay.getInstance(ui.settingsPanel)) HSOverlay.open(ui.settingsPanel);
 		else ui.settingsPanel.classList.remove("hidden");
 	} else {
+		state.settingsTab = "profile";
 		if (HSOverlay.getInstance(ui.settingsPanel)) HSOverlay.close(ui.settingsPanel);
 		else ui.settingsPanel.classList.add("hidden");
 		ui.settingsButton.focus();
@@ -281,8 +478,21 @@ function setSettingsPage(open) {
 }
 
 function focusSettingsField() {
-	const focusTarget = ui.settingsModelsPanel.classList.contains("hidden") ? ui.settingsProfileSearch : ui.settingsModelSearch;
+	const focusTarget = state.settingsTab === "voice"
+		? ui.voiceProvider
+		: ui.settingsModelsPanel.classList.contains("hidden") ? ui.settingsProfileSearch : ui.settingsModelSearch;
 	focusTarget.focus();
+}
+
+function syncSettingsTab() {
+	if (ui.settingsVoiceTab.getAttribute("aria-selected") === "true") state.settingsTab = "voice";
+	else if (ui.settingsModelsPanel.classList.contains("hidden")) state.settingsTab = "profile";
+	else state.settingsTab = "models";
+	updateSettingsControls();
+	if (state.settingsTab === "voice") {
+		if (!state.voiceLoaded && state.draftProfileSlug && !state.voiceLoading) void loadVoiceSettings(state.draftProfileSlug);
+		else void loadVoiceModelStatus();
+	}
 }
 
 function updateSettingsTabOrientation() {
@@ -311,7 +521,7 @@ function settingsOption(value, label) {
 	return option;
 }
 
-function createSearchableDropdown({ input, select, listbox, listboxID, onChange }) {
+function createSearchableDropdown({ input, select, listbox, listboxID, onChange, filterOptions }) {
 	let options = [];
 	let matches = [];
 	let activeIndex = -1;
@@ -350,7 +560,9 @@ function createSearchableDropdown({ input, select, listbox, listboxID, onChange 
 	};
 	const render = () => {
 		const query = input.value.trim().toLocaleLowerCase();
-		matches = options.filter((option) => !query || `${option.label} ${option.value}`.toLocaleLowerCase().includes(query));
+		matches = filterOptions
+			? filterOptions(options, query)
+			: options.filter((option) => !query || `${option.label} ${option.value}`.toLocaleLowerCase().includes(query));
 		activeIndex = matches.length > 0 ? 0 : -1;
 		listbox.replaceChildren();
 		if (matches.length === 0) {
@@ -473,6 +685,7 @@ async function loadSettingsModels(profileSlug) {
 			value: model,
 			label: model === details.saved_model && (details.models_unavailable || !availableModels.includes(model)) ? `${model} (saved, unavailable)` : model,
 		})), details.saved_model || models[0] || "");
+		state.settingsSavedModel = details.saved_model || "";
 		state.draftModel = details.saved_model || models[0] || "";
 		state.settingsChatModelsUnavailable = Boolean(details.models_unavailable);
 		const savedEmbeddingsModel = details.saved_embeddings_model || "";
@@ -493,6 +706,7 @@ async function loadSettingsModels(profileSlug) {
 			...extractorModels.map((model) => ({ value: model, label: model === savedExtractorModel && (details.models_unavailable || !availableModels.includes(model)) ? `${model} (saved, unavailable)` : model })),
 		], savedExtractorModel);
 		state.draftExtractorModel = savedExtractorModel;
+		state.settingsSavedExtractorModel = savedExtractorModel;
 		state.settingsSetupRequired = Boolean(details.setup_required);
 		state.settingsModelsLoaded = true;
 		ui.settingsRetryModels.classList.toggle("hidden", !state.settingsChatModelsUnavailable && !state.settingsEmbeddingModelsUnavailable);
@@ -523,6 +737,318 @@ async function loadSettingsModels(profileSlug) {
 	}
 }
 
+
+function updateVoiceDraftDirty() {
+	state.voiceDraftDirty = state.draftVoiceProvider !== state.savedVoiceProvider || state.draftVoiceModel !== state.savedVoiceModel;
+	renderVoiceSettings();
+	updateSettingsControls();
+}
+
+function renderVoiceSettings() {
+	const provider = state.draftVoiceProvider;
+	ui.voiceProvider.value = provider;
+	ui.voiceProviderPanel.classList.toggle("hidden", provider !== "provider");
+	ui.voiceLocalPanel.classList.toggle("hidden", provider !== "local");
+	state.voiceReady = voiceReady(state.voiceDTO);
+	ui.voiceReadyStatus.textContent = state.voiceLoading
+		? "Loading voice settings…"
+		: state.voiceReady
+			? "Ready for dictation."
+			: state.voiceDTO?.reason || "Voice is not configured and ready.";
+
+	let draftMessage = "";
+	if (state.draftProfileSlug && state.draftProfileSlug !== state.profileSlug) {
+		draftMessage = "Switch to this profile before saving its voice settings.";
+	} else if (state.voiceDraftDirty) {
+		draftMessage = "Unsaved voice changes. Save to apply this selection.";
+	}
+	ui.voiceDraftStatus.textContent = draftMessage;
+	ui.voiceDraftStatus.classList.toggle("hidden", !draftMessage);
+
+	if (provider === "provider") {
+		if (state.voiceModelsLoading) {
+			ui.voiceModelHelp.textContent = "Loading verified speech-to-text models…";
+		} else if (state.voiceModelsUnavailable) {
+			ui.voiceModelHelp.textContent = state.voiceModelsError || "Speech-to-text models are unavailable.";
+		} else if (state.voiceModels.length === 0) {
+			ui.voiceModelHelp.textContent = "No verified speech-to-text models are available. Check provider support and retry.";
+		} else if (state.draftVoiceModel && !state.voiceModels.includes(state.draftVoiceModel)) {
+			ui.voiceModelHelp.textContent = "The saved speech model is not in this provider’s verified transcription list.";
+		} else {
+			ui.voiceModelHelp.textContent = "Choose a verified transcription model; the chat model is not used for speech.";
+		}
+		ui.voiceModelRetry.classList.toggle("hidden", provider !== "provider" || state.voiceModelsLoading || (!state.voiceModelsUnavailable && state.voiceModels.length > 0));
+	}
+
+	const status = state.voiceModelStatus || state.voiceDTO?.model_status || null;
+	if (!status) {
+		ui.voiceModelStatus.textContent = state.voiceLoading ? "Checking local model status…" : "Local model status is unavailable.";
+		ui.voiceLocalReason.textContent = "";
+		ui.voiceDownloadProgress.classList.add("hidden");
+		ui.voiceDownload.classList.add("hidden");
+		ui.voiceDelete.classList.add("hidden");
+		return;
+	}
+	const progress = Math.max(0, Math.min(1, Number(status.progress) || 0));
+	if (!status.available) ui.voiceModelStatus.textContent = "Local speech runtime is unavailable on this platform.";
+	else if (status.deleting) ui.voiceModelStatus.textContent = "Deleting the local speech model…";
+	else if (status.downloading) ui.voiceModelStatus.textContent = `Downloading the local model (${Math.round(progress * 100)}%).`;
+	else if (status.installed) ui.voiceModelStatus.textContent = status.verified ? "Installed and verified." : "Installed; integrity will be checked before first use.";
+	else ui.voiceModelStatus.textContent = "Not installed.";
+	ui.voiceLocalReason.textContent = state.voiceModelStatusReason || (provider === "local" && !state.voiceReady ? state.voiceDTO?.reason || "" : "");
+	ui.voiceDownloadProgress.value = progress;
+	ui.voiceDownloadProgress.classList.toggle("hidden", !status.downloading);
+	ui.voiceDownload.classList.toggle("hidden", !status.available || status.installed);
+	ui.voiceDownload.disabled = state.voiceOperationStarting || !status.available || status.downloading || status.deleting;
+	ui.voiceDownload.textContent = status.downloading ? `Downloading (${Math.round(progress * 100)}%)…` : "Download model";
+	ui.voiceDelete.classList.toggle("hidden", !status.installed);
+	ui.voiceDelete.disabled = state.voiceOperationStarting || status.downloading || status.deleting;
+}
+
+async function loadVoiceSettings(profileSlug, preserveDraft = false) {
+	const requestID = ++state.voiceRequestID;
+	const saveGeneration = state.voiceSaveGeneration;
+	state.voiceModelsRequestID++;
+	const keepDraft = preserveDraft && state.voiceDraftDirty;
+	const savedDraftProvider = state.draftVoiceProvider;
+	const savedDraftModel = state.draftVoiceModel;
+	const expectedRevision = state.draftRevision;
+	state.voiceLoading = true;
+	state.voiceLoaded = false;
+	state.voiceModels = [];
+	state.voiceModelsLoading = false;
+	state.voiceModelsUnavailable = false;
+	state.voiceModelsError = "";
+	voiceModelDropdown.setOptions([], "");
+	renderVoiceSettings();
+	updateSettingsControls();
+	if (!profileSlug) {
+		state.voiceLoading = false;
+		renderVoiceSettings();
+		updateSettingsControls();
+		return;
+	}
+	try {
+		const query = new URLSearchParams({ profile_slug: profileSlug });
+		const dto = await api(`/api/voice?${query}`);
+		if (requestID !== state.voiceRequestID || saveGeneration !== state.voiceSaveGeneration || state.voiceSaving || profileSlug !== state.draftProfileSlug || dto.profile_slug !== profileSlug) return;
+		const responseRevision = Number(dto.revision || 0);
+		if (expectedRevision > 0 && responseRevision > 0 && responseRevision !== expectedRevision) {
+			state.settingsConflict = true;
+			showStatus(ui.voiceSettingsStatus, "Settings changed in another tab. Reload the latest settings before saving.", "error", { label: "Reload", run: reloadSettings });
+			return;
+		}
+		state.voiceDTO = dto;
+		if (profileSlug === state.profileSlug) applyComposerVoiceDTO(dto);
+		state.savedVoiceProvider = dto.provider || "";
+		state.savedVoiceModel = dto.model || "";
+		state.voiceLoaded = true;
+		if (keepDraft) {
+			state.draftVoiceProvider = savedDraftProvider;
+			state.draftVoiceModel = savedDraftModel;
+			state.voiceDraftDirty = true;
+		} else {
+			state.draftVoiceProvider = state.savedVoiceProvider;
+			state.draftVoiceModel = state.savedVoiceModel;
+			state.voiceDraftDirty = false;
+		}
+		state.voiceModelStatus = dto.model_status || state.voiceModelStatus;
+		state.voiceModelStatusReason = "";
+		state.voiceReady = voiceReady(dto);
+		renderVoiceSettings();
+		if (state.draftVoiceProvider === "provider") void loadVoiceModels(profileSlug, requestID, responseRevision || expectedRevision);
+		void loadVoiceModelStatus();
+	} catch (error) {
+		if (requestID === state.voiceRequestID) {
+			state.voiceLoaded = false;
+			showStatus(ui.voiceSettingsStatus, `Could not load voice settings: ${error.message}`, "error");
+		}
+	} finally {
+		if (requestID === state.voiceRequestID) {
+			state.voiceLoading = false;
+			renderVoiceSettings();
+			updateSettingsControls();
+		}
+	}
+}
+
+async function loadVoiceModels(profileSlug, profileRequestID = state.voiceRequestID, expectedRevision = state.draftRevision) {
+	const requestID = ++state.voiceModelsRequestID;
+	state.voiceModelsLoading = true;
+	state.voiceModelsUnavailable = false;
+	state.voiceModelsError = "";
+	state.voiceModels = [];
+	voiceModelDropdown.setOptions([], "");
+	renderVoiceSettings();
+	updateSettingsControls();
+	try {
+		const query = new URLSearchParams({ profile_slug: profileSlug });
+		const result = await api(`/api/voice/models?${query}`);
+		if (requestID !== state.voiceModelsRequestID || profileRequestID !== state.voiceRequestID || profileSlug !== state.draftProfileSlug || result.profile_slug !== profileSlug) return;
+		const responseRevision = Number(result.revision || 0);
+		if (expectedRevision > 0 && responseRevision > 0 && responseRevision !== expectedRevision) {
+			state.settingsConflict = true;
+			state.voiceModelsUnavailable = true;
+			state.voiceModelsError = "Settings changed in another tab. Reload before choosing a speech model.";
+			showStatus(ui.voiceSettingsStatus, state.voiceModelsError, "error", { label: "Reload", run: reloadSettings });
+			return;
+		}
+		state.voiceModels = filterAvailableVoiceModels(result.models, "");
+		voiceModelDropdown.setOptions(state.voiceModels.map((model) => ({ value: model, label: model })), state.voiceModels.includes(state.draftVoiceModel) ? state.draftVoiceModel : "");
+	} catch (error) {
+		if (requestID === state.voiceModelsRequestID && profileRequestID === state.voiceRequestID) {
+			state.voiceModels = [];
+			state.voiceModelsUnavailable = true;
+			state.voiceModelsError = error.message || "Speech-to-text models are unavailable.";
+			voiceModelDropdown.setOptions([], "");
+		}
+	} finally {
+		if (requestID === state.voiceModelsRequestID) {
+			state.voiceModelsLoading = false;
+			renderVoiceSettings();
+			updateSettingsControls();
+		}
+	}
+}
+
+function scheduleVoiceModelStatusPoll() {
+	if (state.voiceStatusTimer) window.clearTimeout(state.voiceStatusTimer);
+	state.voiceStatusTimer = window.setTimeout(() => {
+		state.voiceStatusTimer = null;
+		void loadVoiceModelStatus();
+	}, 750);
+}
+
+async function loadVoiceModelStatus() {
+	const requestID = ++state.voiceStatusRequestID;
+	try {
+		const result = await api("/api/voice/local-model");
+		if (requestID !== state.voiceStatusRequestID || !state.settingsOpen || !result.model_status) return;
+		const wasDownloading = Boolean(state.voiceModelStatus?.downloading);
+		state.voiceModelStatus = result.model_status;
+		state.voiceModelStatusReason = result.reason || "";
+		renderVoiceSettings();
+		updateSettingsControls();
+		if (result.model_status.downloading || result.model_status.deleting) scheduleVoiceModelStatusPoll();
+		else {
+			if (state.voiceStatusTimer) window.clearTimeout(state.voiceStatusTimer);
+			state.voiceStatusTimer = null;
+			if (wasDownloading && state.draftProfileSlug) void loadVoiceSettings(state.draftProfileSlug, true);
+		}
+	} catch (error) {
+		if (requestID === state.voiceStatusRequestID && state.settingsOpen) {
+			state.voiceModelStatusReason = error.message || "Local model status is unavailable.";
+			renderVoiceSettings();
+		}
+	}
+}
+
+async function startVoiceModelDownload() {
+	if (ui.voiceDownload.disabled || state.voiceOperationStarting) return;
+	state.voiceOperationStarting = true;
+	showStatus(ui.voiceSettingsStatus, "Starting local model download…");
+	renderVoiceSettings();
+	updateSettingsControls();
+	try {
+		const result = await api("/api/voice/local-model/download", { method: "POST" });
+		state.voiceModelStatus = result.model_status || state.voiceModelStatus;
+		state.voiceModelStatusReason = result.reason || "";
+		showStatus(ui.voiceSettingsStatus, "Local model download started.");
+		if (state.voiceModelStatus?.downloading) scheduleVoiceModelStatusPoll();
+		else if (state.draftProfileSlug) void loadVoiceSettings(state.draftProfileSlug, true);
+	} catch (error) {
+		showStatus(ui.voiceSettingsStatus, `Could not start local model download: ${error.message}`, "error");
+	} finally {
+		state.voiceOperationStarting = false;
+		renderVoiceSettings();
+		updateSettingsControls();
+	}
+}
+
+async function deleteVoiceModel() {
+	if (ui.voiceDelete.disabled || state.voiceOperationStarting) return;
+	if (!window.confirm("Delete the shared Parakeet model for all profiles? Local dictation will remain unavailable until it is downloaded again.")) return;
+	state.voiceOperationStarting = true;
+	showStatus(ui.voiceSettingsStatus, "Deleting the shared local model…");
+	renderVoiceSettings();
+	updateSettingsControls();
+	try {
+		const result = await api("/api/voice/local-model", { method: "DELETE" });
+		state.voiceModelStatus = result.model_status || state.voiceModelStatus;
+		state.voiceModelStatusReason = result.reason || "";
+		showStatus(ui.voiceSettingsStatus, "Local model deleted for all profiles.");
+		if (state.draftProfileSlug) void loadVoiceSettings(state.draftProfileSlug, true);
+	} catch (error) {
+		showStatus(ui.voiceSettingsStatus, `Could not delete local model: ${error.message}`, "error");
+	} finally {
+		state.voiceOperationStarting = false;
+		renderVoiceSettings();
+		updateSettingsControls();
+	}
+}
+
+
+async function saveVoiceSettings(event) {
+	event?.preventDefault();
+	if (ui.voiceSave.disabled || state.voiceSaving) return;
+	const profileSlug = state.draftProfileSlug;
+	if (!profileSlug || profileSlug !== state.profileSlug) {
+		showStatus(ui.voiceSettingsStatus, "Switch to the selected profile before saving its voice settings.", "error");
+		return;
+	}
+	state.voiceSaving = true;
+	state.voiceSaveGeneration++;
+	showStatus(ui.voiceSettingsStatus, "Saving voice settings…");
+	updateSettingsControls();
+	try {
+		const dto = await api("/api/voice", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ profile_slug: profileSlug, provider: state.draftVoiceProvider, model: state.draftVoiceModel, revision: state.draftRevision }),
+		});
+		if (dto.profile_slug !== profileSlug) return;
+		if (state.draftProfileSlug !== profileSlug || state.profileSlug !== profileSlug) {
+			state.settingsConflict = true;
+			showStatus(ui.voiceSettingsStatus, "The active profile changed while saving. Reload settings before continuing.", "error", { label: "Reload", run: reloadSettings });
+			return;
+		}
+		const savedRevision = Number(dto.revision || 0);
+		if (savedRevision > 0 && savedRevision < state.revision) {
+			state.settingsConflict = true;
+			showStatus(ui.voiceSettingsStatus, "Settings changed in another tab. Reload before continuing.", "error", { label: "Reload", run: reloadSettings });
+			return;
+		}
+		state.voiceDTO = dto;
+		applyComposerVoiceDTO(dto);
+		state.savedVoiceProvider = dto.provider || "";
+		state.savedVoiceModel = dto.model || "";
+		state.draftVoiceProvider = state.savedVoiceProvider;
+		state.draftVoiceModel = state.savedVoiceModel;
+		state.voiceDraftDirty = false;
+		state.voiceLoaded = true;
+		state.voiceReady = voiceReady(dto);
+		if (savedRevision > 0) {
+			state.revision = savedRevision;
+			state.draftRevision = savedRevision;
+		}
+		showStatus(ui.voiceSettingsStatus, "Voice settings saved.");
+		renderVoiceSettings();
+		if (state.draftVoiceProvider === "provider") void loadVoiceModels(profileSlug, state.voiceRequestID, state.draftRevision);
+	} catch (error) {
+		if (error.code === "settings_changed" || error.code === "profile_changed") {
+			state.settingsConflict = true;
+			showStatus(ui.voiceSettingsStatus, "Settings changed in another tab. Reload before saving voice settings.", "error", { label: "Reload", run: reloadSettings });
+		} else {
+			showStatus(ui.voiceSettingsStatus, `Could not save voice settings: ${error.message}`, "error");
+		}
+	} finally {
+		state.voiceSaving = false;
+		state.voiceSaveGeneration++;
+		renderVoiceSettings();
+		updateSettingsControls();
+	}
+}
+
 async function openSettings() {
 	if (state.settingsSaving || state.settingsOpen) return;
 	const requestID = ++state.settingsOpenRequestID;
@@ -543,6 +1069,7 @@ async function openSettings() {
 		state.settingsLoading = false;
 		updateSettingsControls();
 		focusSettingsField();
+		void loadVoiceSettings(state.draftProfileSlug);
 		await loadSettingsModels(state.draftProfileSlug);
 		if (state.recoveryRequired) showStatus(ui.settingsStatus, "Settings require recovery; further changes are disabled.", "error");
 	} catch (error) {
@@ -582,6 +1109,7 @@ async function reloadSettings() {
 		state.settingsLoading = false;
 		updateSettingsControls();
 		focusSettingsField();
+		void loadVoiceSettings(state.draftProfileSlug);
 		await loadSettingsModels(state.draftProfileSlug);
 	} catch (error) {
 		if (state.settingsOpen && requestID === state.settingsOpenRequestID) showStatus(ui.settingsStatus, `Could not reload settings: ${error.message}`, "error", { label: "Retry", run: () => void reloadSettings() });
@@ -594,19 +1122,39 @@ async function reloadSettings() {
 }
 
 function cancelSettings() {
-	if (state.settingsSaving) return;
+	if (state.settingsSaving || state.voiceSaving) return;
 	closeSettings();
 }
 
 function closeSettings() {
 	state.settingsOpenRequestID++;
 	state.settingsModelRequestID++;
+	state.voiceRequestID++;
+	state.voiceModelsRequestID++;
+	state.voiceStatusRequestID++;
+	if (state.voiceStatusTimer) window.clearTimeout(state.voiceStatusTimer);
+	state.voiceStatusTimer = null;
 	state.settingsModelController?.abort();
 	state.settingsModelController = null;
 	state.settingsModelLoading = false;
 	state.settingsLoading = false;
 	state.settingsModelsLoaded = false;
 	state.settingsConflict = false;
+	state.voiceLoading = false;
+	state.voiceLoaded = false;
+	state.voiceModelsLoading = false;
+	state.voiceModelsUnavailable = false;
+	state.voiceModelsError = "";
+	state.voiceModels = [];
+	state.voiceDTO = null;
+	state.voiceModelStatus = null;
+	state.voiceModelStatusReason = "";
+	state.voiceOperationStarting = false;
+	state.voiceDraftDirty = false;
+	state.draftVoiceProvider = "";
+	state.draftVoiceModel = "";
+	state.savedVoiceProvider = "";
+	state.savedVoiceModel = "";
 	state.draftProfileSlug = "";
 	state.draftModel = "";
 	state.draftEmbeddingsModel = "";
@@ -616,11 +1164,16 @@ function closeSettings() {
 	state.embeddingRebuildConfirmed = false;
 	ui.settingsConfirmEmbeddingRebuild.checked = false;
 	showStatus(ui.settingsStatus, "");
+	showStatus(ui.voiceSettingsStatus, "");
 	setSettingsPage(false);
 }
 
 async function saveSettings(event) {
 	event?.preventDefault();
+	if (state.settingsTab === "voice") {
+		await saveVoiceSettings(event);
+		return;
+	}
 	if (ui.settingsSave.disabled || state.sending || state.settingsSaving) return;
 	state.settingsSaving = true;
 	updateSettingsControls();
@@ -971,7 +1524,13 @@ function applyServerState(serverState) {
 	if (state.revision > 0 && revision < state.revision) return { profileChanged: false, revisionChanged: false, stale: true };
 	const profileChanged = Boolean(state.profileSlug && profileSlug && profileSlug !== state.profileSlug);
 	const revisionChanged = revision !== state.revision;
-	if (profileChanged) clearProfileScopedData();
+	if (profileChanged) {
+		clearProfileScopedData();
+		if (["requesting", "recording", "processing"].includes(state.voiceCapture.phase)) {
+			voiceController.cancel();
+			showStatus(ui.chatStatus, "The active profile changed. The recording was discarded and your draft was kept.", "error");
+		}
+	}
 	if (state.settingsOpen && revisionChanged && !state.settingsSaving) {
 		state.settingsConflict = true;
 		state.settingsModelsLoaded = false;
@@ -979,6 +1538,7 @@ function applyServerState(serverState) {
 		updateSettingsControls();
 	}
 	renderState(serverState);
+	if (profileChanged) void loadComposerVoiceReadiness(profileSlug);
 	return { profileChanged, revisionChanged, stale: false };
 }
 
@@ -1075,7 +1635,7 @@ async function pollMemoryExtraction() {
 }
 
 async function sendMessage() {
-	if (state.setupRequired || state.sending || !state.profileSlug) return;
+	if (state.setupRequired || state.sending || !state.profileSlug || ["requesting", "recording", "processing"].includes(state.voiceCapture.phase)) return;
 	const content = ui.messageInput.value;
 	if (!content.trim()) return;
 	ui.messageInput.value = "";
@@ -1133,6 +1693,7 @@ async function sendMessage() {
 	updateSendControls();
 	try {
 		const serverState = await refreshState();
+		void loadComposerVoiceReadiness();
 		await loadMessages();
 		if (serverState.pending_notes > 0) void pollMemoryExtraction();
 		else await loadMemory(state.memoryTab);
@@ -1158,10 +1719,105 @@ function setMobileView(view) {
 	ui.mobileMemoryTab.classList.toggle("text-muted", view !== "memory");
 }
 
+const voiceController = createVoiceController({
+	getUserMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
+	audioContextFactory: () => {
+		const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+		if (!AudioContextConstructor) throw new Error("This browser does not support microphone recording.");
+		return new AudioContextConstructor();
+	},
+	transcribe: async (wav, profileSlug, signal) => {
+		const query = new URLSearchParams({ profile_slug: profileSlug });
+		const result = await api(`/api/voice/transcriptions?${query}`, {
+			method: "POST",
+			headers: { "Content-Type": "audio/wav" },
+			body: wav,
+			signal,
+		});
+		return result?.text || "";
+	},
+	getDraft: () => ui.messageInput.value,
+	getProfileSlug: () => state.profileSlug,
+	onInsert: (text) => {
+		ui.messageInput.value = text;
+		ui.messageInput.readOnly = false;
+		ui.messageInput.focus();
+		ui.messageInput.setSelectionRange?.(text.length, text.length);
+	},
+	onSend: async (text, profileSlug) => {
+		if (profileSlug !== state.profileSlug) throw new Error("The active profile changed. The recording was discarded.");
+		ui.messageInput.value = text;
+		await sendMessage();
+	},
+	onState: updateVoiceRecordingState,
+});
+
+function handleVoiceKeydown(event) {
+	if (state.voiceCapture.phase !== "recording" || event.isComposing || event.keyCode === 229) return;
+	const targetIsControl = event.target !== ui.messageInput && Boolean(event.target?.closest?.("button, a, input, select, textarea"));
+	if (targetIsControl && event.key !== "Escape") return;
+	const hasModifier = event.shiftKey || event.ctrlKey || event.altKey || event.metaKey;
+	if (event.key === "Escape") {
+		event.preventDefault();
+		event.stopPropagation();
+		voiceController.cancel();
+	} else if (!hasModifier && (event.key === "." || event.code === "Period")) {
+		event.preventDefault();
+		event.stopPropagation();
+		void voiceController.finish("edit");
+	} else if (!hasModifier && event.key === "Enter") {
+		event.preventDefault();
+		event.stopPropagation();
+		void voiceController.finish("send");
+	}
+}
+
 ui.settingsButton.addEventListener("click", openSettings);
+ui.voiceOpenSettings.addEventListener("click", openSettings);
+ui.voiceRecord.addEventListener("click", () => {
+	void voiceController.start(state.profileSlug).catch(() => { /* The live region reports permission and platform errors. */ });
+});
+ui.voiceCancel.addEventListener("click", () => voiceController.cancel());
+ui.voiceEdit.addEventListener("click", () => void voiceController.finish("edit"));
+ui.voiceSend.addEventListener("click", () => void voiceController.finish("send"));
+document.addEventListener("keydown", handleVoiceKeydown, true);
+window.addEventListener("pagehide", (event) => {
+	if (event.persisted) voiceController.cancel();
+	else void voiceController.dispose();
+});
 ui.settingsCancel.addEventListener("click", cancelSettings);
 ui.settingsClose.addEventListener("click", cancelSettings);
-ui.settingsForm.addEventListener("submit", saveSettings);
+ui.settingsForm.addEventListener("submit", (event) => {
+	if (state.settingsTab === "voice") {
+		return saveVoiceSettings(event);
+	}
+	return saveSettings(event);
+});
+ui.settingsTabs.addEventListener("click", () => queueMicrotask(syncSettingsTab));
+ui.settingsTabs.addEventListener("keydown", () => window.setTimeout(syncSettingsTab, 0));
+ui.voiceProvider.addEventListener("change", () => {
+	const previousProvider = state.draftVoiceProvider;
+	state.draftVoiceProvider = ui.voiceProvider.value;
+	if (state.draftVoiceProvider === "local") {
+		state.draftVoiceModel = LOCAL_VOICE_MODEL_ID;
+		state.voiceModels = [];
+		voiceModelDropdown.setOptions([], "");
+	} else if (state.draftVoiceProvider === "provider") {
+		state.draftVoiceModel = previousProvider === "provider" || state.savedVoiceProvider === "provider" ? state.savedVoiceModel : "";
+		if (state.draftProfileSlug) void loadVoiceModels(state.draftProfileSlug, state.voiceRequestID, state.draftRevision);
+	} else {
+		state.draftVoiceModel = "";
+		state.voiceModels = [];
+		voiceModelDropdown.setOptions([], "");
+	}
+	updateVoiceDraftDirty();
+});
+ui.voiceModelRetry.addEventListener("click", () => {
+	if (state.draftProfileSlug) void loadVoiceModels(state.draftProfileSlug, state.voiceRequestID, state.draftRevision);
+});
+ui.voiceSave.addEventListener("click", (event) => void saveVoiceSettings(event));
+ui.voiceDownload.addEventListener("click", () => void startVoiceModelDownload());
+ui.voiceDelete.addEventListener("click", () => void deleteVoiceModel());
 ui.settingsPanel.addEventListener("keydown", trapSettingsTab);
 document.addEventListener("keydown", (event) => {
 	if (event.key !== "Escape" || !state.settingsOpen) return;
@@ -1189,10 +1845,16 @@ ui.chatTab.addEventListener("click", () => setMobileView("chat"));
 ui.mobileMemoryTab.addEventListener("click", () => setMobileView("memory"));
 ui.messageForm.addEventListener("submit", (event) => {
 	event.preventDefault();
+	if (["requesting", "recording", "processing"].includes(state.voiceCapture.phase)) return;
 	void sendMessage();
 });
 ui.messageInput.addEventListener("keydown", (event) => {
 	if (event.key === "Enter" && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
+		if (["requesting", "recording", "processing"].includes(state.voiceCapture.phase)) {
+			event.preventDefault();
+			event.stopPropagation();
+			return;
+		}
 		event.preventDefault();
 		ui.messageForm.requestSubmit();
 	}
@@ -1210,6 +1872,7 @@ async function initialize() {
 	HSSelect.autoInit();
 	try {
 		const serverState = await refreshState();
+		void loadComposerVoiceReadiness();
 		await loadMessages();
 		await loadMemory("daily");
 		if (serverState.sending) void pollServerTurn();

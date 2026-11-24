@@ -45,13 +45,15 @@ noto web
 
 Open the printed `http://127.0.0.1:8080` address. The web UI uses the active profile's existing provider, conversation history, notes, and weekly/monthly summaries. Provider setup must be completed in the terminal first. See the [web GUI operations notes](docs/operations.md#web-gui) for localhost, lifecycle, and build details.
 
+Web chat also supports optional post-recording speech dictation. Configure it in **Settings → Voice** for each profile. Local Parakeet is an explicit, shared model download; provider transcription uses a separately selected verified speech-to-text model and may incur provider charges. See the [voice dictation guide](docs/voice-dictation.md) for privacy, setup, keyboard controls, costs, and platform limits.
+
 ## Web UI development
 
 The browser source is in `internal/web/ui`; `make web-build` bundles it into `internal/web/static`, which the Go binary embeds. Rebuilding the UI requires Bun and the project's pinned JavaScript dependencies. On a fresh checkout, install them with `cd internal/web/ui && bun install --frozen-lockfile`. Tailwind CSS is built with the project-local `@tailwindcss/cli`; no global Tailwind installation is needed.
 
 ```bash
 make web-build          # Bun bundle and local Tailwind CSS build
-make web-test           # Bun UI state and interaction tests
+make web-test           # Bun UI state, interaction, and voice-controller tests
 make web-browser-test   # Playwright tests in desktop and 390×844 mobile Chrome
 make build              # Go binary with the generated web assets embedded
 ```

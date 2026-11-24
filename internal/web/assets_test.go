@@ -97,3 +97,29 @@ func TestBrowserFixtureUsesProductionCSP(t *testing.T) {
 		t.Fatalf("browser fixture CSP = %q, production CSP = %q", policy[:end], got)
 	}
 }
+
+func TestBrowserFixtureMicrophonePolicyMatchesProduction(t *testing.T) {
+	fixture, err := os.ReadFile("ui/browser/fixture-server.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const marker = `"Permissions-Policy": "`
+	start := strings.Index(string(fixture), marker)
+	if start < 0 {
+		t.Fatal("browser fixture has no Permissions-Policy header")
+	}
+	policy := string(fixture)[start+len(marker):]
+	end := strings.IndexByte(policy, '"')
+	if end < 0 {
+		t.Fatal("browser fixture Permissions-Policy value is not terminated")
+	}
+	if got, want := policy[:end], "camera=(), microphone=(self), geolocation=()"; got != want {
+		t.Fatalf("browser fixture Permissions-Policy = %q, want %q", got, want)
+	}
+
+	recorder := httptest.NewRecorder()
+	setSecurityHeaders(recorder)
+	if got := recorder.Header().Get("Permissions-Policy"); got != policy[:end] {
+		t.Fatalf("browser fixture Permissions-Policy = %q, production Permissions-Policy = %q", policy[:end], got)
+	}
+}

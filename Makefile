@@ -24,7 +24,7 @@ web-build:
 
 ## web-test: run web UI state tests (requires Bun)
 web-test:
-	cd internal/web/ui && bun test app.test.js state.test.js
+	cd internal/web/ui && bun test app.test.js state.test.js voice.test.js
 
 ## web-browser-test: run browser tests with Node and Chrome
 web-browser-test:

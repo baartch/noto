@@ -43,6 +43,17 @@ button:focus-visible {
 	outline-offset: 2px;
 }
 
+.voice-volume-fill {
+	transform-origin: left center;
+	transition: transform 80ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.voice-volume-fill {
+		transition: none;
+	}
+}
+
 .markdown-body :where(p, ul, ol, pre, blockquote) {
 	margin-block: 0.65rem;
 }
