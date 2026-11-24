@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -281,7 +282,7 @@ func makeArchiveWithReturnedHeaderCount(t *testing.T, contents map[string][]byte
 				t.Fatalf("write %s data: %v", name, err)
 			}
 		}
-		for i := 0; i < extra; i++ {
+		for i := range extra {
 			if err := w.WriteHeader(&tar.Header{Name: fmt.Sprintf("%s/docs/empty-%05d", testArchiveRoot, i), Typeflag: tar.TypeReg, Mode: 0o600}); err != nil {
 				t.Fatalf("write empty archive entry: %v", err)
 			}
@@ -768,7 +769,7 @@ func TestModelManagerReopensRecognizerWhenModelFileIdentityChanges(t *testing.T)
 		t.Fatalf("LocalTranscriber(): %v", err)
 	}
 	wav := makePCM16WAV(1, 16000, 16, []byte{1, 2})
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if got, err := transcriber.Transcribe(context.Background(), wav); err != nil || got != "recognizer-1" {
 			t.Fatalf("unchanged-file Transcribe() = %q, %v; want reused recognizer", got, err)
 		}
@@ -1253,6 +1254,41 @@ func TestModelManagerRejectsRedirectOutsideAllowlist(t *testing.T) {
 	}
 	if got := targetRequests.Load(); got != 0 {
 		t.Fatalf("redirect target received %d requests, want 0", got)
+	}
+}
+
+func TestModelDownloadRedirectsUseExactHTTPSAllowlist(t *testing.T) {
+	client := newModelDownloadClient()
+	for _, tc := range []struct {
+		name    string
+		address string
+		hops    int
+		wantErr bool
+	}{
+		{name: "github release", address: "https://github.com/k2-fsa/sherpa-onnx/releases/download/model.tar.bz2"},
+		{name: "github default port", address: "https://github.com:443/releases/download/model.tar.bz2"},
+		{name: "release assets", address: "https://release-assets.githubusercontent.com/model.tar.bz2"},
+		{name: "unknown CDN", address: "https://cdn.example.invalid/model.tar.bz2", wantErr: true},
+		{name: "cleartext github", address: "http://github.com/model.tar.bz2", wantErr: true},
+		{name: "nonstandard port", address: "https://github.com:8443/model.tar.bz2", wantErr: true},
+		{name: "userinfo", address: "https://token@github.com/model.tar.bz2", wantErr: true},
+		{name: "redirect limit", address: "https://github.com/model.tar.bz2", hops: 5, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			u, err := url.Parse(tc.address)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := &http.Request{URL: u}
+			via := make([]*http.Request, tc.hops)
+			err = client.CheckRedirect(request, via)
+			if tc.wantErr && err == nil {
+				t.Fatalf("CheckRedirect(%q) succeeded, want error", tc.address)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("CheckRedirect(%q) error = %v", tc.address, err)
+			}
+		})
 	}
 }
 

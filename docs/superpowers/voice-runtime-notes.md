@@ -20,7 +20,7 @@ Date: 2026-11-22
 
 ## Download security requirements
 
-- Use HTTPS only; validate every redirect against an explicit allowlist for the official GitHub release and its release-asset CDN. Do not forward credentials across redirects.
+- Use HTTPS only; redirects are limited to exact `github.com` and `release-assets.githubusercontent.com` hosts on the default HTTPS port. Unknown CDN hosts fail closed; add a host only after verifying its official ownership and updating the allowlist tests. Redirect URLs with userinfo or nonstandard ports are rejected.
 - Bound compressed and decompressed bytes. Reject absolute paths, `..`, links, special files and structural PAX overrides. Ignore only bounded regular documentation/test-WAV entries under the expected archive root; extract required regular model files to a private staging directory, verify each against the pinned per-file manifest, then atomically promote. Clean partial files on failure/cancellation.
 - The official archive's layout was not inspected because no archive/model download was approved. The extractor requires the documented Parakeet directory root and the pinned filenames; if the transport archive differs, it fails closed. Fixture tests cover PAX metadata, benign bounded extras, traversal and repair of corrupt installs.
 - Task 4 exercises installation with generated local tar fixtures and a fake recognizer, and a no-model native smoke test loads sherpa-onnx. The GitHub release workflow has not run in this workspace, and actual Parakeet inference remains unverified because no weights/archive were downloaded.

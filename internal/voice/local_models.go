@@ -1170,7 +1170,10 @@ func newModelDownloadClient() *http.Client {
 	return &http.Client{
 		Timeout: modelDownloadTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 5 || !strings.EqualFold(req.URL.Scheme, "https") {
+			if len(via) >= 5 || !strings.EqualFold(req.URL.Scheme, "https") || req.URL.User != nil {
+				return errors.New("voice: unsafe model download redirect")
+			}
+			if port := req.URL.Port(); port != "" && port != "443" {
 				return errors.New("voice: unsafe model download redirect")
 			}
 			host := strings.ToLower(req.URL.Hostname())
