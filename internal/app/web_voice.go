@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"slices"
 	"sync"
+	"time"
 
 	"noto/internal/profile"
 	"noto/internal/provider"
@@ -27,6 +29,8 @@ type webVoiceBackend struct {
 
 	listTranscriptionModels func(context.Context, provider.Config) ([]string, error)
 	newProviderTranscriber  func(provider.Config, string) voice.Transcriber
+	modelCache              *transcriptionModelCache
+	modelCacheMu            sync.Mutex
 
 	mu            sync.Mutex
 	serviceCtx    context.Context
@@ -41,6 +45,7 @@ func newWebVoiceBackend(ctx context.Context, models voiceModelLifecycle) *webVoi
 		models:                  models,
 		listTranscriptionModels: voice.ListTranscriptionModels,
 		newProviderTranscriber:  voice.NewProviderTranscriber,
+		modelCache:              newTranscriptionModelCache(),
 	}
 	b.bindContext(ctx)
 	return b
@@ -88,7 +93,7 @@ func (b *webVoiceBackend) Get(ctx context.Context, slug string) (web.VoiceDTO, e
 			dto.Reason = "Configure a provider endpoint and credentials for this profile."
 			break
 		}
-		models, err := b.transcriptionModels()(ctx, providerConfig(loaded.providerCfg, loaded.apiKey))
+		models, err := b.cachedTranscriptionModels(ctx, providerConfig(loaded.providerCfg, loaded.apiKey))
 		if errors.Is(err, voice.ErrTranscriptionModelsUnsupported) {
 			dto.Reason = "This provider cannot verify speech-to-text models."
 			break
@@ -135,7 +140,7 @@ func (b *webVoiceBackend) Models(ctx context.Context, slug string) ([]string, er
 	if loaded.providerCfg == nil || loaded.apiKey == "" {
 		return nil, web.ErrVoiceNotReady
 	}
-	models, err := b.transcriptionModels()(ctx, providerConfig(loaded.providerCfg, loaded.apiKey))
+	models, err := b.cachedTranscriptionModels(ctx, providerConfig(loaded.providerCfg, loaded.apiKey))
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +173,7 @@ func (b *webVoiceBackend) Transcribe(ctx context.Context, slug string, wav []byt
 		if loaded.providerCfg == nil || loaded.apiKey == "" || loaded.settings.Model == "" {
 			return "", web.ErrVoiceNotReady
 		}
-		models, err := b.transcriptionModels()(ctx, providerConfig(loaded.providerCfg, loaded.apiKey))
+		models, err := b.cachedTranscriptionModels(ctx, providerConfig(loaded.providerCfg, loaded.apiKey))
 		if err != nil {
 			return "", err
 		}
@@ -336,6 +341,81 @@ func (b *webVoiceBackend) openProfileDB(slug string) (*store.DB, error) {
 		openDB = openProfileDB
 	}
 	return openDB(slug)
+}
+
+const transcriptionModelCacheTTL = time.Minute
+
+type transcriptionModelCacheKey struct {
+	endpoint string
+	apiKey   [32]byte
+}
+
+type transcriptionModelCacheEntry struct {
+	models    []string
+	expiresAt time.Time
+}
+
+type transcriptionModelCache struct {
+	mu      sync.Mutex
+	entries map[transcriptionModelCacheKey]transcriptionModelCacheEntry
+	ttl     time.Duration
+	now     func() time.Time
+}
+
+func newTranscriptionModelCache() *transcriptionModelCache {
+	return &transcriptionModelCache{
+		entries: make(map[transcriptionModelCacheKey]transcriptionModelCacheEntry),
+		ttl:     transcriptionModelCacheTTL,
+		now:     time.Now,
+	}
+}
+
+func (c *transcriptionModelCache) get(ctx context.Context, cfg provider.Config, fetch func(context.Context, provider.Config) ([]string, error)) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	key := transcriptionModelCacheKey{endpoint: cfg.Endpoint, apiKey: sha256.Sum256([]byte(cfg.APIKey))}
+	now := c.now()
+	c.mu.Lock()
+	for cachedKey, entry := range c.entries {
+		if !now.Before(entry.expiresAt) {
+			delete(c.entries, cachedKey)
+		}
+	}
+	if entry, ok := c.entries[key]; ok {
+		if now.Before(entry.expiresAt) {
+			models := slices.Clone(entry.models)
+			c.mu.Unlock()
+			return models, nil
+		}
+		delete(c.entries, key)
+	}
+	c.mu.Unlock()
+
+	models, err := fetch(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	if c.entries == nil {
+		c.entries = make(map[transcriptionModelCacheKey]transcriptionModelCacheEntry)
+	}
+	c.entries[key] = transcriptionModelCacheEntry{models: slices.Clone(models), expiresAt: c.now().Add(c.ttl)}
+	c.mu.Unlock()
+	return slices.Clone(models), nil
+}
+
+func (b *webVoiceBackend) cachedTranscriptionModels(ctx context.Context, cfg provider.Config) ([]string, error) {
+	b.modelCacheMu.Lock()
+	if b.modelCache == nil {
+		b.modelCache = newTranscriptionModelCache()
+	}
+	cache := b.modelCache
+	b.modelCacheMu.Unlock()
+	return cache.get(ctx, cfg, b.transcriptionModels())
 }
 
 func (b *webVoiceBackend) transcriptionModels() func(context.Context, provider.Config) ([]string, error) {

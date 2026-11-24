@@ -91,6 +91,7 @@ func TestWebVoiceBackendReadinessAndDispatchStayProfileScoped(t *testing.T) {
 	}
 	localCalls := atomic.Int32{}
 	providerCalls := atomic.Int32{}
+	openRouterDiscoveryCalls := atomic.Int32{}
 	models := &appVoiceTestModels{
 		status: voice.ModelStatus{Available: true, Installed: true},
 		transcriber: appVoiceTestTranscriber(func(context.Context, []byte) (string, error) {
@@ -112,6 +113,7 @@ func TestWebVoiceBackendReadinessAndDispatchStayProfileScoped(t *testing.T) {
 			if cfg.Endpoint != "https://openrouter.ai/api/v1" || cfg.APIKey != "beta-secret" {
 				t.Errorf("speech model discovery config = %+v", cfg)
 			}
+			openRouterDiscoveryCalls.Add(1)
 			return []string{"whisper-1"}, nil
 		},
 		newProviderTranscriber: func(cfg provider.Config, model string) voice.Transcriber {
@@ -189,6 +191,9 @@ func TestWebVoiceBackendReadinessAndDispatchStayProfileScoped(t *testing.T) {
 	if err != nil || text != "provider transcript" || providerCalls.Load() != 1 {
 		t.Fatalf("provider dispatch = %q, err=%v factory calls=%d", text, err, providerCalls.Load())
 	}
+	if got := openRouterDiscoveryCalls.Load(); got != 1 {
+		t.Fatalf("OpenRouter discovery calls = %d, want 1 across Models, Get and Transcribe", got)
+	}
 	if err := backend.Save(ctx, gamma.Slug, store.VoiceSettings{Provider: "provider", Model: "whisper-1"}, 5); err != nil {
 		t.Fatalf("save unsupported provider selection: %v", err)
 	}
@@ -247,6 +252,75 @@ func TestWebVoiceDownloadOutlivesRequestAndCancelsAtShutdown(t *testing.T) {
 	}
 	if err := backend.Wait(context.Background()); err != nil {
 		t.Fatalf("Wait() = %v", err)
+	}
+}
+
+func TestTranscriptionModelCacheReusesResultsWithoutSharingCredentialEntries(t *testing.T) {
+	cache := newTranscriptionModelCache()
+	calls := 0
+	fetch := func(_ context.Context, cfg provider.Config) ([]string, error) {
+		calls++
+		return []string{cfg.APIKey}, nil
+	}
+	cfg := provider.Config{Endpoint: "https://openrouter.ai/api/v1", APIKey: "profile-a-secret"}
+
+	got, err := cache.get(context.Background(), cfg, fetch)
+	if err != nil || len(got) != 1 || got[0] != cfg.APIKey {
+		t.Fatalf("first cache lookup = %v, err=%v", got, err)
+	}
+	got[0] = "mutated"
+	got, err = cache.get(context.Background(), cfg, fetch)
+	if err != nil || len(got) != 1 || got[0] != cfg.APIKey {
+		t.Fatalf("cached lookup = %v, err=%v; want independent cached copy", got, err)
+	}
+	otherCfg := cfg
+	otherCfg.APIKey = "profile-b-secret"
+	got, err = cache.get(context.Background(), otherCfg, fetch)
+	if err != nil || len(got) != 1 || got[0] != otherCfg.APIKey {
+		t.Fatalf("other credential lookup = %v, err=%v", got, err)
+	}
+	if calls != 2 {
+		t.Fatalf("fetch calls = %d, want 2 (one per credential)", calls)
+	}
+}
+
+func TestTranscriptionModelCacheExpiresAndRetriesErrors(t *testing.T) {
+	cache := newTranscriptionModelCache()
+	now := time.Now()
+	cache.now = func() time.Time { return now }
+	calls := 0
+	fetch := func(context.Context, provider.Config) ([]string, error) {
+		calls++
+		switch calls {
+		case 1:
+			return nil, errors.New("temporary lookup failure")
+		case 2:
+			return []string{"speech-v1"}, nil
+		default:
+			return []string{"speech-v2"}, nil
+		}
+	}
+	cfg := provider.Config{Endpoint: "https://openrouter.ai/api/v1"}
+
+	if _, err := cache.get(context.Background(), cfg, fetch); err == nil {
+		t.Fatal("first lookup succeeded; want temporary failure")
+	}
+	if got, err := cache.get(context.Background(), cfg, fetch); err != nil || len(got) != 1 || got[0] != "speech-v1" {
+		t.Fatalf("retry lookup = %v, err=%v", got, err)
+	}
+	if got, err := cache.get(context.Background(), cfg, fetch); err != nil || len(got) != 1 || got[0] != "speech-v1" {
+		t.Fatalf("cached lookup = %v, err=%v", got, err)
+	}
+	if calls != 2 {
+		t.Fatalf("fetch calls before expiry = %d, want 2", calls)
+	}
+
+	now = now.Add(transcriptionModelCacheTTL)
+	if got, err := cache.get(context.Background(), cfg, fetch); err != nil || len(got) != 1 || got[0] != "speech-v2" {
+		t.Fatalf("expired lookup = %v, err=%v; want refreshed models", got, err)
+	}
+	if calls != 3 {
+		t.Fatalf("fetch calls after expiry = %d, want 3", calls)
 	}
 }
 
