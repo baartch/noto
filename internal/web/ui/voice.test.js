@@ -193,6 +193,38 @@ describe("createVoiceController", () => {
 		expect(phaseWhenInsertStarts).toBe("idle");
 	});
 
+	test("resumes a suspended audio context before starting capture", async () => {
+		const audio = audioHarness();
+		audio.context.state = "suspended";
+		let resumeContext;
+		let resumeCalls = 0;
+		audio.context.resume = () => {
+			resumeCalls++;
+			return new Promise((resolve) => {
+				resumeContext = () => {
+					audio.context.state = "running";
+					resolve();
+				};
+			});
+		};
+		const states = [];
+		const controller = createVoiceController({
+			...audio,
+			audioContextFactory: () => audio.context,
+			transcribe: async () => "recognized words",
+			onState: (state) => states.push(state),
+		});
+
+		const starting = controller.start("artist");
+		await Bun.sleep(0);
+		expect(resumeCalls).toBe(1);
+		expect(states.at(-1).phase).toBe("requesting");
+
+		resumeContext();
+		expect(await starting).toBe(true);
+		expect(states.at(-1).phase).toBe("recording");
+	});
+
 	test("empty and failed transcriptions preserve the draft and never submit", async () => {
 		const empty = makeController({ transcribe: async () => "  " });
 		await empty.controller.start("artist");

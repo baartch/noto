@@ -181,6 +181,13 @@ export function createVoiceController({
 				if (!audioContext || typeof audioContext.createScriptProcessor !== "function" || typeof audioContext.createMediaStreamSource !== "function") {
 					throw new Error("This browser does not support microphone audio processing.");
 				}
+				if (audioContext.state === "suspended") {
+					await audioContext.resume();
+					if (disposed || requestGeneration !== generation) {
+						await releaseAudio();
+						return false;
+					}
+				}
 				source = audioContext.createMediaStreamSource(stream);
 				processor = audioContext.createScriptProcessor(4096, 1, 1);
 				const maxSamples = Math.floor(maxDurationMs * VOICE_SAMPLE_RATE / 1000);
