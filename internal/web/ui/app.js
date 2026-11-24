@@ -1778,7 +1778,10 @@ ui.voiceCancel.addEventListener("click", () => voiceController.cancel());
 ui.voiceEdit.addEventListener("click", () => void voiceController.finish("edit"));
 ui.voiceSend.addEventListener("click", () => void voiceController.finish("send"));
 document.addEventListener("keydown", handleVoiceKeydown, true);
-window.addEventListener("pagehide", () => { void voiceController.dispose(); }, { once: true });
+window.addEventListener("pagehide", (event) => {
+	if (event.persisted) voiceController.cancel();
+	else void voiceController.dispose();
+});
 ui.settingsCancel.addEventListener("click", cancelSettings);
 ui.settingsClose.addEventListener("click", cancelSettings);
 ui.settingsForm.addEventListener("submit", (event) => {

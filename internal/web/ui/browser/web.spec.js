@@ -797,6 +797,24 @@ test("idle punctuation and IME Enter retain normal chat semantics", async ({ pag
 	expect(await page.evaluate(() => window.__micGetUserMediaCalls)).toBe(0);
 });
 
+test("voice capture remains available after bfcache restore", async ({ page }) => {
+	await installFakeMicrophone(page);
+	const { readinessLoads } = await routeReadyVoice(page);
+	await page.goto("/");
+	await expect.poll(readinessLoads).toBeGreaterThan(0);
+	await page.locator("#voice-record").click();
+	await expect(page.locator("#voice-recording-panel")).toBeVisible();
+	await page.evaluate(() => {
+		window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+		window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+	});
+	await expect(page.locator("#voice-recording-panel")).toBeHidden();
+	await expect.poll(() => page.evaluate(() => window.__micTrackStopCount)).toBe(1);
+	await page.locator("#voice-record").click();
+	await expect(page.locator("#voice-recording-panel")).toBeVisible();
+	await expect.poll(() => page.evaluate(() => window.__micGetUserMediaCalls)).toBe(2);
+});
+
 test("recording period edits, Enter sends once, and Escape cancels without changing the draft", async ({ page }) => {
 	await installFakeMicrophone(page);
 	const { uploads, sends, readinessLoads } = await routeReadyVoice(page);
