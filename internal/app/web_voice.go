@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -117,6 +118,9 @@ func (b *webVoiceBackend) Save(ctx context.Context, slug string, settings store.
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if err := validateVoiceSelection(settings); err != nil {
+		return err
+	}
 	p, err := b.profileBySlug(ctx, slug)
 	if err != nil {
 		return err
@@ -126,8 +130,48 @@ func (b *webVoiceBackend) Save(ctx context.Context, slug string, settings store.
 		return errors.New("web: open profile settings failed")
 	}
 	defer func() { _ = db.Close() }()
-	if err := store.NewVoiceSettingsRepo(db).Save(ctx, settings); err != nil {
+	if settings.Provider == web.VoiceProviderProvider {
+		if err := b.verifyProviderVoiceModel(ctx, db, p.ID, settings.Model); err != nil {
+			return err
+		}
+	}
+	return store.NewVoiceSettingsRepo(db).Save(ctx, settings)
+}
+
+func validateVoiceSelection(settings store.VoiceSettings) error {
+	switch settings.Provider {
+	case "":
+		if settings.Model != "" {
+			return web.ErrInvalidVoiceSettings
+		}
+	case web.VoiceProviderLocal:
+		if settings.Model != voice.LocalModelID {
+			return web.ErrInvalidVoiceSettings
+		}
+	case web.VoiceProviderProvider:
+		if settings.Model == "" || strings.TrimSpace(settings.Model) != settings.Model {
+			return web.ErrInvalidVoiceSettings
+		}
+	default:
+		return store.ErrInvalidVoiceProvider
+	}
+	return nil
+}
+
+func (b *webVoiceBackend) verifyProviderVoiceModel(ctx context.Context, db *store.DB, profileID, model string) error {
+	cfg, apiKey, err := loadSettingsProviderConfig(ctx, db, profileID)
+	if err != nil {
+		return errors.New("web: read provider settings failed")
+	}
+	if cfg == nil || apiKey == "" {
+		return web.ErrInvalidVoiceSettings
+	}
+	models, err := b.cachedTranscriptionModels(ctx, providerConfig(cfg, apiKey))
+	if err != nil {
 		return err
+	}
+	if !slices.Contains(models, model) {
+		return web.ErrVoiceModelUnverified
 	}
 	return nil
 }

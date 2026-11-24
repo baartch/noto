@@ -30,6 +30,10 @@ var (
 	ErrVoiceOperationConflict = errors.New("web: voice model operation conflict")
 	// ErrVoiceNotReady indicates the saved backend/model selection is incomplete or unsupported.
 	ErrVoiceNotReady = errors.New("web: voice selection is not ready")
+	// ErrInvalidVoiceSettings indicates a malformed backend/model combination.
+	ErrInvalidVoiceSettings = errors.New("web: invalid voice settings")
+	// ErrVoiceModelUnverified indicates a provider model is not transcription-capable.
+	ErrVoiceModelUnverified = errors.New("web: voice model is not verified for transcription")
 )
 
 // VoiceBackend owns profile-specific speech settings and transcription routing.
@@ -448,8 +452,10 @@ func writeVoiceError(w http.ResponseWriter, err error, fallback string) {
 		writeAPIError(w, http.StatusConflict, "voice_conflict", "the local speech model is being deleted")
 	case errors.Is(err, ErrServiceStopped):
 		writeAPIError(w, http.StatusServiceUnavailable, "server_stopping", "server is shutting down")
-	case errors.Is(err, store.ErrInvalidVoiceProvider):
-		writeAPIError(w, http.StatusBadRequest, "invalid_voice_settings", "voice provider is invalid")
+	case errors.Is(err, ErrInvalidVoiceSettings), errors.Is(err, store.ErrInvalidVoiceProvider), errors.Is(err, store.ErrInvalidVoiceSelection):
+		writeAPIError(w, http.StatusBadRequest, "invalid_voice_settings", "voice provider and model selection is invalid")
+	case errors.Is(err, ErrVoiceModelUnverified):
+		writeAPIError(w, http.StatusUnprocessableEntity, "voice_model_unverified", "the selected model is not verified for speech-to-text")
 	case errors.Is(err, voice.ErrTranscriptionModelsUnsupported):
 		writeAPIError(w, http.StatusServiceUnavailable, "voice_models_unsupported", "the active provider cannot identify speech models")
 	case errors.Is(err, voice.ErrLocalRuntimeUnavailable), errors.Is(err, voice.ErrLocalModelNotInstalled), errors.Is(err, voice.ErrLocalModelIntegrity), errors.Is(err, ErrVoiceNotReady):

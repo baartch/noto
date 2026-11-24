@@ -55,7 +55,7 @@ func TestVoiceSettingsRepoSettingsArePerProfile(t *testing.T) {
 	first := NewVoiceSettingsRepo(openVoiceSettingsTestDB(t))
 	second := NewVoiceSettingsRepo(openVoiceSettingsTestDB(t))
 
-	firstSettings := VoiceSettings{Provider: "local"}
+	firstSettings := VoiceSettings{Provider: "local", Model: "local-model"}
 	secondSettings := VoiceSettings{Provider: "provider", Model: "vendor/stt-model"}
 	if err := first.Save(ctx, firstSettings); err != nil {
 		t.Fatalf("save first profile settings: %v", err)
@@ -90,5 +90,31 @@ func TestVoiceSettingsRepoRejectsInvalidProvider(t *testing.T) {
 	err := repo.Save(context.Background(), VoiceSettings{Provider: "cloud"})
 	if !errors.Is(err, ErrInvalidVoiceProvider) {
 		t.Fatalf("save error = %v, want ErrInvalidVoiceProvider", err)
+	}
+}
+
+func TestVoiceSettingsRepoRejectsIncompleteSelectionsWithoutReplacingSavedValue(t *testing.T) {
+	repo := NewVoiceSettingsRepo(openVoiceSettingsTestDB(t))
+	ctx := context.Background()
+	want := VoiceSettings{Provider: "provider", Model: "whisper-1"}
+	if err := repo.Save(ctx, want); err != nil {
+		t.Fatalf("save initial value: %v", err)
+	}
+
+	for _, invalid := range []VoiceSettings{
+		{Provider: "", Model: "whisper-1"},
+		{Provider: "provider"},
+		{Provider: "local"},
+	} {
+		if err := repo.Save(ctx, invalid); err == nil {
+			t.Errorf("save incomplete selection %#v succeeded", invalid)
+		}
+		got, err := repo.Get(ctx)
+		if err != nil {
+			t.Fatalf("read after rejected selection: %v", err)
+		}
+		if got != want {
+			t.Fatalf("rejected selection %#v replaced settings with %#v; want %#v", invalid, got, want)
+		}
 	}
 }

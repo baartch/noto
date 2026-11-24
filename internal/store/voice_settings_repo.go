@@ -4,10 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ErrInvalidVoiceProvider is returned when a voice backend is not supported.
-var ErrInvalidVoiceProvider = errors.New("store: invalid voice provider")
+var (
+	ErrInvalidVoiceProvider  = errors.New("store: invalid voice provider")
+	ErrInvalidVoiceSelection = errors.New("store: invalid voice selection")
+)
 
 // VoiceSettings stores speech-to-text selection for one profile.
 type VoiceSettings struct {
@@ -42,7 +46,14 @@ func (r *VoiceSettingsRepo) Get(ctx context.Context) (VoiceSettings, error) {
 // Save replaces this profile's voice selection.
 func (r *VoiceSettingsRepo) Save(ctx context.Context, settings VoiceSettings) error {
 	switch settings.Provider {
-	case "", "local", "provider":
+	case "":
+		if settings.Model != "" {
+			return fmt.Errorf("%w: model requires a provider", ErrInvalidVoiceSelection)
+		}
+	case "local", "provider":
+		if settings.Model == "" || strings.TrimSpace(settings.Model) != settings.Model {
+			return fmt.Errorf("%w: model is required", ErrInvalidVoiceSelection)
+		}
 	default:
 		return fmt.Errorf("%w: %q", ErrInvalidVoiceProvider, settings.Provider)
 	}

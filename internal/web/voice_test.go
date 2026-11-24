@@ -166,6 +166,16 @@ func TestVoiceSettingsAndModelRoutes(t *testing.T) {
 	}
 }
 
+func TestVoiceSaveValidationFailureDoesNotAdvanceRevision(t *testing.T) {
+	backend := &testVoiceBackend{saveErr: ErrVoiceModelUnverified}
+	service := NewService(nil, &store.Profile{ID: "alpha-id", Name: "Alpha", Slug: "alpha"}, nil, "model-a", false)
+	h := NewHandlerWithVoice(service, testOrigin, nil, backend)
+	recorder := request(h, http.MethodPost, "/api/voice", `{"profile_slug":"alpha","provider":"provider","model":"unknown-model","revision":1}`, testOrigin)
+	if recorder.Code != http.StatusUnprocessableEntity || service.State().Revision != 1 {
+		t.Fatalf("invalid voice save = %d %s; revision=%d, want 422 and unchanged revision 1", recorder.Code, recorder.Body.String(), service.State().Revision)
+	}
+}
+
 func TestVoiceGetKeepsTheRevisionCapturedBeforeProfileIO(t *testing.T) {
 	release := make(chan struct{})
 	var releaseOnce sync.Once

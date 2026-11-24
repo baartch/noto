@@ -130,12 +130,18 @@ func TestWebVoiceBackendReadinessAndDispatchStayProfileScoped(t *testing.T) {
 		t.Fatalf("provider transcription models = %v, err=%v", got, err)
 	}
 
-	if err := backend.Save(ctx, alpha.Slug, store.VoiceSettings{Provider: "local"}, 1); err != nil {
-		t.Fatalf("save incomplete local selection: %v", err)
+	if err := backend.Save(ctx, alpha.Slug, store.VoiceSettings{Provider: "local"}, 1); !errors.Is(err, web.ErrInvalidVoiceSettings) {
+		t.Fatalf("save incomplete local selection error = %v, want invalid settings", err)
+	}
+	if err := backend.Save(ctx, alpha.Slug, store.VoiceSettings{Provider: "provider", Model: "whisper-1"}, 1); !errors.Is(err, web.ErrInvalidVoiceSettings) {
+		t.Fatalf("save provider selection without credentials error = %v, want invalid settings", err)
+	}
+	if err := backend.Save(ctx, alpha.Slug, store.VoiceSettings{Provider: "local", Model: "other-model"}, 1); !errors.Is(err, web.ErrInvalidVoiceSettings) {
+		t.Fatalf("save unsupported local model error = %v, want invalid settings", err)
 	}
 	dto, err := backend.Get(ctx, alpha.Slug)
-	if err != nil || dto.Ready || dto.Reason == "" {
-		t.Fatalf("blank local selection = %+v, err=%v; want not ready", dto, err)
+	if err != nil || dto.Provider != "" || dto.Model != "" {
+		t.Fatalf("rejected local selection was persisted: %+v, err=%v", dto, err)
 	}
 	if _, err := backend.Transcribe(ctx, alpha.Slug, makeAppVoiceWAV(2)); !errors.Is(err, web.ErrVoiceNotReady) || localCalls.Load() != 0 {
 		t.Fatalf("blank local dispatch err=%v local calls=%d", err, localCalls.Load())
@@ -170,12 +176,12 @@ func TestWebVoiceBackendReadinessAndDispatchStayProfileScoped(t *testing.T) {
 	}
 	models.status.Available = true
 
-	if err := backend.Save(ctx, beta.Slug, store.VoiceSettings{Provider: "provider", Model: "chat-model"}, 3); err != nil {
-		t.Fatalf("save mismatched provider model: %v", err)
+	if err := backend.Save(ctx, beta.Slug, store.VoiceSettings{Provider: "provider", Model: "chat-model"}, 3); !errors.Is(err, web.ErrVoiceModelUnverified) {
+		t.Fatalf("save unverified provider model error = %v, want unverified model", err)
 	}
 	dto, err = backend.Get(ctx, beta.Slug)
-	if err != nil || dto.Ready {
-		t.Fatalf("unverified provider selection = %+v, err=%v; want not ready", dto, err)
+	if err != nil || dto.Provider != "" || dto.Model != "" {
+		t.Fatalf("rejected provider selection was persisted: %+v, err=%v", dto, err)
 	}
 	if _, err := backend.Transcribe(ctx, beta.Slug, makeAppVoiceWAV(2)); !errors.Is(err, web.ErrVoiceNotReady) || providerCalls.Load() != 0 {
 		t.Fatalf("unverified provider dispatch err=%v factory calls=%d", err, providerCalls.Load())
@@ -194,19 +200,58 @@ func TestWebVoiceBackendReadinessAndDispatchStayProfileScoped(t *testing.T) {
 	if got := openRouterDiscoveryCalls.Load(); got != 1 {
 		t.Fatalf("OpenRouter discovery calls = %d, want 1 across Models, Get and Transcribe", got)
 	}
-	if err := backend.Save(ctx, gamma.Slug, store.VoiceSettings{Provider: "provider", Model: "whisper-1"}, 5); err != nil {
-		t.Fatalf("save unsupported provider selection: %v", err)
+	if err := backend.Save(ctx, gamma.Slug, store.VoiceSettings{Provider: "provider", Model: "whisper-1"}, 5); !errors.Is(err, voice.ErrTranscriptionModelsUnsupported) {
+		t.Fatalf("save selection on unsupported provider error = %v, want unsupported models", err)
 	}
 	dto, err = backend.Get(ctx, gamma.Slug)
-	if err != nil || dto.Ready || dto.Reason == "" {
-		t.Fatalf("unsupported provider selection = %+v, err=%v; want not ready", dto, err)
+	if err != nil || dto.Provider != "" || dto.Model != "" {
+		t.Fatalf("unsupported provider selection was persisted: %+v, err=%v", dto, err)
 	}
-	if _, err := backend.Transcribe(ctx, gamma.Slug, makeAppVoiceWAV(2)); !errors.Is(err, voice.ErrTranscriptionModelsUnsupported) || providerCalls.Load() != 1 {
+	if _, err := backend.Transcribe(ctx, gamma.Slug, makeAppVoiceWAV(2)); !errors.Is(err, web.ErrVoiceNotReady) || providerCalls.Load() != 1 {
 		t.Fatalf("unsupported provider dispatch err=%v factory calls=%d", err, providerCalls.Load())
 	}
 	encoded, err := json.Marshal(dto)
 	if err != nil || strings.Contains(string(encoded), "beta-secret") {
 		t.Fatalf("voice DTO leaked profile credential: %s, err=%v", encoded, err)
+	}
+}
+
+func TestWebVoiceSaveDoesNotPersistWhenModelDiscoveryFails(t *testing.T) {
+	t.Setenv("NOTO_APP_DIR", t.TempDir())
+	t.Setenv("NOTO_API_KEY", "")
+	t.Setenv("NOTO_ENDPOINT", "")
+	t.Setenv("NOTO_MODEL", "")
+	ctx := context.Background()
+	profiles := profile.NewService(nil)
+	p, err := profiles.Create(ctx, "Voice Discovery Failure")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := addVoiceTestProvider(ctx, p, "https://openrouter.ai/api/v1", "provider-secret"); err != nil {
+		t.Fatal(err)
+	}
+	discoveryErr := errors.New("provider discovery failed")
+	backend := &webVoiceBackend{
+		profiles: profiles,
+		openDB:   openProfileDB,
+		listTranscriptionModels: func(context.Context, provider.Config) ([]string, error) {
+			return nil, discoveryErr
+		},
+	}
+	if err := backend.Save(ctx, p.Slug, store.VoiceSettings{Provider: "provider", Model: "whisper-1"}, 1); !errors.Is(err, discoveryErr) {
+		t.Fatalf("save during discovery failure error = %v, want discovery error", err)
+	}
+	db, err := openProfileDB(p.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	got, err := store.NewVoiceSettingsRepo(db).Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != (store.VoiceSettings{}) {
+		t.Fatalf("settings after discovery failure = %#v, want unchanged defaults", got)
 	}
 }
 
