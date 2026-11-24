@@ -34,6 +34,8 @@ const (
 	maxModelArchiveBytes    = int64(600_000_000)
 	maxModelExpandedBytes   = int64(700 << 20)
 	maxIgnoredArchiveEntry  = int64(2 << 20)
+	maxModelArchiveEntries  = 10_000
+	modelInstallLockName    = ".parakeet-install.lock"
 	modelDownloadTimeout    = 45 * time.Minute
 )
 
@@ -414,7 +416,17 @@ func (m *ModelManager) Download(ctx context.Context) (retErr error) {
 	if err := ensureModelDirectory(m.modelsDir); err != nil {
 		return err
 	}
-	stagingDir, err := os.MkdirTemp(m.modelsDir, ".parakeet-install-*")
+	releaseInstallLock, canSweep, err := acquireModelInstallLock(ctx, m.modelsDir)
+	if err != nil {
+		return err
+	}
+	defer releaseInstallLock()
+	if canSweep {
+		if err := sweepOrphanModelStagingDirectories(m.modelsDir); err != nil {
+			return fmt.Errorf("voice: clean orphaned model staging directories: %w", err)
+		}
+	}
+	stagingDir, err := os.MkdirTemp(m.modelsDir, ".parakeet-install-v2-*")
 	if err != nil {
 		return fmt.Errorf("voice: create model staging directory: %w", err)
 	}
@@ -479,6 +491,7 @@ func (m *ModelManager) extractAndVerify(ctx context.Context, source io.Reader, s
 	seen := make(map[string]bool, len(manifest))
 	seenEntries := make(map[string]bool)
 	var expanded int64
+	entryCount := 0
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -489,6 +502,10 @@ func (m *ModelManager) extractAndVerify(ctx context.Context, source io.Reader, s
 		}
 		if err != nil {
 			return fmt.Errorf("voice: read Parakeet archive: %w", err)
+		}
+		entryCount++
+		if entryCount > maxModelArchiveEntries {
+			return fmt.Errorf("%w: too many archive entries", ErrUnsafeModelArchive)
 		}
 		if header.Typeflag == tar.TypeXGlobalHeader || header.Typeflag == tar.TypeXHeader {
 			if err := validateHarmlessPAXRecords(header.PAXRecords); err != nil {
@@ -557,6 +574,33 @@ func (m *ModelManager) extractAndVerify(ctx context.Context, source io.Reader, s
 	for name := range manifest {
 		if !seen[name] {
 			return fmt.Errorf("voice: Parakeet archive is missing %s", name)
+		}
+	}
+	return nil
+}
+
+func sweepOrphanModelStagingDirectories(modelsDir string) error {
+	entries, err := os.ReadDir(modelsDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), ".parakeet-install-v2-") {
+			continue
+		}
+		path := filepath.Join(modelsDir, entry.Name())
+		info, err := os.Lstat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			continue
+		}
+		if err := os.RemoveAll(path); err != nil {
+			return err
 		}
 	}
 	return nil

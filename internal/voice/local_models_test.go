@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -200,6 +201,76 @@ func makeModelArchiveWithLargePAX(t *testing.T, contents map[string][]byte) []by
 		t.Fatalf("close archive: %v", err)
 	}
 	return archive.Bytes()
+}
+
+func makeArchiveWithReturnedHeaderCount(t *testing.T, contents map[string][]byte, total int, globalPAX bool) []byte {
+	t.Helper()
+	build := func(extra int) []byte {
+		var archive bytes.Buffer
+		w := tar.NewWriter(&archive)
+		if globalPAX {
+			if err := w.WriteHeader(&tar.Header{Name: "GlobalHead.0", Typeflag: tar.TypeXGlobalHeader, Format: tar.FormatPAX, PAXRecords: map[string]string{"comment": "bounded metadata"}}); err != nil {
+				t.Fatalf("write global PAX header: %v", err)
+			}
+		}
+		if err := w.WriteHeader(&tar.Header{Name: testArchiveRoot + "/", Typeflag: tar.TypeDir, Mode: 0o700}); err != nil {
+			t.Fatalf("write archive root: %v", err)
+		}
+		names := make([]string, 0, len(contents))
+		for name := range contents {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			data := contents[name]
+			if err := w.WriteHeader(&tar.Header{Name: testArchiveRoot + "/" + name, Typeflag: tar.TypeReg, Mode: 0o600, Size: int64(len(data))}); err != nil {
+				t.Fatalf("write %s header: %v", name, err)
+			}
+			if _, err := w.Write(data); err != nil {
+				t.Fatalf("write %s data: %v", name, err)
+			}
+		}
+		for i := 0; i < extra; i++ {
+			if err := w.WriteHeader(&tar.Header{Name: fmt.Sprintf("%s/docs/empty-%05d", testArchiveRoot, i), Typeflag: tar.TypeReg, Mode: 0o600}); err != nil {
+				t.Fatalf("write empty archive entry: %v", err)
+			}
+		}
+		if err := w.Close(); err != nil {
+			t.Fatalf("close archive: %v", err)
+		}
+		return archive.Bytes()
+	}
+	countHeaders := func(archive []byte) int {
+		r := tar.NewReader(bytes.NewReader(archive))
+		count := 0
+		for {
+			_, err := r.Next()
+			if errors.Is(err, io.EOF) {
+				return count
+			}
+			if err != nil {
+				t.Fatalf("count archive headers: %v", err)
+			}
+			count++
+		}
+	}
+	extra := total - 1 - len(contents)
+	if globalPAX {
+		extra--
+	}
+	for range 2 {
+		if extra < 0 {
+			t.Fatalf("cannot fit %d headers into archive", total)
+		}
+		archive := build(extra)
+		count := countHeaders(archive)
+		if count == total {
+			return archive
+		}
+		extra += total - count
+	}
+	t.Fatalf("could not construct archive with %d returned headers", total)
+	return nil
 }
 
 func makeUnsafeModelArchive(t *testing.T, header *tar.Header, body []byte) []byte {
@@ -416,8 +487,10 @@ func TestModelManagerRejectsChecksumFailureAndCleansStaging(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read model dir: %v", err)
 	}
-	if len(entries) != 0 {
-		t.Fatalf("failed install left staging entries: %v", entries)
+	for _, entry := range entries {
+		if entry.Name() != modelInstallLockName {
+			t.Fatalf("failed install left staging entry: %v", entry.Name())
+		}
 	}
 }
 
@@ -472,8 +545,14 @@ func TestModelManagerRepairsCorruptExistingInstall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read model directory: %v", err)
 	}
-	if len(entries) != 1 || entries[0].Name() != localModelDirectoryName {
-		t.Fatalf("model directory entries = %v, want only installed model", entries)
+	var otherEntries []string
+	for _, entry := range entries {
+		if entry.Name() != localModelDirectoryName && entry.Name() != modelInstallLockName {
+			otherEntries = append(otherEntries, entry.Name())
+		}
+	}
+	if len(otherEntries) != 0 {
+		t.Fatalf("unexpected model directory entries = %v (all: %v)", otherEntries, entries)
 	}
 }
 
@@ -519,8 +598,10 @@ func TestModelManagerBoundsDecompressedArchive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read model dir: %v", err)
 	}
-	if len(entries) != 0 {
-		t.Fatalf("oversized archive left staging entries: %v", entries)
+	for _, entry := range entries {
+		if entry.Name() != modelInstallLockName {
+			t.Fatalf("oversized archive left staging entry: %v", entry.Name())
+		}
 	}
 }
 
@@ -542,12 +623,181 @@ func TestModelManagerCleansInterruptedDownload(t *testing.T) {
 	if fixture.manager.Status().Installed {
 		t.Fatalf("interrupted download marked installed: %+v", fixture.manager.Status())
 	}
-	entries, err := os.ReadDir(fixture.modelsDir)
+	entries, err := filepath.Glob(filepath.Join(fixture.modelsDir, ".parakeet-install-v2-*"))
 	if err != nil {
-		t.Fatalf("read model dir: %v", err)
+		t.Fatalf("read model staging entries: %v", err)
 	}
 	if len(entries) != 0 {
 		t.Fatalf("interrupted download left staging entries: %v", entries)
+	}
+}
+
+func TestModelManagerCoordinatesStagingAcrossManagers(t *testing.T) {
+	contents := testModelContents()
+	manifest := manifestForTestFiles(contents)
+	archive := makeModelArchive(t, contents)
+	modelsDir := filepath.Join(t.TempDir(), "models")
+	if err := os.MkdirAll(modelsDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	orphanBefore := filepath.Join(modelsDir, ".parakeet-install-v2-orphan-before")
+	if err := os.Mkdir(orphanBefore, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(modelsDir, ".parakeet-install-legacy")
+	if err := os.Mkdir(legacy, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "outside")
+	if err := os.Mkdir(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	symlink := filepath.Join(modelsDir, ".parakeet-install-v2-link")
+	if err := os.Symlink(outside, symlink); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	firstStarted := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	orphanAfterFirst := filepath.Join(modelsDir, ".parakeet-install-v2-orphan-after")
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(releaseFirst) })
+	var requests atomic.Int32
+	var sweptBeforeThird atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		request := requests.Add(1)
+		if request == 1 {
+			close(firstStarted)
+			<-releaseFirst
+		} else {
+			if _, err := os.Lstat(orphanAfterFirst); errors.Is(err, os.ErrNotExist) {
+				sweptBeforeThird.Store(true)
+			}
+		}
+		_, _ = w.Write(archive)
+	}))
+	defer func() {
+		releaseOnce.Do(func() { close(releaseFirst) })
+		server.Close()
+	}()
+	newManager := func() *ModelManager {
+		return newModelManager(modelManagerOptions{
+			modelsDir:            modelsDir,
+			archiveURL:           server.URL + "/model.tar.bz2",
+			archiveRoot:          testArchiveRoot,
+			expectedDownloadSize: int64(len(archive)),
+			maxArchiveBytes:      4 << 20,
+			maxExpandedBytes:     1 << 20,
+			manifest:             manifest,
+			testWAVs:             map[string]int64{},
+			client:               server.Client(),
+			decompress:           func(r io.Reader) io.Reader { return r },
+			runtimeAvailable:     true,
+			recognizerFactory: func(modelPaths) (localRecognizer, error) {
+				return &testLocalRecognizer{text: "unused"}, nil
+			},
+		})
+	}
+
+	first := newManager()
+	firstDone := make(chan error, 1)
+	go func() { firstDone <- first.Download(context.Background()) }()
+	select {
+	case <-firstStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first download did not reach the server")
+	}
+	if _, err := os.Lstat(orphanBefore); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("preexisting owned staging directory was not swept before download: %v", err)
+	}
+	stageCandidates, err := filepath.Glob(filepath.Join(modelsDir, ".parakeet-install-v2-*"))
+	if err != nil {
+		t.Fatalf("active staging candidates = %v, %v", stageCandidates, err)
+	}
+	activeStages := make([]string, 0, 1)
+	for _, candidate := range stageCandidates {
+		info, err := os.Lstat(candidate)
+		if err == nil && info.Mode()&os.ModeSymlink == 0 && info.IsDir() {
+			activeStages = append(activeStages, candidate)
+		}
+	}
+	if len(activeStages) != 1 {
+		t.Fatalf("active staging directories = %v; want one v2 directory", activeStages)
+	}
+
+	second := newManager()
+	waitCtx, cancel := context.WithTimeout(context.Background(), 120*time.Millisecond)
+	defer cancel()
+	secondDone := make(chan error, 1)
+	go func() { secondDone <- second.Download(waitCtx) }()
+	select {
+	case err := <-secondDone:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("second Download() while lock held = %v, want deadline exceeded", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("second download did not honor lock wait cancellation")
+	}
+	if got := requests.Load(); got != 1 {
+		t.Fatalf("requests while first staging is live = %d, want 1", got)
+	}
+	if _, err := os.Lstat(activeStages[0]); err != nil {
+		t.Fatalf("live staging directory disappeared while another manager waited: %v", err)
+	}
+
+	releaseOnce.Do(func() { close(releaseFirst) })
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first Download() = %v", err)
+	}
+	if err := os.RemoveAll(filepath.Join(modelsDir, localModelDirectoryName)); err != nil {
+		t.Fatalf("remove first install to exercise a later download: %v", err)
+	}
+	sweptBeforeThird.Store(false)
+	if err := os.Mkdir(orphanAfterFirst, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	third := newManager()
+	if err := third.Download(context.Background()); err != nil {
+		t.Fatalf("third Download() after lock release = %v", err)
+	}
+	if !sweptBeforeThird.Load() {
+		t.Fatal("orphan staging directory was not swept after acquiring the released lock")
+	}
+	if _, err := os.Lstat(legacy); err != nil {
+		t.Fatalf("legacy unmarked staging entry was not preserved: %v", err)
+	}
+	if _, err := os.Lstat(symlink); err != nil {
+		t.Fatalf("staging symlink was not preserved: %v", err)
+	}
+}
+
+func TestModelManagerCapsArchiveEntryCount(t *testing.T) {
+	contents := testModelContents()
+	manifest := manifestForTestFiles(contents)
+	for _, tc := range []struct {
+		name       string
+		count      int
+		globalPAX  bool
+		wantUnsafe bool
+	}{
+		{name: "exact limit with empty entries", count: maxModelArchiveEntries},
+		{name: "one over with visible global PAX", count: maxModelArchiveEntries + 1, globalPAX: true, wantUnsafe: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			archive := makeArchiveWithReturnedHeaderCount(t, contents, tc.count, tc.globalPAX)
+			stagingDir := t.TempDir()
+			manager := &ModelManager{archiveRoot: testArchiveRoot, maxExpandedBytes: 16 << 20, manifest: manifest}
+			err := manager.extractAndVerify(context.Background(), bytes.NewReader(archive), stagingDir)
+			if tc.wantUnsafe {
+				if !errors.Is(err, ErrUnsafeModelArchive) {
+					t.Fatalf("extractAndVerify() = %v, want ErrUnsafeModelArchive", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("extractAndVerify() at exact entry cap: %v", err)
+			}
+		})
 	}
 }
 
