@@ -243,6 +243,11 @@ export function createVoiceController({
 				publish({ phase: "error", error: "The active profile changed. The recording was discarded." });
 				return false;
 			}
+			if (pcm.length === 0) {
+				resetCapture();
+				publish({ phase: "error", error: "No audio was captured. Please try again." });
+				return false;
+			}
 			transcribeController = new AbortController();
 			try {
 				if (typeof transcribe !== "function") throw new Error("Voice transcription is unavailable.");

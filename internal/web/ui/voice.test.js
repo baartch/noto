@@ -189,6 +189,7 @@ describe("createVoiceController", () => {
 			},
 		});
 		await testVoice.controller.start("artist");
+		testVoice.audio.push([0.1, -0.1]);
 		await testVoice.controller.finish("edit");
 		expect(phaseWhenInsertStarts).toBe("idle");
 	});
@@ -225,9 +226,27 @@ describe("createVoiceController", () => {
 		expect(states.at(-1).phase).toBe("recording");
 	});
 
+	test("zero-sample recordings do not upload an empty WAV", async () => {
+		let transcriptionCalls = 0;
+		const testVoice = makeController({
+			transcribe: async () => { transcriptionCalls++; return "unexpected transcript"; },
+		});
+		await testVoice.controller.start("artist");
+		await testVoice.controller.finish("send");
+
+		expect(transcriptionCalls).toBe(0);
+		expect(testVoice.sent).toEqual([]);
+		expect(testVoice.inserted).toEqual([]);
+		expect(testVoice.getDraft()).toBe("existing draft");
+		expect(testVoice.audio.track.stopped).toBe(true);
+		expect(testVoice.states.at(-1).phase).toBe("error");
+		expect(testVoice.states.at(-1).error).toContain("No audio was captured");
+	});
+
 	test("empty and failed transcriptions preserve the draft and never submit", async () => {
 		const empty = makeController({ transcribe: async () => "  " });
 		await empty.controller.start("artist");
+		empty.audio.push([0.1, -0.1]);
 		await empty.controller.finish("send");
 		expect(empty.inserted).toEqual([]);
 		expect(empty.sent).toEqual([]);
@@ -237,6 +256,7 @@ describe("createVoiceController", () => {
 
 		const failed = makeController({ transcribe: async () => { throw new Error("transcription unavailable"); } });
 		await failed.controller.start("artist");
+		failed.audio.push([0.1, -0.1]);
 		await failed.controller.finish("edit");
 		expect(failed.inserted).toEqual([]);
 		expect(failed.sent).toEqual([]);
@@ -250,6 +270,7 @@ describe("createVoiceController", () => {
 		const pendingTranscription = new Promise((resolve) => { finishTranscription = resolve; });
 		const testVoice = makeController({ transcribe: () => pendingTranscription });
 		await testVoice.controller.start("artist");
+		testVoice.audio.push([0.1, -0.1]);
 		const finishing = testVoice.controller.finish("send");
 		await Promise.resolve();
 		testVoice.setProfile("");
@@ -283,6 +304,7 @@ describe("createVoiceController", () => {
 			clearIntervalFn: (id) => { cleared = id === 7; },
 		});
 		await testVoice.controller.start("artist");
+		testVoice.audio.push([0.1, -0.1]);
 		now = 600;
 		tick();
 		expect(testVoice.states.at(-1).elapsedMs).toBe(600);
