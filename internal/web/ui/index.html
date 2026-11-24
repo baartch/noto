@@ -52,14 +52,45 @@
 				</div>
 
 				<div class="shrink-0 border-t border-line bg-panel px-4 pb-3 pt-3 sm:px-7">
-					<form id="message-form" class="mx-auto max-w-4xl rounded-xl border border-line bg-composer p-2 shadow-lg shadow-black/15">
+					<form id="message-form" class="mx-auto max-w-4xl rounded-2xl border border-line bg-composer p-2 shadow-lg shadow-black/15">
 						<label class="sr-only" for="message-input">Message Noto</label>
-						<div class="flex items-end gap-2">
-							<textarea id="message-input" rows="1" maxlength="65536" placeholder="Ask about your work…" class="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-3 text-sm leading-5 text-ink outline-none placeholder:text-muted" autocomplete="off"></textarea>
-							<button id="send-button" type="submit" class="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-semibold text-white transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" aria-label="Send message">
-								<span id="send-label">Send</span><i data-lucide="arrow-up" class="size-4" aria-hidden="true"></i>
-							</button>
+						<textarea id="message-input" rows="2" maxlength="65536" placeholder="Type your message…" class="max-h-40 min-h-14 w-full resize-none bg-transparent px-3 py-2.5 text-sm leading-5 text-ink outline-none placeholder:text-muted read-only:cursor-default" autocomplete="off"></textarea>
+						<div id="voice-request-status" class="hidden px-3 pb-1 text-xs text-muted" role="status" aria-live="polite"></div>
+						<div id="composer-idle-controls" class="flex min-h-10 items-center justify-between gap-3 px-1 pb-1 pt-1">
+							<p id="voice-readiness-help" class="hidden min-w-0 flex-1 text-xs text-muted" role="status" aria-live="polite">
+								<span id="voice-readiness-message"></span>
+								<button id="voice-open-settings" class="ml-1 underline underline-offset-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus" type="button">Open Settings</button>
+							</p>
+							<div class="ml-auto flex shrink-0 items-center gap-2">
+								<button id="voice-record" type="button" class="grid size-8 shrink-0 place-items-center rounded-full bg-raised text-muted transition hover:bg-active hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" aria-label="Start voice recording" aria-describedby="voice-readiness-help voice-error">
+									<i data-lucide="mic" class="size-4" aria-hidden="true"></i>
+								</button>
+								<button id="send-button" type="submit" class="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-white transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" aria-label="Send message">
+									<span id="send-label" class="sr-only">Send</span><i data-lucide="send" class="size-4 fill-current" aria-hidden="true"></i>
+								</button>
+							</div>
 						</div>
+						<div id="voice-recording-panel" class="hidden min-h-10 items-center gap-3 px-1 pb-1 pt-1" aria-label="Voice recording controls">
+							<button id="voice-cancel" type="button" class="grid size-8 shrink-0 place-items-center rounded-full text-muted transition hover:bg-active hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" aria-label="Cancel voice recording" title="Cancel recording">
+								<i data-lucide="x" class="size-4" aria-hidden="true"></i>
+							</button>
+							<div class="flex min-w-0 flex-1 items-center gap-3" aria-label="Recording status">
+								<time id="voice-elapsed" class="w-12 shrink-0 font-mono text-xs tabular-nums text-muted">00:00</time>
+								<div id="voice-volume" class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-raised" role="progressbar" aria-label="Microphone volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+										<span id="voice-volume-fill" class="voice-volume-fill block h-full w-full scale-x-0 rounded-full bg-accent"></span>
+								</div>
+								<span id="voice-phase-label" class="sr-only" aria-live="polite">Recording</span>
+							</div>
+							<div class="flex shrink-0 items-center gap-2">
+								<button id="voice-edit" type="button" class="grid size-8 place-items-center rounded-full bg-raised text-muted transition hover:bg-active hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" aria-label="Transcribe and edit draft" title="Transcribe to edit">
+									<i data-lucide="pencil" class="size-4" aria-hidden="true"></i>
+								</button>
+								<button id="voice-send" type="button" class="grid size-8 place-items-center rounded-full bg-accent text-white transition hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50" aria-label="Transcribe and send" title="Transcribe and send">
+									<i data-lucide="send" class="size-4 fill-current" aria-hidden="true"></i>
+								</button>
+							</div>
+						</div>
+						<p id="voice-error" class="hidden px-3 pb-1 pt-1 text-xs text-danger" role="status" aria-live="assertive"></p>
 						<div class="flex items-center justify-between px-3 pb-1 pt-1 text-[11px] text-muted">
 							<span>Enter to send · Shift+Enter for a new line</span>
 							<span id="send-state" aria-live="polite"></span>

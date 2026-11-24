@@ -1,5 +1,4 @@
 import {
-	ArrowUp,
 	Bot,
 	ChevronDown,
 	Copy,
@@ -8,18 +7,21 @@ import {
 	Mic,
 	MessagesSquare,
 	NotebookPen,
+	Pencil,
+	Send,
 	Settings,
 	Sparkles,
 	UserRound,
+	X,
 	createIcons,
 } from "lucide";
 import HSOverlay from "preline/plugins/overlay-non-auto";
 import HSSelect from "preline/plugins/select-non-auto";
 import HSTabs from "preline/plugins/tabs-non-auto";
 import { copyRichTextToClipboard, createPendingUserMessage, loadSendAttempt, mergeOlderMessages, pollUntil, saveSendAttempt, scrollToBottom, sendWithAttempt, sortMemoryOldestFirst } from "./state.js";
-import { filterAvailableVoiceModels, LOCAL_VOICE_MODEL_ID, voiceReady } from "./voice.js";
+import { createVoiceController, filterAvailableVoiceModels, LOCAL_VOICE_MODEL_ID, voiceReady } from "./voice.js";
 
-const icons = { ArrowUp, Bot, ChevronDown, Copy, Info, LoaderCircle, Mic, MessagesSquare, NotebookPen, Settings, Sparkles, UserRound };
+const icons = { Bot, ChevronDown, Copy, Info, LoaderCircle, Mic, MessagesSquare, NotebookPen, Pencil, Send, Settings, Sparkles, UserRound, X };
 const $ = (selector) => document.querySelector(selector);
 const ui = {
 	profile: $("#profile-name"),
@@ -82,9 +84,24 @@ const ui = {
 	messageList: $("#message-list"),
 	messageForm: $("#message-form"),
 	messageInput: $("#message-input"),
+	composerIdleControls: $("#composer-idle-controls"),
 	sendButton: $("#send-button"),
 	sendLabel: $("#send-label"),
 	sendState: $("#send-state"),
+	voiceRecord: $("#voice-record"),
+	voiceReadinessHelp: $("#voice-readiness-help"),
+	voiceReadinessMessage: $("#voice-readiness-message"),
+	voiceOpenSettings: $("#voice-open-settings"),
+	voiceRequestStatus: $("#voice-request-status"),
+	voiceRecordingPanel: $("#voice-recording-panel"),
+	voiceCancel: $("#voice-cancel"),
+	voiceElapsed: $("#voice-elapsed"),
+	voiceVolume: $("#voice-volume"),
+	voiceVolumeFill: $("#voice-volume-fill"),
+	voicePhaseLabel: $("#voice-phase-label"),
+	voiceEdit: $("#voice-edit"),
+	voiceSend: $("#voice-send"),
+	voiceError: $("#voice-error"),
 	memoryList: $("#memory-list"),
 	memoryStatus: $("#memory-status"),
 	memoryScroll: $("#memory-scroll"),
@@ -160,6 +177,11 @@ const state = {
 	voiceModelsRequestID: 0,
 	voiceStatusRequestID: 0,
 	voiceStatusTimer: null,
+	composerVoiceDTO: null,
+	composerVoiceLoading: false,
+	composerVoiceError: "",
+	composerVoiceRequestID: 0,
+	voiceCapture: { phase: "idle", elapsedMs: 0, volume: 0, error: "", profileSlug: "" },
 	profileSyncing: false,
 	profileSyncTimer: null,
 	profileSyncController: null,
@@ -302,7 +324,109 @@ function updateSendControls() {
 	ui.messageInput.disabled = state.setupRequired || state.recoveryRequired;
 	ui.sendLabel.textContent = state.sending ? "Thinking…" : "Send";
 	ui.sendState.textContent = state.sending ? "Noto is working" : state.pendingNotes > 0 ? "Saving memory…" : "";
+	updateComposerVoiceControls();
 	updateSettingsControls();
+}
+
+function voiceRecorderSupported() {
+	return typeof navigator !== "undefined"
+		&& typeof window !== "undefined"
+		&& typeof navigator.mediaDevices?.getUserMedia === "function"
+		&& typeof (window.AudioContext || window.webkitAudioContext) === "function";
+}
+
+function updateComposerVoiceControls() {
+	const ready = voiceReady(state.composerVoiceDTO);
+	const supported = voiceRecorderSupported();
+	let reason = state.composerVoiceError;
+	if (!reason && !supported) reason = "Microphone recording is not supported in this browser.";
+	if (!reason && state.composerVoiceLoading) reason = "Checking voice dictation readiness…";
+	if (!reason && !ready) {
+		const detail = state.composerVoiceDTO?.reason;
+		reason = detail ? `Voice is not ready. Open Settings: ${detail}` : "Voice must be configured in Settings before recording.";
+	}
+	const needsSetup = Boolean(reason);
+	ui.voiceReadinessHelp.classList.toggle("hidden", !needsSetup);
+	ui.voiceReadinessMessage.textContent = state.composerVoiceLoading
+		? "Checking voice dictation readiness…"
+		: reason;
+	ui.voiceOpenSettings.classList.toggle("hidden", !needsSetup || !supported);
+	ui.voiceRecord.title = needsSetup ? reason || "Checking voice readiness" : "Start voice recording";
+	const phase = state.voiceCapture.phase;
+	const voiceBusy = ["requesting", "recording", "processing"].includes(phase);
+	ui.sendButton.disabled = state.setupRequired || state.sending || !state.profileSlug || state.recoveryRequired || voiceBusy;
+	ui.voiceRecord.disabled = !ready || !supported || state.composerVoiceLoading || state.setupRequired || state.recoveryRequired || state.sending || !["idle", "error"].includes(phase);
+	ui.voiceRequestStatus.textContent = phase === "requesting" ? "Waiting for microphone permission…" : "";
+	ui.voiceRequestStatus.classList.toggle("hidden", phase !== "requesting");
+}
+
+function formatVoiceElapsed(elapsedMs) {
+	const seconds = Math.floor(Math.max(0, elapsedMs) / 1000);
+	return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function updateVoiceRecordingState(captureState) {
+	const previousPhase = state.voiceCapture.phase;
+	const activeElement = document.activeElement;
+	const hadVoiceFocus = ui.voiceRecordingPanel.contains(activeElement) || activeElement === ui.voiceRecord || activeElement === ui.messageInput;
+	state.voiceCapture = { ...captureState };
+	const requesting = captureState.phase === "requesting";
+	const recording = captureState.phase === "recording";
+	const processing = captureState.phase === "processing";
+	const active = requesting || recording || processing;
+	ui.messageInput.readOnly = ["requesting", "recording", "processing"].includes(captureState.phase);
+	ui.composerIdleControls.classList.toggle("hidden", active);
+	ui.voiceRecordingPanel.classList.toggle("hidden", !active);
+	ui.voiceRecordingPanel.classList.toggle("flex", active);
+	ui.voiceElapsed.textContent = formatVoiceElapsed(captureState.elapsedMs);
+	ui.voiceVolume.setAttribute("aria-valuenow", String(Math.round(Math.max(0, Math.min(1, captureState.volume || 0)) * 100)));
+	ui.voiceVolumeFill.style.transform = `scaleX(${Math.max(0, Math.min(1, captureState.volume || 0))})`;
+	ui.voicePhaseLabel.textContent = requesting ? "Waiting for microphone permission" : processing ? "Transcribing recording" : "Recording";
+	ui.voiceCancel.disabled = !["requesting", "recording", "processing"].includes(captureState.phase);
+	ui.voiceEdit.disabled = !recording;
+	ui.voiceSend.disabled = !recording;
+	ui.voiceError.textContent = captureState.error || "";
+	ui.voiceError.classList.toggle("hidden", !captureState.error);
+	updateComposerVoiceControls();
+	if (["idle", "error"].includes(previousPhase) && requesting) ui.messageInput.focus();
+	else if (["requesting", "recording", "processing"].includes(previousPhase) && ["idle", "error"].includes(captureState.phase) && hadVoiceFocus) ui.messageInput.focus();
+}
+
+async function loadComposerVoiceReadiness(profileSlug = state.profileSlug) {
+	const requestID = ++state.composerVoiceRequestID;
+	state.composerVoiceLoading = true;
+	state.composerVoiceError = "";
+	updateComposerVoiceControls();
+	if (!profileSlug) {
+		state.composerVoiceLoading = false;
+		state.composerVoiceDTO = null;
+		updateComposerVoiceControls();
+		return;
+	}
+	try {
+		const query = new URLSearchParams({ profile_slug: profileSlug });
+		const dto = await api(`/api/voice?${query}`);
+		if (requestID !== state.composerVoiceRequestID || profileSlug !== state.profileSlug || dto.profile_slug !== profileSlug) return;
+		state.composerVoiceDTO = dto;
+	} catch (error) {
+		if (requestID === state.composerVoiceRequestID && profileSlug === state.profileSlug) {
+			state.composerVoiceDTO = null;
+			state.composerVoiceError = `Voice readiness could not be checked: ${error.message}`;
+		}
+	} finally {
+		if (requestID === state.composerVoiceRequestID) {
+			state.composerVoiceLoading = false;
+			updateComposerVoiceControls();
+		}
+	}
+}
+
+function applyComposerVoiceDTO(dto) {
+	state.composerVoiceRequestID++;
+	state.composerVoiceDTO = dto;
+	state.composerVoiceError = "";
+	state.composerVoiceLoading = false;
+	updateComposerVoiceControls();
 }
 
 function updateSettingsControls() {
@@ -715,6 +839,7 @@ async function loadVoiceSettings(profileSlug, preserveDraft = false) {
 			return;
 		}
 		state.voiceDTO = dto;
+		if (profileSlug === state.profileSlug) applyComposerVoiceDTO(dto);
 		state.savedVoiceProvider = dto.provider || "";
 		state.savedVoiceModel = dto.model || "";
 		state.voiceLoaded = true;
@@ -894,6 +1019,7 @@ async function saveVoiceSettings(event) {
 			return;
 		}
 		state.voiceDTO = dto;
+		applyComposerVoiceDTO(dto);
 		state.savedVoiceProvider = dto.provider || "";
 		state.savedVoiceModel = dto.model || "";
 		state.draftVoiceProvider = state.savedVoiceProvider;
@@ -1396,7 +1522,13 @@ function applyServerState(serverState) {
 	if (state.revision > 0 && revision < state.revision) return { profileChanged: false, revisionChanged: false, stale: true };
 	const profileChanged = Boolean(state.profileSlug && profileSlug && profileSlug !== state.profileSlug);
 	const revisionChanged = revision !== state.revision;
-	if (profileChanged) clearProfileScopedData();
+	if (profileChanged) {
+		clearProfileScopedData();
+		if (["requesting", "recording", "processing"].includes(state.voiceCapture.phase)) {
+			voiceController.cancel();
+			showStatus(ui.chatStatus, "The active profile changed. The recording was discarded and your draft was kept.", "error");
+		}
+	}
 	if (state.settingsOpen && revisionChanged && !state.settingsSaving) {
 		state.settingsConflict = true;
 		state.settingsModelsLoaded = false;
@@ -1404,6 +1536,7 @@ function applyServerState(serverState) {
 		updateSettingsControls();
 	}
 	renderState(serverState);
+	if (profileChanged) void loadComposerVoiceReadiness(profileSlug);
 	return { profileChanged, revisionChanged, stale: false };
 }
 
@@ -1500,7 +1633,7 @@ async function pollMemoryExtraction() {
 }
 
 async function sendMessage() {
-	if (state.setupRequired || state.sending || !state.profileSlug) return;
+	if (state.setupRequired || state.sending || !state.profileSlug || ["requesting", "recording", "processing"].includes(state.voiceCapture.phase)) return;
 	const content = ui.messageInput.value;
 	if (!content.trim()) return;
 	ui.messageInput.value = "";
@@ -1558,6 +1691,7 @@ async function sendMessage() {
 	updateSendControls();
 	try {
 		const serverState = await refreshState();
+		void loadComposerVoiceReadiness();
 		await loadMessages();
 		if (serverState.pending_notes > 0) void pollMemoryExtraction();
 		else await loadMemory(state.memoryTab);
@@ -1583,7 +1717,68 @@ function setMobileView(view) {
 	ui.mobileMemoryTab.classList.toggle("text-muted", view !== "memory");
 }
 
+const voiceController = createVoiceController({
+	getUserMedia: (constraints) => navigator.mediaDevices.getUserMedia(constraints),
+	audioContextFactory: () => {
+		const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+		if (!AudioContextConstructor) throw new Error("This browser does not support microphone recording.");
+		return new AudioContextConstructor();
+	},
+	transcribe: async (wav, profileSlug, signal) => {
+		const query = new URLSearchParams({ profile_slug: profileSlug });
+		const result = await api(`/api/voice/transcriptions?${query}`, {
+			method: "POST",
+			headers: { "Content-Type": "audio/wav" },
+			body: wav,
+			signal,
+		});
+		return result?.text || "";
+	},
+	getDraft: () => ui.messageInput.value,
+	getProfileSlug: () => state.profileSlug,
+	onInsert: (text) => {
+		ui.messageInput.value = text;
+		ui.messageInput.readOnly = false;
+		ui.messageInput.focus();
+		ui.messageInput.setSelectionRange?.(text.length, text.length);
+	},
+	onSend: async (text, profileSlug) => {
+		if (profileSlug !== state.profileSlug) throw new Error("The active profile changed. The recording was discarded.");
+		ui.messageInput.value = text;
+		await sendMessage();
+	},
+	onState: updateVoiceRecordingState,
+});
+
+function handleVoiceKeydown(event) {
+	if (state.voiceCapture.phase !== "recording" || event.isComposing || event.keyCode === 229) return;
+	const targetIsControl = event.target !== ui.messageInput && Boolean(event.target?.closest?.("button, a, input, select, textarea"));
+	if (targetIsControl && event.key !== "Escape") return;
+	if (event.key === "Escape") {
+		event.preventDefault();
+		event.stopPropagation();
+		voiceController.cancel();
+	} else if (event.key === "." || event.code === "Period") {
+		event.preventDefault();
+		event.stopPropagation();
+		void voiceController.finish("edit");
+	} else if (event.key === "Enter") {
+		event.preventDefault();
+		event.stopPropagation();
+		void voiceController.finish("send");
+	}
+}
+
 ui.settingsButton.addEventListener("click", openSettings);
+ui.voiceOpenSettings.addEventListener("click", openSettings);
+ui.voiceRecord.addEventListener("click", () => {
+	void voiceController.start(state.profileSlug).catch(() => { /* The live region reports permission and platform errors. */ });
+});
+ui.voiceCancel.addEventListener("click", () => voiceController.cancel());
+ui.voiceEdit.addEventListener("click", () => void voiceController.finish("edit"));
+ui.voiceSend.addEventListener("click", () => void voiceController.finish("send"));
+document.addEventListener("keydown", handleVoiceKeydown, true);
+window.addEventListener("pagehide", () => { void voiceController.dispose(); }, { once: true });
 ui.settingsCancel.addEventListener("click", cancelSettings);
 ui.settingsClose.addEventListener("click", cancelSettings);
 ui.settingsForm.addEventListener("submit", (event) => {
@@ -1644,10 +1839,16 @@ ui.chatTab.addEventListener("click", () => setMobileView("chat"));
 ui.mobileMemoryTab.addEventListener("click", () => setMobileView("memory"));
 ui.messageForm.addEventListener("submit", (event) => {
 	event.preventDefault();
+	if (["requesting", "recording", "processing"].includes(state.voiceCapture.phase)) return;
 	void sendMessage();
 });
 ui.messageInput.addEventListener("keydown", (event) => {
 	if (event.key === "Enter" && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
+		if (["requesting", "recording", "processing"].includes(state.voiceCapture.phase)) {
+			event.preventDefault();
+			event.stopPropagation();
+			return;
+		}
 		event.preventDefault();
 		ui.messageForm.requestSubmit();
 	}
@@ -1665,6 +1866,7 @@ async function initialize() {
 	HSSelect.autoInit();
 	try {
 		const serverState = await refreshState();
+		void loadComposerVoiceReadiness();
 		await loadMessages();
 		await loadMemory("daily");
 		if (serverState.sending) void pollServerTurn();

@@ -2,7 +2,7 @@ import { expect, mock, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 
 mock.module("lucide", () => ({
-	ArrowUp: {}, Bot: {}, ChevronDown: {}, Copy: {}, Info: {}, LoaderCircle: {}, Mic: {}, MessagesSquare: {}, NotebookPen: {}, Settings: {}, Sparkles: {}, UserRound: {},
+	ArrowUp: {}, Bot: {}, ChevronDown: {}, Copy: {}, Info: {}, LoaderCircle: {}, Mic: {}, MessagesSquare: {}, NotebookPen: {}, Pencil: {}, Send: {}, Settings: {}, Sparkles: {}, UserRound: {}, X: {},
 	createIcons() {},
 }));
 
@@ -12,6 +12,7 @@ class Element {
 		this.listeners = {};
 		this.attributes = {};
 		this.classes = new Set();
+		this.style = {};
 		this.classList = {
 			toggle: (name, force) => {
 				const enabled = force === undefined ? !this.classes.has(name) : force;
