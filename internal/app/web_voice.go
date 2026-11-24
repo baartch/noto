@@ -74,7 +74,8 @@ func (b *webVoiceBackend) Get(ctx context.Context, slug string) (web.VoiceDTO, e
 		case !status.Installed:
 			dto.Reason = "Download the local speech model to enable dictation."
 		case status.Error != "":
-			dto.Reason = "The local speech model could not be opened."
+			dto.Ready = true
+			dto.Reason = "A previous model open failed; the next transcription will retry."
 		default:
 			dto.Ready = true
 		}
@@ -155,7 +156,7 @@ func (b *webVoiceBackend) Transcribe(ctx context.Context, slug string, wav []byt
 			return "", web.ErrVoiceNotReady
 		}
 		status := b.ModelStatus()
-		if !status.Available || !status.Installed || status.Error != "" {
+		if !status.Available || !status.Installed {
 			return "", voice.ErrLocalModelNotInstalled
 		}
 		transcriber, err := b.models.LocalTranscriber()

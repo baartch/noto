@@ -149,12 +149,21 @@ func TestWebVoiceBackendReadinessAndDispatchStayProfileScoped(t *testing.T) {
 	if err != nil || text != "local transcript" || localCalls.Load() != 1 {
 		t.Fatalf("local dispatch = %q, err=%v calls=%d", text, err, localCalls.Load())
 	}
+	models.status.Error = "voice: could not open local speech model: transient failure"
+	dto, err = backend.Get(ctx, alpha.Slug)
+	if err != nil || !dto.Ready {
+		t.Errorf("transient local model error readiness = %+v, err=%v; want ready for retry", dto, err)
+	}
+	text, err = backend.Transcribe(ctx, alpha.Slug, makeAppVoiceWAV(2))
+	if err != nil || text != "local transcript" || localCalls.Load() != 2 {
+		t.Errorf("local retry after open error = %q, err=%v calls=%d; want a second dispatch", text, err, localCalls.Load())
+	}
 	models.status.Available = false
 	dto, err = backend.Get(ctx, alpha.Slug)
 	if err != nil || dto.Ready {
 		t.Fatalf("unsupported local runtime = %+v, err=%v; want not ready", dto, err)
 	}
-	if _, err := backend.Transcribe(ctx, alpha.Slug, makeAppVoiceWAV(2)); !errors.Is(err, voice.ErrLocalModelNotInstalled) || localCalls.Load() != 1 {
+	if _, err := backend.Transcribe(ctx, alpha.Slug, makeAppVoiceWAV(2)); !errors.Is(err, voice.ErrLocalModelNotInstalled) || localCalls.Load() != 2 {
 		t.Fatalf("unsupported local dispatch err=%v local calls=%d", err, localCalls.Load())
 	}
 	models.status.Available = true
