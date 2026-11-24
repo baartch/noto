@@ -95,7 +95,7 @@ jobs:
         run: |
           set -euo pipefail
           go test -c -o dist/voice-runtime-smoke ./internal/voice
-          readelf -d "$PWD/dist/voice-runtime-smoke" | grep -F '$ORIGIN/lib'
+          readelf -d "$PWD/dist/voice-runtime-smoke" | grep -F "\$ORIGIN/lib"
           DEPENDENCIES=$(env -u LD_LIBRARY_PATH ldd "$PWD/dist/voice-runtime-smoke")
           SHERPA_DEPENDENCIES=$(printf '%s\n' "$DEPENDENCIES" | grep -E '^[[:space:]]*(libsherpa|libonnxruntime)')
           if [ -z "$SHERPA_DEPENDENCIES" ]; then
