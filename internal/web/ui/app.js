@@ -351,7 +351,7 @@ function updateComposerVoiceControls() {
 		? "Checking voice dictation readiness…"
 		: reason;
 	ui.voiceOpenSettings.classList.toggle("hidden", !needsSetup || !supported);
-	ui.voiceRecord.title = needsSetup ? reason || "Checking voice readiness" : "Start voice recording";
+	ui.voiceRecord.title = needsSetup ? reason || "Checking voice readiness" : "Start voice recording (Ctrl+D)";
 	const phase = state.voiceCapture.phase;
 	const voiceBusy = ["requesting", "recording", "processing"].includes(phase);
 	ui.sendButton.disabled = state.setupRequired || state.sending || !state.profileSlug || state.recoveryRequired || voiceBusy;
@@ -1753,6 +1753,12 @@ const voiceController = createVoiceController({
 });
 
 function handleVoiceKeydown(event) {
+	if (!event.isComposing && event.keyCode !== 229 && !event.repeat && event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey && event.key.toLowerCase() === "d" && !state.settingsOpen && !ui.voiceRecord.disabled) {
+		event.preventDefault();
+		event.stopPropagation();
+		ui.voiceRecord.click();
+		return;
+	}
 	if (state.voiceCapture.phase !== "recording" || event.isComposing || event.keyCode === 229) return;
 	const targetIsControl = event.target !== ui.messageInput && Boolean(event.target?.closest?.("button, a, input, select, textarea"));
 	if (targetIsControl && event.key !== "Escape") return;

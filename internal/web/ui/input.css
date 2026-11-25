@@ -44,6 +44,7 @@ button:focus-visible {
 }
 
 .voice-volume-fill {
+	transform: scaleX(0);
 	transform-origin: left center;
 	transition: transform 80ms linear;
 }

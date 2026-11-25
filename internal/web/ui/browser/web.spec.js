@@ -997,3 +997,53 @@ test("permission denial reports an error and recording meter shows elapsed time 
 	await expect(page.locator("#voice-error")).toContainText(/permission/i);
 	await expect(page.locator("#voice-recording-panel")).toBeHidden();
 });
+
+test("recording volume visibly grows and shrinks with microphone audio", async ({ page }) => {
+	await installFakeMicrophone(page);
+	const { readinessLoads } = await routeReadyVoice(page);
+	await page.goto("/");
+	await expect.poll(readinessLoads).toBeGreaterThan(0);
+	await page.locator("#voice-record").click();
+	await expect(page.locator("#voice-recording-panel")).toBeVisible();
+	const fill = page.locator("#voice-volume-fill");
+	await page.evaluate(() => window.__emitVoiceAudio(0.2));
+	await expect.poll(async () => (await fill.boundingBox()).width).toBeGreaterThan(10);
+	await page.evaluate(() => window.__emitVoiceAudio(0));
+	await expect.poll(async () => (await fill.boundingBox()).width).toBeLessThan(1);
+});
+
+test("Ctrl+D starts recording from the composer without starting it twice", async ({ page }) => {
+	await installFakeMicrophone(page);
+	const { readinessLoads } = await routeReadyVoice(page);
+	await page.goto("/");
+	await expect.poll(readinessLoads).toBeGreaterThan(0);
+	await expect(page.locator("#voice-record")).toBeEnabled();
+	await page.locator("#message-input").focus();
+	await page.keyboard.press("Control+d");
+	await expect(page.locator("#voice-recording-panel")).toBeVisible();
+	await page.keyboard.press("Control+d");
+	expect(await page.evaluate(() => window.__micGetUserMediaCalls)).toBe(1);
+});
+
+test("Ctrl+D does not start recording when voice is unavailable", async ({ page }) => {
+	await installFakeMicrophone(page);
+	const { readinessLoads } = await routeReadyVoice(page, { ready: false });
+	await page.goto("/");
+	await expect.poll(readinessLoads).toBeGreaterThan(0);
+	await expect(page.locator("#voice-record")).toBeDisabled();
+	await page.locator("#message-input").focus();
+	await page.keyboard.press("Control+d");
+	expect(await page.evaluate(() => window.__micGetUserMediaCalls)).toBe(0);
+});
+
+test("Ctrl+D does not start recording while settings are open", async ({ page }) => {
+	await installFakeMicrophone(page);
+	const { readinessLoads } = await routeReadyVoice(page);
+	await page.goto("/");
+	await expect.poll(readinessLoads).toBeGreaterThan(0);
+	await expect(page.locator("#voice-record")).toBeEnabled();
+	await page.locator("#settings-button").click();
+	await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+	await page.keyboard.press("Control+d");
+	expect(await page.evaluate(() => window.__micGetUserMediaCalls)).toBe(0);
+});
